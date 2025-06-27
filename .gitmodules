@@ -1,0 +1,3 @@
+[submodule "gcu_objects"]
+	path = gcu_objects
+	url = https://github.com/personalrobotics/gcu_objects.git

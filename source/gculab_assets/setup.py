@@ -8,7 +8,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Installation script for the 'tote_consolidation' python package."""
+"""Installation script for the 'gculab_assets' python package."""
 
 import os
 
@@ -28,8 +28,8 @@ INSTALL_REQUIRES = [
 
 # Installation operation
 setup(
-    name="tote_consolidation",
-    packages=["tote_consolidation"],
+    name="gculab_assets",
+    packages=["gculab_assets"],
     author=EXTENSION_TOML_DATA["package"]["author"],
     maintainer=EXTENSION_TOML_DATA["package"]["maintainer"],
     url=EXTENSION_TOML_DATA["package"]["repository"],

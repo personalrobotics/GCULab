@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 # Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # All rights reserved.
 #
@@ -40,6 +35,8 @@ import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
+# PLACEHOLDER: Extension template (do not remove this comment)
+
 
 def main():
     """Zero actions agent with Isaac Lab environment."""
@@ -55,14 +52,22 @@ def main():
     print(f"[INFO]: Gym action space: {env.action_space}")
     # reset environment
     env.reset()
+
+    idx = 0
+    obj_idx = 1
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # compute zero actions
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
+            if idx % 50 == 0 and idx != 0:
+                actions[:] = torch.tensor([obj_idx, 0, 0, obj_idx * 0.05, 0, 0, 1, 0], device=env.unwrapped.device)
+                obj_idx += 1
+                # print(f"[INFO]: Actions: {actions}")
             # apply actions
             env.step(actions)
+            idx += 1
 
     # close the simulator
     env.close()

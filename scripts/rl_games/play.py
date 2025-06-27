@@ -52,27 +52,27 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 
-import gymnasium as gym
 import math
 import os
 import time
+
+import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
 import torch
-
-from rl_games.common import env_configurations, vecenv
-from rl_games.common.player import BasePlayer
-from rl_games.torch_runner import Runner
-
+import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-
 from isaaclab_rl.rl_games import RlGamesGpuEnv, RlGamesVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-from isaaclab_tasks.utils import get_checkpoint_path, load_cfg_from_registry, parse_env_cfg
-
-import tote_consolidation.tasks  # noqa: F401
+from isaaclab_tasks.utils import (
+    get_checkpoint_path,
+    load_cfg_from_registry,
+    parse_env_cfg,
+)
+from rl_games.common import env_configurations, vecenv
+from rl_games.common.player import BasePlayer
+from rl_games.torch_runner import Runner
 
 
 def main():

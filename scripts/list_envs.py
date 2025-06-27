@@ -30,9 +30,8 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
-from prettytable import PrettyTable
-
 import tote_consolidation.tasks  # noqa: F401
+from prettytable import PrettyTable
 
 
 def main():
@@ -49,7 +48,7 @@ def main():
     index = 0
     # acquire all Isaac environments names
     for task_spec in gym.registry.values():
-        if "Template-" in task_spec.id:
+        if "Pack-" in task_spec.id:
             # add details to table
             table.add_row([index + 1, task_spec.id, task_spec.entry_point, task_spec.kwargs["env_cfg_entry_point"]])
             # increment count
