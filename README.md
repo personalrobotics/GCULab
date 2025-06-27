@@ -3,6 +3,7 @@
 ## Overview
 
 **GCU Lab** - Additions to IsaacLab Core functionality for Pack task.
+
 **Pack Task** - Packing environment.
 
 ---
@@ -14,7 +15,7 @@ Packing gym environment for the Amazon task.
 
 **Command:**
 ```bash
-./isaaclab.sh -p scripts/environments/zero_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
+python scripts/zero_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
 ```
 
 ---
@@ -24,7 +25,7 @@ Requires **curobo** ([Installation Instructions](https://curobo.org/get_started/
 
 **Command:**
 ```bash
-./isaaclab.sh -p scripts/environments/ik_reachability_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
+python scripts/ik_reachability_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
 ```
 
 ---
@@ -34,7 +35,7 @@ Requires **pyconsolidation** ([Repository](https://github.com/kaikwan?tab=reposi
 
 **Command:**
 ```bash
-./isaaclab.sh -p scripts/environments/ik_reachability_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
+python scripts/scripts/bsmc_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 1
 ```
 
 ---
