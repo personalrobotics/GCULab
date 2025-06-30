@@ -34,7 +34,6 @@ num_object_per_env = 25
 # Spacing between totes
 d = 0.43  # width of tote + gap between totes
 
-
 @configclass
 class PackSceneCfg(InteractiveSceneCfg):
     """Configuration for the scene with a robotic arm."""
