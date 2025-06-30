@@ -62,7 +62,14 @@ def main():
             # compute zero actions
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
             if idx % 50 == 0 and idx != 0:
-                actions[:] = torch.tensor([obj_idx, 0, 0, obj_idx * 0.05, 0, 0, 1, 0], device=env.unwrapped.device)
+                batch_size = actions.shape[0]
+                # [0] is destination tote idx (ascending values for batch size)
+                # [1] currently is the object idx (1-indexed. Set to 0 for no object selected)
+                # [2-9] is the desired object position and orientation
+                actions[:, 0] = (
+                    torch.arange(batch_size, device=env.unwrapped.device) % 4
+                )  # Example: different destination totes for each env
+                actions[:, 1:] = torch.tensor([obj_idx, 0, 0, obj_idx * 0.05, 0, 0, 1, 0], device=env.unwrapped.device)
                 obj_idx += 1
                 # print(f"[INFO]: Actions: {actions}")
             # apply actions

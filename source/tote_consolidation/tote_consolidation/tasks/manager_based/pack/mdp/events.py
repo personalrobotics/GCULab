@@ -75,21 +75,11 @@ def object_props(
         bbox = bbox[[2, 0, 1]]  # Reorder to (l, w, h)
         return bbox
 
-    def compute_mesh_bottomleft(mesh):
-        points = torch.tensor(mesh.GetPointsAttr().Get(), dtype=torch.float32)
-        min_coords = torch.min(points, dim=0).values
-        center_coords = torch.mean(points, dim=0)
-        T_bottomleft = torch.eye(4, device=env.device)
-        T_bottomleft[:3, 3] = min_coords - center_coords
-        return T_bottomleft
-
     # Cache for storing volumes of already computed objects
     obj_volumes = torch.zeros((env.num_envs, num_objects), device=env.device)
     obj_bboxes = torch.zeros((env.num_envs, num_objects, 3), device=env.device)
-    obj_T_bottomleft = torch.zeros((env.num_envs, num_objects, 4, 4), device=env.device)
     volume_cache = {}
     bbox_cache = {}
-    T_bottomleft_cache = {}
 
     # Get mesh from the asset
     for asset_cfg in asset_cfgs:
@@ -101,24 +91,19 @@ def object_props(
                 mesh_name = mesh.GetPath().__str__().split("/")[-1]  # Extract the last portion of the path
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4]))) - 1
-                if mesh_name in volume_cache and mesh_name in bbox_cache and mesh_name in T_bottomleft_cache:
+                if mesh_name in volume_cache and mesh_name in bbox_cache:
                     volume = volume_cache[mesh_name]
                     bbox = bbox_cache[mesh_name]
-                    T_bottomleft = T_bottomleft_cache[mesh_name]
                 else:
                     volume = compute_mesh_volume(mesh)
                     bbox = compute_mesh_bbox(mesh)
-                    T_bottomleft = compute_mesh_bottomleft(mesh)
 
                     # Cache the computed values
                     volume_cache[mesh_name] = volume
                     bbox_cache[mesh_name] = bbox
-                    T_bottomleft_cache[mesh_name] = T_bottomleft
 
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
-                obj_T_bottomleft[env_idx, obj_idx] = T_bottomleft
 
     env.gcu.set_object_volume(obj_volumes)
     env.gcu.set_object_bbox(obj_bboxes)
-    env.gcu.set_object_T_bottomleft(obj_T_bottomleft)

@@ -29,7 +29,10 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 5
+num_object_per_env = 25
+
+# Spacing between totes
+d = 0.43  # width of tote + gap between totes
 
 
 @configclass
@@ -51,13 +54,13 @@ class PackSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.0, -0.0), rot=(0.70711, 0.0, 0.0, 0.70711)),
     )
 
-    tote = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Tote",
+    tote1 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Tote1",
         spawn=sim_utils.UsdFileCfg(
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.0, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -1.5 * d, 0.0)),
     )
 
     tote2 = AssetBaseCfg(
@@ -66,7 +69,7 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.42, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * d, 0.0)),
     )
 
     tote3 = AssetBaseCfg(
@@ -75,7 +78,16 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.42, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * d, 0.0)),
+    )
+
+    tote4 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Tote4",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=tote_usd_path,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * d, 0.0)),
     )
 
     # robots
@@ -97,27 +109,29 @@ class PackSceneCfg(InteractiveSceneCfg):
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i+1}",
                     spawn=sim_utils.MultiUsdFileCfg(
                         usd_path=[
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
+                            # (kaikwan): Other YCB objects are still not working… only the given axis aligned items are working
+                            # Error:  Failed to find RigidObject at /primpath
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd")
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd")
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd")
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(

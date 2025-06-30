@@ -43,7 +43,7 @@ python scripts/scripts/bsmc_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_
 ## Installation
 
 ### Step 1: Install Isaac Lab
-Follow the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).  
+Follow the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
 We recommend using the **conda installation** as it simplifies calling Python scripts from the terminal.
 
 ### Step 2: Clone or Copy This Repository
