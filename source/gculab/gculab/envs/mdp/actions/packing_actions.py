@@ -39,7 +39,9 @@ class PackingAction(ActionTerm):
 
         # get pose of the asset
         self._asset_state = self._asset.get_world_poses()
-        tote_keys = [key for key in self._env.scene.keys() if key.startswith("tote")]
+        tote_keys = sorted(
+            [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.lstrip("tote"))
+        )
         self.num_totes = len(tote_keys)
 
         self._tote_assets = [self._env.scene[key] for key in tote_keys]
@@ -87,8 +89,6 @@ class PackingAction(ActionTerm):
         self._raw_actions[:] = actions
         self._processed_actions = self._raw_actions.clone()
 
-        num_envs = self._processed_actions.shape[0]
-
         # get the position and orientation
         tote_ids = self._processed_actions[:, 0].long()
         tote_states = self._tote_assets_state.permute(1, 0, 2)
@@ -96,13 +96,11 @@ class PackingAction(ActionTerm):
 
         tote_state = tote_states[batch_indices, tote_ids]
 
-        num_envs = self._processed_actions.shape[0]
-
         # offset to center of the tote
         self._processed_actions[:, 2:5] += tote_state[:, :3].squeeze(1)
 
         # z offset to displace the object above the table
-        self._processed_actions[:, 2:5] += torch.tensor([0, 0, 0.1], device=self.device).repeat(num_envs, 1)
+        self._processed_actions[:, 2:5] += torch.tensor([0, 0, 0.1], device=self.device).repeat(self.num_envs, 1)
         # # compute the command
         # if self.cfg.clip is not None:
         #     self._processed_actions = torch.clamp(

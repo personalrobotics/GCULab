@@ -32,7 +32,7 @@ gcu_objects_path = os.path.abspath("gcu_objects")
 num_object_per_env = 25
 
 # Spacing between totes
-d = 0.43  # width of tote + gap between totes
+tote_spacing = 0.43  # width of tote + gap between totes
 
 @configclass
 class PackSceneCfg(InteractiveSceneCfg):
@@ -59,7 +59,7 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -1.5 * d, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -1.5 * tote_spacing, 0.0)),
     )
 
     tote2 = AssetBaseCfg(
@@ -68,7 +68,7 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * d, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * tote_spacing, 0.0)),
     )
 
     tote3 = AssetBaseCfg(
@@ -77,7 +77,7 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * d, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * tote_spacing, 0.0)),
     )
 
     tote4 = AssetBaseCfg(
@@ -86,7 +86,7 @@ class PackSceneCfg(InteractiveSceneCfg):
             usd_path=tote_usd_path,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
         ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * d, 0.0)),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
     )
 
     # robots
