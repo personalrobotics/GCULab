@@ -142,7 +142,7 @@ def randomize_object_pose_with_invalid_ranges(
         if not invalid_ranges:
             return random.uniform(valid_min, valid_max)
 
-        sorted_ranges = sorted(invalid_ranges, key=lambda r: r[dim][0] if dim in r else float('inf'))
+        sorted_ranges = sorted(invalid_ranges, key=lambda x: x[0])
 
         # Create list of valid ranges
         valid_ranges = []
