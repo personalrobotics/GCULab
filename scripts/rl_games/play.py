@@ -59,7 +59,6 @@ import time
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
@@ -73,6 +72,8 @@ from isaaclab_tasks.utils import (
 from rl_games.common import env_configurations, vecenv
 from rl_games.common.player import BasePlayer
 from rl_games.torch_runner import Runner
+
+import tote_consolidation.tasks  # noqa: F401
 
 
 def main():

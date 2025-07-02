@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import builtins
+from collections.abc import Sequence
 
 import gymnasium as gym
 import omni.log
 import torch
+from isaaclab.envs.common import VecEnvStepReturn
 from isaaclab.envs.manager_based_rl_env import ManagerBasedRLEnv
 from isaaclab.envs.manager_based_rl_env_cfg import ManagerBasedRLEnvCfg
 from isaaclab.envs.ui import ViewportCameraController
@@ -15,7 +17,7 @@ from isaaclab.managers import EventManager
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
-from tote_consolidation.tasks.manager_based.pack.utils.gcu import GCU
+from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
 
 
 class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
@@ -111,8 +113,8 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         if "prestartup" in self.event_manager.available_modes:
             self.event_manager.apply(mode="prestartup")
 
-        # Initialize the GCU
-        self.gcu = GCU(cfg.gcu, self)
+        # Initialize the ToteManager
+        self.tote_manager = ToteManager(cfg.tote_manager, self)
 
         # play the simulator to activate physics handles
         # note: this activates the physics simulation view that exposes TensorAPIs
@@ -152,3 +154,71 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.metadata["render_fps"] = 1 / self.step_dt
 
         print("[INFO]: Completed setting up the environment...")
+
+    def _reset_idx(self, env_ids: Sequence[int]):
+        """Reset environments based on specified indices.
+
+        Args:
+            env_ids: List of environment ids which must be reset
+        """
+        # update the curriculum for environments that need a reset
+        self.curriculum_manager.compute(env_ids=env_ids)
+        # reset the internal buffers of the scene elements
+        self.scene.reset(env_ids)
+        # apply events such as randomizations for environments that need a reset
+        if "reset" in self.event_manager.available_modes:
+            env_step_count = self._sim_step_counter // self.cfg.decimation
+            self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
+
+        # wait until objects settle
+        wait_time = 100
+        for i in range(wait_time):
+            self.scene.write_data_to_sim()
+            self.sim.step(render=False)
+            if self._sim_step_counter % self.cfg.sim.render_interval == 0:
+                self.sim.render()
+            # update buffers at sim dt
+            self.scene.update(dt=self.physics_dt)
+        self.scene.write_data_to_sim()
+        self.sim.forward()
+
+        if "post_reset" in self.event_manager.available_modes:
+            env_step_count = self._sim_step_counter // self.cfg.decimation
+            self.event_manager.apply(mode="post_reset", env_ids=env_ids, global_env_step_count=env_step_count)
+
+        # if self.check_obj_out_of_bounds(self.scene, env_ids):
+        #     self._reset_idx(env_ids)  # Reset again if objects are out of bounds
+
+        # self.detect_objects_in_tote(env_ids)
+
+        # iterate over all managers and reset them
+        # this returns a dictionary of information which is stored in the extras
+        # note: This is order-sensitive! Certain things need be reset before others.
+        self.extras["log"] = dict()
+        # -- observation manager
+        info = self.observation_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- action manager
+        info = self.action_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- rewards manager
+        info = self.reward_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- curriculum manager
+        info = self.curriculum_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- command manager
+        info = self.command_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- event manager
+        info = self.event_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- termination manager
+        info = self.termination_manager.reset(env_ids)
+        self.extras["log"].update(info)
+        # -- recorder manager
+        info = self.recorder_manager.reset(env_ids)
+        self.extras["log"].update(info)
+
+        # reset the episode length buffer
+        self.episode_length_buf[env_ids] = 0

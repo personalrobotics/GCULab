@@ -114,10 +114,11 @@ class PackingAction(ActionTerm):
             self._raw_actions[env_ids] = torch.zeros_like(self._raw_actions[env_ids])
 
     def apply_actions(self):
-        # first index is object id, the rest are position and orientation for the object
-        # get the object id
+        # first index is tote id
+        tote_ids = self._processed_actions[:, 0].long()
+        # second index is the object id
         object_ids = self._processed_actions[:, 1].long()
-        # get the position and orientation
+        # the rest are  position and orientation
         position = self._processed_actions[:, 2:5]
         # print("position", position)
         orientation = self._processed_actions[:, 5:9]
@@ -129,20 +130,14 @@ class PackingAction(ActionTerm):
             if object_id == 0:
                 continue
             asset = self._env.scene[f"object{object_id.item()}"]
-            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{idx}")
-            schemas.modify_rigid_body_properties(
-                prim_path,
-                schemas_cfg.RigidBodyPropertiesCfg(
-                    kinematic_enabled=False,
-                    disable_gravity=False,
-                ),
-            )
             asset.write_root_link_pose_to_sim(
                 torch.cat([position[idx], orientation[idx]]), env_ids=torch.tensor([idx], device=self.device)
             )
             asset.write_root_com_velocity_to_sim(
                 torch.zeros(6, device=self.device), env_ids=torch.tensor([idx], device=self.device)
             )
-        self._env.gcu.put_objects_in_totes(object_ids)
+        self._env.tote_manager.put_objects_in_tote(
+            object_ids, tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
+        )
         if torch.any(object_ids > 0):
-            print("GCU is:", self._env.gcu.get_gcus())
+            print("GCU is:", self._env.tote_manager.get_gcu(torch.arange(self.num_envs, device=self.device)))

@@ -15,7 +15,7 @@ Packing gym environment for the Amazon task.
 
 **Command:**
 ```bash
-python scripts/zero_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
+python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 ---
@@ -26,16 +26,6 @@ Requires **curobo** ([Installation Instructions](https://curobo.org/get_started/
 **Command:**
 ```bash
 python scripts/ik_reachability_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
-```
-
----
-
-#### BSMC Placement Agent
-Requires **pyconsolidation** ([Repository](https://github.com/kaikwan?tab=repositories&q=pyconsolidation&type=&language=&sort=)).
-
-**Command:**
-```bash
-python scripts/scripts/bsmc_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 1
 ```
 
 ---
@@ -78,6 +68,15 @@ python scripts/zero_agent.py --task=<TASK_NAME>
 ```bash
 # Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
 python scripts/random_agent.py --task=<TASK_NAME>
+```
+
+---
+
+### Test Placement Agent
+**Command:**
+```bash
+# Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
+python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 ---

@@ -5,9 +5,12 @@
 
 from __future__ import annotations
 
+import math
+import random
 from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
+import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
@@ -105,5 +108,213 @@ def object_props(
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
 
-    env.gcu.set_object_volume(obj_volumes)
-    env.gcu.set_object_bbox(obj_bboxes)
+    env.tote_manager.set_object_volume(obj_volumes, torch.arange(env.num_envs, device=env.device))
+    env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
+
+
+def randomize_object_pose_with_invalid_ranges(
+    env: ManagerBasedRLGCUEnv,
+    env_ids: torch.Tensor,
+    asset_cfgs: list[SceneEntityCfg],
+    min_separation: float = 0.0,
+    pose_range: dict[str, tuple[float, float]] = {},
+    invalid_ranges: list[dict[str, tuple[float, float]]] = [],
+    max_sample_tries: int = 5000,
+):
+    """
+    Randomizes object poses while avoiding invalid pose ranges.
+
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+        asset_cfgs (list[SceneEntityCfg]): List of asset configurations.
+        min_separation (float): Minimum separation between objects.
+        pose_range (dict[str, tuple[float, float]]): Valid pose ranges for sampling.
+        invalid_ranges (list[dict[str, tuple[float, float]]]): List of invalid pose ranges to avoid.
+        max_sample_tries (int): Maximum number of sampling attempts per object.
+    """
+    if env_ids is None:
+        return
+
+    def sample_outside_range(valid_min, valid_max, invalid_ranges):
+        """Samples a value outside of invalid ranges within the valid range."""
+        # Sort invalid ranges
+        if not invalid_ranges:
+            return random.uniform(valid_min, valid_max)
+
+        sorted_ranges = sorted(invalid_ranges, key=lambda r: r[dim][0] if dim in r else float('inf'))
+
+        # Create list of valid ranges
+        valid_ranges = []
+        current_min = valid_min
+
+        for low, high in sorted_ranges:
+            if current_min < low:
+                valid_ranges.append((current_min, low))
+            current_min = max(current_min, high)
+
+        if current_min < valid_max:
+            valid_ranges.append((current_min, valid_max))
+
+        # No valid ranges left
+        if not valid_ranges:
+            return random.uniform(valid_min, valid_max)  # Fallback to original range
+
+        # Weighted selection of range based on range size
+        weights = [high - low for low, high in valid_ranges]
+        if sum(weights) <= 0:
+            return random.uniform(valid_min, valid_max)  # Fallback if weights are invalid
+
+        selected_range_idx = random.choices(range(len(valid_ranges)), weights=weights, k=1)[0]
+        selected_range = valid_ranges[selected_range_idx]
+
+        return random.uniform(selected_range[0], selected_range[1])
+
+    def get_invalid_ranges_for_dimension(dim, invalid_ranges):
+        """Extract invalid ranges for a specific dimension from all invalid ranges."""
+        ranges = []
+        for invalid_range in invalid_ranges:
+            if dim in invalid_range:
+                ranges.append(invalid_range[dim])
+        return ranges
+
+    # Randomize poses in each environment independently
+    for cur_env in env_ids.tolist():
+        pose_list = []
+        for i in range(len(asset_cfgs)):
+            for j in range(max_sample_tries):
+                # Sample each dimension outside of invalid ranges
+                sample = {
+                    "x": sample_outside_range(
+                        *pose_range.get("x", (0.0, 0.0)), get_invalid_ranges_for_dimension("x", invalid_ranges)
+                    ),
+                    "y": sample_outside_range(
+                        *pose_range.get("y", (0.0, 0.0)), get_invalid_ranges_for_dimension("y", invalid_ranges)
+                    ),
+                    "z": sample_outside_range(
+                        *pose_range.get("z", (0.0, 0.0)), get_invalid_ranges_for_dimension("z", invalid_ranges)
+                    ),
+                    "roll": sample_outside_range(
+                        *pose_range.get("roll", (0.0, 0.0)), get_invalid_ranges_for_dimension("roll", invalid_ranges)
+                    ),
+                    "pitch": sample_outside_range(
+                        *pose_range.get("pitch", (0.0, 0.0)), get_invalid_ranges_for_dimension("pitch", invalid_ranges)
+                    ),
+                    "yaw": sample_outside_range(
+                        *pose_range.get("yaw", (0.0, 0.0)), get_invalid_ranges_for_dimension("yaw", invalid_ranges)
+                    ),
+                }
+
+                # Check if pose is sufficiently separated from already sampled poses
+                if len(pose_list) == 0 or all(
+                    math.dist([sample["x"], sample["y"], sample["z"]], [pose["x"], pose["y"], pose["z"]])
+                    > min_separation
+                    for pose in pose_list
+                ):
+                    pose_list.append(sample)
+                    break
+
+        # Randomize pose for each object
+        for i in range(len(asset_cfgs)):
+            asset_cfg = asset_cfgs[i]
+            asset = env.scene[asset_cfg.name]
+
+            # Write pose to simulation
+            pose_tensor = torch.tensor(
+                [[
+                    pose_list[i]["x"],
+                    pose_list[i]["y"],
+                    pose_list[i]["z"],
+                    pose_list[i]["roll"],
+                    pose_list[i]["pitch"],
+                    pose_list[i]["yaw"],
+                ]],
+                device=env.device,
+            )
+            positions = pose_tensor[:, 0:3] + env.scene.env_origins[cur_env, 0:3]
+            orientations = math_utils.quat_from_euler_xyz(pose_tensor[:, 3], pose_tensor[:, 4], pose_tensor[:, 5])
+            asset.write_root_pose_to_sim(
+                torch.cat([positions, orientations], dim=-1), env_ids=torch.tensor([cur_env], device=env.device)
+            )
+            asset.write_root_velocity_to_sim(
+                torch.zeros(1, 6, device=env.device), env_ids=torch.tensor([cur_env], device=env.device)
+            )
+
+
+def check_obj_out_of_bounds(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
+    """Check if any object is out of bounds and reset the environment if so.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+    Returns:
+        bool: True if any object is out of bounds, False otherwise.
+    """
+    if env_ids is None:
+        return False
+    # Check if any object is out of bounds
+    for key in env.scene.keys():
+        bounds = [(0.2, 0.65), (-0.8, 0.8), (0.0, 0.3)]
+        if key.startswith("object"):
+            asset = env.scene[key]  # Access asset directly using the key
+            asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+            if not all(
+                bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
+                and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
+                for i in range(3)
+            ):
+                for i in range(3):
+                    if not (
+                        bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
+                        and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
+                    ):
+                        print(
+                            f"Asset '{key}' is out of bounds on axis {i}. "
+                            f"Expected bounds: {bounds[i]}, "
+                            f"Found min: {asset_pose[:, i].min()}, max: {asset_pose[:, i].max()}"
+                        )
+                env._reset_idx(env_ids)  # Reset the environment if any object is out of bounds
+
+
+def detect_objects_in_tote(
+    env: ManagerBasedRLGCUEnv,
+    env_ids: torch.Tensor,
+):
+    """Detects objects in the tote.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+    """
+    if env_ids is None:
+        return
+
+    env.tote_manager.reset()
+
+    for key in env.scene.keys():
+        if key.startswith("object"):
+            asset = env.scene[key]
+            asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+            envs_in_tote = []
+
+            for i, tote_bound in enumerate(env.tote_manager.tote_bounds):
+                in_tote_envs = (
+                    (tote_bound[0][0] <= asset_pose[:, 0])
+                    & (asset_pose[:, 0] <= tote_bound[0][1])
+                    & (tote_bound[1][0] <= asset_pose[:, 1])
+                    & (asset_pose[:, 1] <= tote_bound[1][1])
+                    & (tote_bound[2][0] <= asset_pose[:, 2])
+                    & (asset_pose[:, 2] <= tote_bound[2][1])
+                ).nonzero(as_tuple=True)[0]
+
+                if len(in_tote_envs) > 0:
+                    envs_in_tote.extend(in_tote_envs.tolist())
+                    env.tote_manager.put_objects_in_tote(
+                        torch.tensor([int(key.split("object")[-1])], device=env.device),
+                        torch.tensor([i], device=env.device),
+                        torch.tensor(in_tote_envs, device=env.device),
+                    )
+
+            if len(envs_in_tote) == 0:
+                raise RuntimeError(
+                    f"Object {key} is not within the bounds of any tote in environments {env_ids.tolist()}. "
+                    f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
+                )

@@ -19,7 +19,6 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
 from . import mdp
 
@@ -29,10 +28,11 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 25
+num_object_per_env = 10
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
+
 
 @configclass
 class PackSceneCfg(InteractiveSceneCfg):
@@ -112,7 +112,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            # (kaikwan): Other YCB objects are still not working… only the given axis aligned items are working
+                            # FIXME (kaikwan): Other YCB objects are still not working… only the given axis aligned items are working
                             # Error:  Failed to find RigidObject at /primpath
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
@@ -133,10 +133,10 @@ class PackSceneCfg(InteractiveSceneCfg):
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
-                        rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                            kinematic_enabled=False,
-                            disable_gravity=True,
-                        ),
+                        # rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                        #     kinematic_enabled=False,
+                        #     disable_gravity=True,
+                        # ),
                         # collision_props=sim_utils.CollisionPropertiesCfg(
                         #     collision_enabled=False,
                         # ),
@@ -199,7 +199,31 @@ class EventCfg:
         mode="startup",
     )
 
-    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    # reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    randomize_objects = EventTerm(
+        func=mdp.randomize_object_pose_with_invalid_ranges,
+        params={
+            "asset_cfgs": [SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env)],
+            "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
+            "min_separation": 0.13,
+            "invalid_ranges": [
+                {"x": (0.3, 0.5), "y": (-0.07, 0.07)},  # center brim
+                {"x": (0.3, 0.5), "y": (-tote_spacing - 0.07, -tote_spacing + 0.07)},  # left brim
+                {"x": (0.3, 0.5), "y": (tote_spacing - 0.07, tote_spacing + 0.07)},  # right brim
+            ],
+        },
+        mode="reset",
+    )
+
+    check_obj_out_of_bounds = EventTerm(
+        func=mdp.check_obj_out_of_bounds,
+        mode="post_reset",
+    )
+
+    detect_objects_in_tote = EventTerm(
+        func=mdp.detect_objects_in_tote,
+        mode="post_reset",
+    )
 
 
 @configclass
@@ -222,7 +246,7 @@ class CurriculumCfg:
 
 
 @configclass
-class GCUCfg:
+class ToteManagerCfg:
     num_object_per_env = num_object_per_env
 
 
@@ -246,7 +270,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     terminations: TerminationsCfg = TerminationsCfg()
     events: EventCfg = EventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
-    gcu: GCUCfg = GCUCfg()
+    tote_manager: ToteManagerCfg = ToteManagerCfg()
 
     def __post_init__(self):
         """Post initialization."""
