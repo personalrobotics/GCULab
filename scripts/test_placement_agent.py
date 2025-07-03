@@ -103,8 +103,9 @@ def select_random_packable_objects(packable_objects, packable_mask, device, num_
     random_values = torch.rand(num_envs, device=device)
     random_indices = (random_values * available_obj_counts).to(torch.int64)
 
-    # Select objects using vectorized indexing
-    sampled_objects = all_objects[:, random_indices]
+    # Select objects using vectorized indexing - fix the broadcasting issue
+    # We need to explicitly select each environment with its corresponding index
+    sampled_objects = all_objects[torch.arange(num_envs, device=device), random_indices]
 
     # Apply mask for environments with objects
     selected_obj_indices = torch.where(has_objects, sampled_objects.to(torch.int32), selected_obj_indices)
@@ -184,7 +185,8 @@ def main():
                 drop_heights = drop_heights * (obj_idx > 0).float()
 
                 actions[:, 4] = drop_heights  # Set z-drop height based on packing order
-                print(f"[INFO]: Actions: {actions}")
+
+                # print(f"[INFO]: Actions: {actions}")
             # apply actions
             env.step(actions)
 

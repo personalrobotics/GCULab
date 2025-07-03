@@ -46,7 +46,7 @@ class PackingAction(ActionTerm):
 
         self._tote_assets = [self._env.scene[key] for key in tote_keys]
 
-        # # get poses of totes
+        # get poses of totes
         self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self._tote_assets], dim=0)
 
         # create tensors for raw and processed actions
@@ -147,5 +147,10 @@ class PackingAction(ActionTerm):
         self._env.tote_manager.put_objects_in_tote(
             object_ids, tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )
+
+        self._env.tote_manager.update_totes(
+            self._env, dest_totes=tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
+        )
+
         if torch.any(object_ids > 0):
             print("GCU is:", self._env.tote_manager.get_gcu(torch.arange(self.num_envs, device=self.device)))
