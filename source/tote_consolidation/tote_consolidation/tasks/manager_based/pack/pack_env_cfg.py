@@ -29,6 +29,7 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 gcu_objects_path = os.path.abspath("gcu_objects")
 
 num_object_per_env = 10
+num_objects_to_reserve = 2
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -133,15 +134,12 @@ class PackSceneCfg(InteractiveSceneCfg):
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
-                        # rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                        #     kinematic_enabled=False,
-                        #     disable_gravity=True,
-                        # ),
-                        # collision_props=sim_utils.CollisionPropertiesCfg(
-                        #     collision_enabled=False,
-                        # ),
+                        rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                            kinematic_enabled=False,
+                            disable_gravity=True,
+                        ),
                     ),
-                    init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 0.0, 2.0)),
+                    init_state=RigidObjectCfg.InitialStateCfg(pos=(1.0 + i / 5.0, 0.0, -0.7)),
                 ),
             )
 
@@ -199,11 +197,14 @@ class EventCfg:
         mode="startup",
     )
 
-    # reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+
     randomize_objects = EventTerm(
         func=mdp.randomize_object_pose_with_invalid_ranges,
         params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env)],
+            "asset_cfgs": [
+                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
+            ],
             "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
             "min_separation": 0.13,
             "invalid_ranges": [
@@ -218,11 +219,21 @@ class EventCfg:
     check_obj_out_of_bounds = EventTerm(
         func=mdp.check_obj_out_of_bounds,
         mode="post_reset",
+        params={
+            "asset_cfgs": [
+                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
+            ],
+        },
     )
 
     detect_objects_in_tote = EventTerm(
         func=mdp.detect_objects_in_tote,
         mode="post_reset",
+        params={
+            "asset_cfgs": [
+                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
+            ],
+        },
     )
 
 

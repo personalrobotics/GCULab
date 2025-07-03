@@ -14,6 +14,8 @@ import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.sim import schemas
+from isaaclab.sim.schemas import schemas_cfg
 from pxr import UsdGeom
 
 if TYPE_CHECKING:
@@ -233,6 +235,14 @@ def randomize_object_pose_with_invalid_ranges(
             )
             positions = pose_tensor[:, 0:3] + env.scene.env_origins[cur_env, 0:3]
             orientations = math_utils.quat_from_euler_xyz(pose_tensor[:, 3], pose_tensor[:, 4], pose_tensor[:, 5])
+            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{cur_env}")
+            schemas.modify_rigid_body_properties(
+                prim_path,
+                schemas_cfg.RigidBodyPropertiesCfg(
+                    kinematic_enabled=False,
+                    disable_gravity=False,
+                ),
+            )
             asset.write_root_pose_to_sim(
                 torch.cat([positions, orientations], dim=-1), env_ids=torch.tensor([cur_env], device=env.device)
             )
@@ -241,80 +251,79 @@ def randomize_object_pose_with_invalid_ranges(
             )
 
 
-def check_obj_out_of_bounds(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
+def check_obj_out_of_bounds(
+    env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, asset_cfgs: Optional[list[SceneEntityCfg]] = None
+):
+    asset_cfgs = asset_cfgs or []
     """Check if any object is out of bounds and reset the environment if so.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
+        asset_cfgs (list[SceneEntityCfg]): List of asset configurations to check.
     Returns:
         bool: True if any object is out of bounds, False otherwise.
     """
     if env_ids is None:
         return False
-    # Check if any object is out of bounds
-    for key in env.scene.keys():
-        bounds = [(0.2, 0.65), (-0.8, 0.8), (0.0, 0.3)]
-        if key.startswith("object"):
-            asset = env.scene[key]  # Access asset directly using the key
-            asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
-            if not all(
-                bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
-                and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
-                for i in range(3)
-            ):
-                for i in range(3):
-                    if not (
-                        bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
-                        and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
-                    ):
-                        print(
-                            f"Asset '{key}' is out of bounds on axis {i}. "
-                            f"Expected bounds: {bounds[i]}, "
-                            f"Found min: {asset_pose[:, i].min()}, max: {asset_pose[:, i].max()}"
-                        )
-                env._reset_idx(env_ids)  # Reset the environment if any object is out of bounds
+    # Check if any object is out of bounds using asset_cfgs
+    bounds = [(0.2, 0.65), (-0.8, 0.8), (0.0, 0.3)]
+    for asset_cfg in asset_cfgs:
+        asset = env.scene[asset_cfg.name]  # Access asset using asset_cfg
+        asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+        if not all(
+            bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
+            and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
+            for i in range(3)
+        ):
+            for i in range(3):
+                if not (
+                    bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
+                    and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
+                ):
+                    print(
+                        f"Asset '{asset_cfg.name}' is out of bounds on axis {i}. "
+                        f"Expected bounds: {bounds[i]}, "
+                        f"Found min: {asset_pose[:, i].min()}, max: {asset_pose[:, i].max()}"
+                    )
+            env._reset_idx(env_ids)  # Reset the environment if any object is out of bounds
 
 
-def detect_objects_in_tote(
-    env: ManagerBasedRLGCUEnv,
-    env_ids: torch.Tensor,
-):
+def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, asset_cfgs: list[SceneEntityCfg] = []):
     """Detects objects in the tote.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
+        asset_cfgs (list[SceneEntityCfg]): List of asset configurations.
     """
     if env_ids is None:
         return
 
     env.tote_manager.reset()
+    for asset_cfg in asset_cfgs:
+        asset = env.scene[asset_cfg.name]
+        asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+        envs_in_tote = []
 
-    for key in env.scene.keys():
-        if key.startswith("object"):
-            asset = env.scene[key]
-            asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
-            envs_in_tote = []
+        for i, tote_bound in enumerate(env.tote_manager.tote_bounds):
+            in_tote_envs = (
+                (tote_bound[0][0] <= asset_pose[:, 0])
+                & (asset_pose[:, 0] <= tote_bound[0][1])
+                & (tote_bound[1][0] <= asset_pose[:, 1])
+                & (asset_pose[:, 1] <= tote_bound[1][1])
+                & (tote_bound[2][0] <= asset_pose[:, 2])
+                & (asset_pose[:, 2] <= tote_bound[2][1])
+            ).nonzero(as_tuple=True)[0]
 
-            for i, tote_bound in enumerate(env.tote_manager.tote_bounds):
-                in_tote_envs = (
-                    (tote_bound[0][0] <= asset_pose[:, 0])
-                    & (asset_pose[:, 0] <= tote_bound[0][1])
-                    & (tote_bound[1][0] <= asset_pose[:, 1])
-                    & (asset_pose[:, 1] <= tote_bound[1][1])
-                    & (tote_bound[2][0] <= asset_pose[:, 2])
-                    & (asset_pose[:, 2] <= tote_bound[2][1])
-                ).nonzero(as_tuple=True)[0]
-
-                if len(in_tote_envs) > 0:
-                    envs_in_tote.extend(in_tote_envs.tolist())
-                    env.tote_manager.put_objects_in_tote(
-                        torch.tensor([int(key.split("object")[-1])], device=env.device),
-                        torch.tensor([i], device=env.device),
-                        torch.tensor(in_tote_envs, device=env.device),
-                    )
-
-            if len(envs_in_tote) == 0:
-                raise RuntimeError(
-                    f"Object {key} is not within the bounds of any tote in environments {env_ids.tolist()}. "
-                    f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
+            if len(in_tote_envs) > 0:
+                envs_in_tote.extend(in_tote_envs.tolist())
+                env.tote_manager.put_objects_in_tote(
+                    torch.tensor([int(asset_cfg.name.split("object")[-1])], device=env.device),
+                    torch.tensor([i], device=env.device),
+                    torch.tensor(in_tote_envs, device=env.device),
                 )
+
+        if len(envs_in_tote) == 0:
+            raise RuntimeError(
+                f"Object {asset_cfg.name} is not within the bounds of any tote in environments {env_ids.tolist()}. "
+                f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
+            )

@@ -161,3 +161,28 @@ class ToteManager:
     def reset(self):
         """Reset object tracking for all totes across all environments."""
         self.tote_to_obj.zero_()
+
+    def get_reserved_objs_idx(self, env_ids):
+        """
+        Get ids of objects that are reserved for the specified environments.
+
+        Args:
+            env_ids (torch.Tensor): Tensor containing environment IDs.
+
+        Returns:
+            torch.Tensor: Indices of objects reserved for the specified environments.
+        """
+        return self.tote_to_obj[env_ids].sum(dim=1) == 0
+
+    def get_tote_objs_idx(self, tote_ids, env_ids):
+        """
+        Get ids of objects placed in the specified totes for the given environments.
+
+        Args:
+            tote_ids (torch.Tensor): Tensor containing tote IDs.
+            env_ids (torch.Tensor): Tensor containing environment IDs.
+
+        Returns:
+            torch.Tensor: Indices of objects placed in the specified totes.
+        """
+        return self.tote_to_obj[env_ids, tote_ids]

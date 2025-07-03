@@ -130,6 +130,14 @@ class PackingAction(ActionTerm):
             if object_id == 0:
                 continue
             asset = self._env.scene[f"object{object_id.item()}"]
+            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{idx}")
+            schemas.modify_rigid_body_properties(
+                prim_path,
+                schemas_cfg.RigidBodyPropertiesCfg(
+                    kinematic_enabled=False,
+                    disable_gravity=False,
+                ),
+            )
             asset.write_root_link_pose_to_sim(
                 torch.cat([position[idx], orientation[idx]]), env_ids=torch.tensor([idx], device=self.device)
             )
