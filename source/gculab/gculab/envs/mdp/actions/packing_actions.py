@@ -50,8 +50,8 @@ class PackingAction(ActionTerm):
         self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self._tote_assets], dim=0)
 
         # create tensors for raw and processed actions
-        self._raw_actions = torch.zeros(self.num_envs, 9, device=self.device)
-        self._processed_actions = torch.zeros(self.num_envs, 9, device=self.device)
+        self._raw_actions = torch.zeros(self.num_envs, 10, device=self.device)
+        self._processed_actions = torch.zeros(self.num_envs, 10, device=self.device)
 
         # parse clip
         if self.cfg.clip is not None:
@@ -70,7 +70,7 @@ class PackingAction(ActionTerm):
 
     @property
     def action_dim(self) -> int:
-        return 9
+        return 10
 
     @property
     def raw_actions(self) -> torch.Tensor:
@@ -122,13 +122,19 @@ class PackingAction(ActionTerm):
         position = self._processed_actions[:, 2:5]
         # print("position", position)
         orientation = self._processed_actions[:, 5:9]
-        if torch.all(object_ids == 0):
+
+        # action to place object (1 for place, 0 for no action)
+        act = self._processed_actions[:, -1].long()
+
+        if torch.all(act == 0):
             return
 
         # get the object
         for idx, object_id in enumerate(object_ids):
-            if object_id == 0:
+            if act[idx] == 0:
                 continue
+            if object_id == -1:
+                raise ValueError(f"Invalid object ID: {object_id}. Object IDs should be non-negative integers.")
             asset = self._env.scene[f"object{object_id.item()}"]
             prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{idx}")
             schemas.modify_rigid_body_properties(
@@ -144,6 +150,7 @@ class PackingAction(ActionTerm):
             asset.write_root_com_velocity_to_sim(
                 torch.zeros(6, device=self.device), env_ids=torch.tensor([idx], device=self.device)
             )
+
         self._env.tote_manager.put_objects_in_tote(
             object_ids, tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )
@@ -151,6 +158,3 @@ class PackingAction(ActionTerm):
         self._env.tote_manager.update_totes(
             self._env, dest_totes=tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )
-
-        if torch.any(object_ids > 0):
-            print("GCU is:", self._env.tote_manager.get_gcu(torch.arange(self.num_envs, device=self.device)))

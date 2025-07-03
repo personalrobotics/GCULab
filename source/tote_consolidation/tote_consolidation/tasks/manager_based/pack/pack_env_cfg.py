@@ -104,9 +104,9 @@ class PackSceneCfg(InteractiveSceneCfg):
         for i in range(num_object_per_env):
             setattr(
                 self,
-                f"object{i+1}",
+                f"object{i}",
                 RigidObjectCfg(
-                    prim_path=f"{{ENV_REGEX_NS}}/Object{i+1}",
+                    prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=sim_utils.MultiUsdFileCfg(
                         usd_path=[
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
@@ -191,7 +191,7 @@ class EventCfg:
     obj_volume = EventTerm(
         func=mdp.object_props,
         params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env)],
+            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env)],
             "num_objects": num_object_per_env,
         },
         mode="startup",
@@ -202,9 +202,7 @@ class EventCfg:
     randomize_objects = EventTerm(
         func=mdp.randomize_object_pose_with_invalid_ranges,
         params={
-            "asset_cfgs": [
-                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
-            ],
+            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
             "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
             "min_separation": 0.13,
             "invalid_ranges": [
@@ -220,9 +218,7 @@ class EventCfg:
         func=mdp.check_obj_out_of_bounds,
         mode="post_reset",
         params={
-            "asset_cfgs": [
-                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
-            ],
+            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
         },
     )
 
@@ -230,9 +226,7 @@ class EventCfg:
         func=mdp.detect_objects_in_tote,
         mode="post_reset",
         params={
-            "asset_cfgs": [
-                SceneEntityCfg(f"object{i + 1}") for i in range(num_object_per_env - num_objects_to_reserve)
-            ],
+            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
         },
     )
 

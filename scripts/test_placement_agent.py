@@ -59,7 +59,7 @@ def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote
     objs_in_dest = tote_manager.get_tote_objs_idx(tote_ids, env_indices)
 
     # Create a 2D tensor of object indices: shape (num_envs, num_obj_per_env)
-    obj_indices = torch.arange(1, num_obj_per_env + 1, device=env_indices.device).expand(num_envs, -1)
+    obj_indices = torch.arange(0, num_obj_per_env, device=env_indices.device).expand(num_envs, -1)
 
     # Compute mask of packable objects
     mask = (~reserved_objs & ~objs_in_dest).bool()
@@ -80,10 +80,10 @@ def select_random_packable_objects(packable_objects, packable_mask, device, num_
         num_obj_per_env: Number of objects per environment
 
     Returns:
-        Tensor of selected object indices (zeros for environments with no packable objects)
+        Tensor of selected object indices (-1 for environments with no packable objects)
     """
     num_envs = len(packable_objects)
-    selected_obj_indices = torch.zeros(num_envs, device=device, dtype=torch.int32)
+    selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
 
     # Count available objects per environment
     available_obj_counts = packable_mask.sum(dim=1)
@@ -103,7 +103,7 @@ def select_random_packable_objects(packable_objects, packable_mask, device, num_
     random_values = torch.rand(num_envs, device=device)
     random_indices = (random_values * available_obj_counts).to(torch.int64)
 
-    # Select objects using vectorized indexing - fix the broadcasting issue
+    # Select objects using vectorized indexing
     # We need to explicitly select each environment with its corresponding index
     sampled_objects = all_objects[torch.arange(num_envs, device=device), random_indices]
 
@@ -129,14 +129,18 @@ def main():
     env.reset()
 
     idx = 0
-    obj_idx = torch.ones(
+    obj_idx = torch.zeros(
         env.num_envs, device=env.unwrapped.device, dtype=torch.int32
     )  # Track object indices per environment
     tote_manager = env.unwrapped.tote_manager
     num_obj_per_env = tote_manager.num_objects
 
     # Add counters to track packing order for drop height calculation
-    packing_counters = torch.zeros(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
+    packing_counters = torch.ones(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
+
+    pack_interval = 100  # Interval to pack objects
+
+    env_indices = torch.arange(env.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
     # simulate environment
     while simulation_app.is_running():
@@ -144,59 +148,71 @@ def main():
         with torch.inference_mode():
             # compute zero actions
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            if idx % 50 == 0 and idx != 0:
-                batch_size = actions.shape[0]
+            if idx % pack_interval == 0 and idx != 0:
+                print("GCU is:", tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+
                 num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
                 # [0] is destination tote idx (ascending values for batch size)
-                # [1] currently is the object idx (1-indexed. Set to 0 for no object selected)
+                # [1] currently is the object idx (0-indexed. -1 for no packable objects)
                 # [2-9] is the desired object position and orientation
-                actions[:, 0] = torch.arange(batch_size, device=env.unwrapped.device) % num_totes
+                # [10] is the action to indicate if an object is being placed
+                actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
 
                 # Get the tote IDs and environment indices
                 tote_ids = actions[:, 0].to(torch.int32)  # Destination tote IDs for each environment
-                env_indices = torch.arange(env.num_envs, device=env.unwrapped.device)  # Indices of environments
 
                 # Get the objects that can be packed
                 packable_objects, packable_mask = get_packable_object_indices(
                     num_obj_per_env, tote_manager, env_indices, tote_ids
                 )
 
-                # Select random packable objects
-                new_obj_idx = select_random_packable_objects(
+                # Select random packable objects and update obj_idx directly
+                obj_idx = select_random_packable_objects(
                     packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env
                 )
 
                 # Increment packing counters for environments with valid object indices
-                packing_counters += (new_obj_idx > 0).int()
-                obj_idx = new_obj_idx
+                packing_counters += (obj_idx >= 0).int()
 
-                actions[:, 1:] = torch.cat(
+                actions[:, 1:9] = torch.cat(
                     [
                         obj_idx.unsqueeze(1),
-                        torch.tensor([0, 0, 0, 0, 0, 1, 0], device=env.unwrapped.device).repeat(batch_size, 1),
+                        torch.tensor([0, 0, 0, 0, 0, 1, 0], device=env.unwrapped.device).repeat(args_cli.num_envs, 1),
                     ],
                     dim=1,
                 )
 
-                # Vectorized height calculation
-                height_increment = 0.05
-                drop_heights = height_increment * packing_counters
-                # Only apply drop height for non-zero object indices
-                drop_heights = drop_heights * (obj_idx > 0).float()
+                # Drop height calculation
+                drop_heights = torch.ones(args_cli.num_envs, device=env.unwrapped.device) * 0.3
 
                 actions[:, 4] = drop_heights  # Set z-drop height based on packing order
 
-                # print(f"[INFO]: Actions: {actions}")
+                # Set action to place object (1 for place, 0 for no action)
+                # 0 if obj index is -1
+                # NOTE: This shouldn't happen when both environments have packable objects,
+                # which happens now since source and destination totes are not swapped automatically.
+                # The end goal is to have both environments always have packable objects
+                # If it is -1, it could be a sign for a hard environment reset.
+                actions[:, -1] = (obj_idx >= 0).long()
             # apply actions
             env.step(actions)
 
-            if torch.all(obj_idx == 0):
+            # Check that all environments have no packable objects
+            tote_ids = actions[:, 0].to(torch.int32)  # Destination tote IDs for each environment
+
+            packable_objects = get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
+            if all(len(objs) == 0 for objs in packable_objects):
+                # If no packable objects, reset object indices to zero
                 # Wait to show that it has been packed before resetting
-                for i in range(50):
+                for i in range(pack_interval):
                     env.step(torch.zeros(env.action_space.shape, device=env.unwrapped.device))
-                obj_idx = torch.ones(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
+                print(
+                    "Final GCU is:", tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device))
+                )
+
+                obj_idx = torch.zeros(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
                 # Reset packing counters when environment is reset
-                packing_counters = torch.zeros(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
+                packing_counters = torch.ones(env.num_envs, device=env.unwrapped.device, dtype=torch.int32)
                 env.reset()
 
             idx += 1

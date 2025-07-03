@@ -7,6 +7,7 @@ import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
 
+
 class ToteManager:
     """
     Manages tote-related operations in a multi-environment simulation.
@@ -101,15 +102,10 @@ class ToteManager:
         """
         if self.obj_volumes[env_ids].numel() == 0:
             raise ValueError("Object volumes not set.")
-        # Create a mask for valid object IDs (non-zero)
-        mask = object_ids > 0
-        # Apply the mask to filter invalid object IDs while maintaining tensor dimensions
-        filtered_object_ids = object_ids[mask]
         # Remove objects from their original tote
-        self.tote_to_obj[env_ids, :, filtered_object_ids - 1] = 0  # object IDs are 1-based
+        self.tote_to_obj[env_ids, :, object_ids] = 0
         # Mark objects as placed in the specified tote
-        valid_object_ids = filtered_object_ids[filtered_object_ids > 0]  # Filter out zero IDs
-        self.tote_to_obj[env_ids, tote_ids, valid_object_ids - 1] = 1  # object IDs are 1-based
+        self.tote_to_obj[env_ids, tote_ids, object_ids] = 1
 
     def update_totes(self, env, dest_totes, env_ids):
         """
@@ -176,7 +172,11 @@ class ToteManager:
                     # Generate random positions within bounds
                     x_pos = torch.rand(objects.numel(), device=env_ids.device) * (x_max - x_min) + x_min
                     y_pos = torch.rand(objects.numel(), device=env_ids.device) * (y_max - y_min) + y_min
-                    z_pos = torch.rand(objects.numel(), device=env_ids.device) * (z_max - z_min) + z_min + self.true_tote_dim[2] * 0.01
+                    z_pos = (
+                        torch.rand(objects.numel(), device=env_ids.device) * (z_max - z_min)
+                        + z_min
+                        + self.true_tote_dim[2] * 0.01
+                    )
 
                     # Stack positions into a single tensor
                     positions = torch.stack([x_pos, y_pos, z_pos], dim=1)  # Shape: [num_objects, 3]
@@ -185,7 +185,7 @@ class ToteManager:
 
                     # Update the object positions in the simulation
                     for i, obj_id in enumerate(objects):
-                        asset = env.scene[f"object{obj_id.item() + 1}"]
+                        asset = env.scene[f"object{obj_id.item()}"]
                         prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{cur_env.item()}")
                         schemas.modify_rigid_body_properties(
                             prim_path,
@@ -202,16 +202,8 @@ class ToteManager:
                             torch.zeros(6, device=env_ids.device),
                             env_ids=torch.tensor([cur_env], device=env_ids.device),
                         )
-                    # for i in range(100):
-                    #     env.scene.write_data_to_sim()
-                    #     env.sim.step(render=False)
-                    #     env.sim.render()
-                    #     env.scene.update(dt=env.physics_dt)
-                    print(f"[INFO]: Teleported {objects.numel()} objects to empty tote {empty_tote_index.item()} in environment {cur_env.item()}.")
                     # Place the sampled objects in the empty tote
-                    self.put_objects_in_tote(
-                        objects + 1, empty_tote_index, torch.tensor([cur_env], device=env_ids.device)
-                    )
+                    self.put_objects_in_tote(objects, empty_tote_index, torch.tensor([cur_env], device=env_ids.device))
 
     def get_gcu(self, env_ids):
         """

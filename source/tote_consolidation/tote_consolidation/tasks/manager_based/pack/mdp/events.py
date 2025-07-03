@@ -95,7 +95,7 @@ def object_props(
             for mesh in find_meshes(prim):
                 mesh_name = mesh.GetPath().__str__().split("/")[-1]  # Extract the last portion of the path
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
-                obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4]))) - 1
+                obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
                 if mesh_name in volume_cache and mesh_name in bbox_cache:
                     volume = volume_cache[mesh_name]
                     bbox = bbox_cache[mesh_name]
