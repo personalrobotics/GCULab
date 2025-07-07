@@ -50,8 +50,8 @@ class PackingAction(ActionTerm):
         self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self._tote_assets], dim=0)
 
         # create tensors for raw and processed actions
-        self._raw_actions = torch.zeros(self.num_envs, 10, device=self.device)
-        self._processed_actions = torch.zeros(self.num_envs, 10, device=self.device)
+        self._raw_actions = torch.zeros(self.num_envs, 9, device=self.device)
+        self._processed_actions = torch.zeros(self.num_envs, 9, device=self.device)
 
         # parse clip
         if self.cfg.clip is not None:
@@ -70,7 +70,7 @@ class PackingAction(ActionTerm):
 
     @property
     def action_dim(self) -> int:
-        return 10
+        return 9
 
     @property
     def raw_actions(self) -> torch.Tensor:
@@ -123,38 +123,18 @@ class PackingAction(ActionTerm):
         # print("position", position)
         orientation = self._processed_actions[:, 5:9]
 
-        # action to place object (1 for place, 0 for no action)
-        act = self._processed_actions[:, -1].long()
+        # Convert to list of objects
+        objects = [f"object{obj_id.item()}" for obj_id in object_ids]
 
-        if torch.all(act == 0):
-            return
-
-        # get the object
-        for idx, object_id in enumerate(object_ids):
-            if act[idx] == 0:
-                continue
-            if object_id == -1:
-                raise ValueError(f"Invalid object ID: {object_id}. Object IDs should be non-negative integers.")
-            asset = self._env.scene[f"object{object_id.item()}"]
-            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{idx}")
-            schemas.modify_rigid_body_properties(
-                prim_path,
-                schemas_cfg.RigidBodyPropertiesCfg(
-                    kinematic_enabled=False,
-                    disable_gravity=False,
-                ),
-            )
-            asset.write_root_link_pose_to_sim(
-                torch.cat([position[idx], orientation[idx]]), env_ids=torch.tensor([idx], device=self.device)
-            )
-            asset.write_root_com_velocity_to_sim(
-                torch.zeros(6, device=self.device), env_ids=torch.tensor([idx], device=self.device)
-            )
+        # Update object positions using tote manager's method
+        self._env.tote_manager.update_object_positions_in_sim(
+            self._env, objects, position, orientation, cur_env=torch.arange(self.num_envs, device=self.device)
+        )
 
         self._env.tote_manager.put_objects_in_tote(
             object_ids, tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )
 
-        self._env.tote_manager.update_totes(
+        self._env.tote_manager.refill_source_totes(
             self._env, dest_totes=tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )

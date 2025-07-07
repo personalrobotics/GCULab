@@ -221,7 +221,7 @@ def randomize_object_pose_with_invalid_ranges(
             asset_cfg = asset_cfgs[i]
             asset = env.scene[asset_cfg.name]
 
-            # Write pose to simulation
+            # Prepare poses
             pose_tensor = torch.tensor(
                 [[
                     pose_list[i]["x"],
@@ -235,24 +235,20 @@ def randomize_object_pose_with_invalid_ranges(
             )
             positions = pose_tensor[:, 0:3] + env.scene.env_origins[cur_env, 0:3]
             orientations = math_utils.quat_from_euler_xyz(pose_tensor[:, 3], pose_tensor[:, 4], pose_tensor[:, 5])
-            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{cur_env}")
-            schemas.modify_rigid_body_properties(
-                prim_path,
-                schemas_cfg.RigidBodyPropertiesCfg(
-                    kinematic_enabled=False,
-                    disable_gravity=False,
-                ),
-            )
-            asset.write_root_pose_to_sim(
-                torch.cat([positions, orientations], dim=-1), env_ids=torch.tensor([cur_env], device=env.device)
-            )
-            asset.write_root_velocity_to_sim(
-                torch.zeros(1, 6, device=env.device), env_ids=torch.tensor([cur_env], device=env.device)
+
+            env.tote_manager.update_object_positions_in_sim(
+                env,
+                objects=[asset_cfg.name],
+                positions=positions,
+                orientations=orientations,
+                cur_env=cur_env,
             )
 
 
 def check_obj_out_of_bounds(
-    env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, asset_cfgs: Optional[list[SceneEntityCfg]] = None
+    env: ManagerBasedRLGCUEnv,
+    env_ids: torch.Tensor,
+    asset_cfgs: list[SceneEntityCfg],
 ):
     asset_cfgs = asset_cfgs or []
     """Check if any object is out of bounds and reset the environment if so.
@@ -319,7 +315,7 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
                 env.tote_manager.put_objects_in_tote(
                     torch.tensor([int(asset_cfg.name.split("object")[-1])], device=env.device),
                     torch.tensor([i], device=env.device),
-                    torch.tensor(in_tote_envs, device=env.device),
+                    in_tote_envs,
                 )
 
         if len(envs_in_tote) == 0:

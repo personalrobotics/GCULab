@@ -3,6 +3,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import itertools
+
+import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
@@ -55,16 +58,16 @@ class ToteManager:
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
         self.tote_bounds = []
-        self.overfill_threshold = 0.3
+        self.overfill_threshold = 0.2  # in meters
+        self.max_objects_per_tote = 2
 
         tote_bbox = self.true_tote_dim * 0.01  # Convert cm to m for bounding box calculations
         for tote in self.tote_assets:
             tote_pose = tote.get_world_poses()[0][0] - env.scene.env_origins[0, :3]
-            tote_pose_tensor = torch.tensor(tote_pose, device=env.device)
             bounds = [
-                (tote_pose_tensor[0] - tote_bbox[0] / 2, tote_pose_tensor[0] + tote_bbox[0] / 2),
-                (tote_pose_tensor[1] - tote_bbox[1] / 2, tote_pose_tensor[1] + tote_bbox[1] / 2),
-                (tote_pose_tensor[2], tote_pose_tensor[2] + tote_bbox[2]),
+                (tote_pose[0] - tote_bbox[0] / 2, tote_pose[0] + tote_bbox[0] / 2),
+                (tote_pose[1] - tote_bbox[1] / 2, tote_pose[1] + tote_bbox[1] / 2),
+                (tote_pose[2], tote_pose[2] + tote_bbox[2]),
             ]
             self.tote_bounds.append(bounds)
 
@@ -107,7 +110,7 @@ class ToteManager:
         # Mark objects as placed in the specified tote
         self.tote_to_obj[env_ids, tote_ids, object_ids] = 1
 
-    def update_totes(self, env, dest_totes, env_ids):
+    def refill_source_totes(self, env, dest_totes, env_ids):
         """
         1. Check if source totes are empty
         2. If source totes are empty, teleport a random number of objects from reserve
@@ -122,88 +125,278 @@ class ToteManager:
         first_empty = torch.argmax(empty_totes.float(), dim=1)
         empty_tote_tensor = torch.where(has_empty, first_empty, torch.full_like(first_empty, -1))
 
-        # in all has-empty environments, teleport a random number of objects from reserve
+        # In all has-empty environments, teleport objects from reserve to the first empty tote
         if has_empty.any():
-            # Get the indices of the empty totes
-            empty_tote_indices = empty_tote_tensor[has_empty]
-            # Get reserved objects
-            reserve_objects = self.get_reserved_objs_idx(env_ids[has_empty])
-            reserve_objects_idx = torch.stack(torch.where(reserve_objects), dim=1)
-            reserve_objects_grouped = [
-                reserve_objects_idx[reserve_objects_idx[:, 0] == idx, 1].tolist()
-                for idx in range(len(env_ids[has_empty]))
-            ]
+            self.sample_and_place_objects_in_totes(
+                env, empty_tote_tensor[has_empty], env_ids[has_empty], self.max_objects_per_tote
+            )
 
-            max_objects = reserve_objects.sum(dim=1).max().item()
+    def get_tote_fill_height(self, env, tote_ids, env_ids):
+        """
+        Calculate the fill height for specified totes in given environments.
 
-            # Handle the case where there are no reserved objects
-            if max_objects <= 0:
-                return
+        Args:
+            env: Simulation environment object.
+            tote_ids (torch.Tensor): Tensor containing tote IDs.
+            env_ids (torch.Tensor): Tensor containing environment IDs.
 
-            # Generate random number of objects to teleport (between 1 and max_objects)
+        Returns:
+            torch.Tensor: Fill height for the specified totes in the given environments.
+        """
+        # Get asset configurations for the specified environments
+        assets = [env.scene[f"object{obj_id}"] for obj_id in range(self.num_objects)]
+        max_z_positions = torch.zeros(len(env_ids), device=env.device)
+
+        for asset in assets:
+            obj_id = int(asset.cfg.prim_path.split("Object")[-1])
+
+            # First check if object is in destination tote of any env to avoid unnecessary calculations
+            object_in_dest_tote = self.tote_to_obj[env_ids, tote_ids, obj_id] == 1
+            if not object_in_dest_tote.any():
+                continue
+
+            # Get positions for all environments
+            asset_position = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+            asset_orientation = asset.data.root_state_w[:, 3:7]
+
+            # Get rotated bounding box
+            obj_bbox = env.tote_manager.obj_bboxes[:, obj_id]
+            rotated_dims = env.tote_manager._calculate_rotated_bounding_box(obj_bbox, asset_orientation, env.device)
+            margin = rotated_dims / 2.0
+            top_z_positions = asset_position[:, 2] + margin[:, 2]
+
+            # Update max_z_positions only for relevant environments
+            max_z_positions[object_in_dest_tote] = torch.maximum(
+                max_z_positions[object_in_dest_tote], top_z_positions[object_in_dest_tote]
+            )
+
+        self.refill_source_totes(env, tote_ids, env_ids)  # Update totes after calculating fill heights
+
+        return max_z_positions
+
+    def eject_destination_totes(self, env, tote_ids, env_ids):
+        """
+        Eject destination totes by resetting the objects in them to reserve.
+
+        Args:
+            env: Simulation environment object.
+            tote_ids (torch.Tensor): Tensor containing tote IDs.
+            env_ids (torch.Tensor): Tensor containing environment IDs.
+
+        Returns:
+            None
+        """
+        fill_heights = self.get_tote_fill_height(env, tote_ids, env_ids)
+
+        # Check if any tote exceeds the overfill threshold
+        overfilled_envs = fill_heights > self.overfill_threshold
+
+        if not overfilled_envs.any():
+            return
+
+        assets_to_eject = []
+        for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
+            # Get all objects in the overfilled tote
+            objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
+            if objects_in_tote.numel() > 0:
+                # Add to the list of assets to eject
+                assets_to_eject.append([f"object{obj_id.item()}" for obj_id in objects_in_tote])
+
+        for env_id, asset_names in zip(env_ids[overfilled_envs], assets_to_eject):
+            # Reset the asset to reserve
+            for asset_name in asset_names:
+                asset = env.scene[asset_name]
+                default_root_state = asset.data.default_root_state[env_id]
+                default_root_state[:3] += env.scene.env_origins[env_id, :3]  # Adjust for environment origin
+                asset.write_root_link_pose_to_sim(
+                    default_root_state[:7], env_ids=torch.tensor([env_id], device=env.device)
+                )
+                asset.write_root_com_velocity_to_sim(
+                    default_root_state[7:], env_ids=torch.tensor([env_id], device=env.device)
+                )
+
+        if overfilled_envs.any():
+            self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
+
+        wait_time = 100
+        for i in range(wait_time):
+            env.scene.write_data_to_sim()
+            env.sim.step(render=False)
+            if env._sim_step_counter % env.cfg.sim.render_interval == 0:
+                env.sim.render()
+            # update buffers at sim dt
+            env.scene.update(dt=env.physics_dt)
+
+    def update_object_positions_in_sim(self, env, objects, positions, orientations, cur_env):
+        """
+        Update object positions and orientations in the simulation.
+
+        Args:
+            env: Simulation environment object.
+            objects (torch.Tensor or list): Object IDs or names to update.
+            positions (torch.Tensor): Positions for each object [N, 3].
+            orientations (torch.Tensor): Orientations for each object [N, 4].
+            cur_env (int, torch.Tensor): Current environment ID(s).
+
+        Returns:
+            None
+        """
+        device = positions.device
+
+        is_multi_env = hasattr(cur_env, "numel") and cur_env.numel() > 1
+
+        # Update the object positions in the simulation
+        for j, obj_id in enumerate(objects):
+            # Get environment ID for this object
+            if is_multi_env:
+                env_id = cur_env[j].item()
+            else:
+                env_id = cur_env.item() if hasattr(cur_env, "item") else cur_env
+
+            env_id_tensor = torch.tensor([env_id], device=device)
+
+            # Get the asset based on object identifier type
+            if isinstance(obj_id, str):
+                asset = env.scene[obj_id]
+            else:
+                asset = env.scene[f"object{obj_id.item()}"]
+
+            # Update prim path for the specific environment
+            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
+
+            # Modify physics properties and apply pose and velocity
+            schemas.modify_rigid_body_properties(
+                prim_path,
+                schemas_cfg.RigidBodyPropertiesCfg(
+                    kinematic_enabled=False,
+                    disable_gravity=False,
+                ),
+            )
+
+            # Apply position and orientation
+            asset.write_root_link_pose_to_sim(
+                torch.cat([positions[j], orientations[j]]),
+                env_ids=env_id_tensor,
+            )
+
+            # Reset velocity
+            asset.write_root_com_velocity_to_sim(
+                torch.zeros(6, device=device),
+                env_ids=env_id_tensor,
+            )
+
+    def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None):
+        """
+        Sample objects from reserve and place them in the specified totes.
+
+        Args:
+            env: Simulation environment object.
+            tote_ids (torch.Tensor): Tensor containing tote IDs to place objects in.
+            env_ids (torch.Tensor): Tensor containing environment IDs.
+            max_objects_per_tote (int, optional): Maximum number of objects to place in each tote.
+                If None, a random number will be chosen based on available objects.
+
+        Returns:
+            bool: True if objects were placed, False otherwise.
+        """
+        # Get reserved objects
+        reserve_objects = self.get_reserved_objs_idx(env_ids)
+        reserve_objects_idx = torch.stack(torch.where(reserve_objects), dim=1)
+        reserve_objects_grouped = [
+            reserve_objects_idx[reserve_objects_idx[:, 0] == idx, 1].tolist() for idx in range(len(env_ids))
+        ]
+
+        max_available = reserve_objects.sum(dim=1).max().item()
+
+        # Handle the case where there are no reserved objects
+        if max_available <= 0:
+            return False
+
+        # Ensure tote_ids is a tensor with the right shape
+        if not isinstance(tote_ids, torch.Tensor):
+            tote_ids = torch.tensor(tote_ids, device=env_ids.device)
+
+        if tote_ids.ndim == 0:
+            tote_ids = tote_ids.unsqueeze(0)
+
+        # Generate random number of objects to teleport or use specified max
+        if max_objects_per_tote is None:
             num_objects_to_teleport = torch.randint(
                 low=1,
-                high=max_objects + 1,  # +1 because randint is exclusive at the high end
-                size=(empty_tote_indices.shape[0],),
+                high=max_available + 1,  # +1 because randint is exclusive at the high end
+                size=(len(env_ids),),
                 device=env_ids.device,
             )
-            # Sample the objects to teleport
-            sampled_objects = []
-            for i, num in enumerate(num_objects_to_teleport):
-                if num > 0 and reserve_objects_grouped[i]:
-                    sampled_indices = torch.randperm(len(reserve_objects_grouped[i]), device=env_ids.device)[:num]
-                    sampled_objects.append(
-                        torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[sampled_indices]
-                    )
-                else:
-                    sampled_objects.append(torch.tensor([], device=env_ids.device))
+        else:
+            num_objects_to_teleport = torch.full(
+                (len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device
+            )
 
-            # Place the sampled objects in the empty totes
-            for cur_env, objects, empty_tote_index in zip(env_ids[has_empty], sampled_objects, empty_tote_indices):
-                if objects.numel() > 0:
-                    # Sample positions above tote_bounds
-                    tote_bounds = self.tote_bounds[empty_tote_index.item()]
+        # Sample the objects to teleport
+        sampled_objects = []
+        for i, num in enumerate(num_objects_to_teleport):
+            if num > 0 and reserve_objects_grouped[i]:
+                sampled_indices = torch.randperm(len(reserve_objects_grouped[i]), device=env_ids.device)[:num]
+                sampled_objects.append(torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[sampled_indices])
+            else:
+                sampled_objects.append(torch.tensor([], device=env_ids.device))
 
-                    # Calculate bounds for each dimension
-                    x_min, x_max = tote_bounds[0]
-                    y_min, y_max = tote_bounds[1]
-                    z_min, z_max = tote_bounds[2]
+        for i, (cur_env, objects, tote_id) in enumerate(zip(env_ids, sampled_objects, tote_ids)):
+            if objects.numel() > 0:
+                # Sample positions above tote_bounds
+                tote_bounds = self.tote_bounds[tote_id.item()]
 
-                    # Generate random positions within bounds
-                    x_pos = torch.rand(objects.numel(), device=env_ids.device) * (x_max - x_min) + x_min
-                    y_pos = torch.rand(objects.numel(), device=env_ids.device) * (y_max - y_min) + y_min
-                    z_pos = (
-                        torch.rand(objects.numel(), device=env_ids.device) * (z_max - z_min)
-                        + z_min
-                        + self.true_tote_dim[2] * 0.01
-                    )
+                orientations_init = torch.tensor([1, 0, 0, 0], device=env_ids.device)
+                orientations_to_apply = torch.tensor([1, 0, 0, 0], device=env_ids.device)
 
-                    # Stack positions into a single tensor
-                    positions = torch.stack([x_pos, y_pos, z_pos], dim=1)  # Shape: [num_objects, 3]
+                # Extract tote boundaries
+                x_min, x_max = tote_bounds[0]
+                y_min, y_max = tote_bounds[1]
+                z_min, z_max = tote_bounds[2]
 
-                    positions += env.scene.env_origins[cur_env, :3]  # Adjust positions to the environment origin
+                # Calculate rotated bounding boxes using the function
+                orientations_to_apply_repeated = orientations_to_apply.repeat(objects.numel(), 1)
+                rotated_dims = self._calculate_rotated_bounding_box(
+                    self.obj_bboxes[cur_env, objects], orientations_to_apply_repeated, env_ids.device
+                )
 
-                    # Update the object positions in the simulation
-                    for i, obj_id in enumerate(objects):
-                        asset = env.scene[f"object{obj_id.item()}"]
-                        prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{cur_env.item()}")
-                        schemas.modify_rigid_body_properties(
-                            prim_path,
-                            schemas_cfg.RigidBodyPropertiesCfg(
-                                kinematic_enabled=False,
-                                disable_gravity=False,
-                            ),
-                        )
-                        asset.write_root_link_pose_to_sim(
-                            torch.cat([positions[i], torch.tensor([0, 0, 0, 1], device=env_ids.device)]),
-                            env_ids=torch.tensor([cur_env], device=env_ids.device),
-                        )
-                        asset.write_root_com_velocity_to_sim(
-                            torch.zeros(6, device=env_ids.device),
-                            env_ids=torch.tensor([cur_env], device=env_ids.device),
-                        )
-                    # Place the sampled objects in the empty tote
-                    self.put_objects_in_tote(objects, empty_tote_index, torch.tensor([cur_env], device=env_ids.device))
+                repeated_orientations = torch.stack(
+                    [math_utils.quat_mul(orientations_init, orientations_to_apply)] * objects.numel()
+                )
+
+                # Adjust placement bounds for each object based on its rotated dimensions
+                margin = rotated_dims / 2.0
+                adjusted_x_min = x_min + margin[:, 0]
+                adjusted_x_max = x_max - margin[:, 0]
+                adjusted_y_min = y_min + margin[:, 1]
+                adjusted_y_max = y_max - margin[:, 1]
+                adjusted_z_min = z_min
+                adjusted_z_max = z_max
+
+                # Generate random positions within adjusted bounds for all objects
+                x_pos = (
+                    torch.rand(objects.numel(), device=env_ids.device) * (adjusted_x_max - adjusted_x_min)
+                    + adjusted_x_min
+                )
+                y_pos = (
+                    torch.rand(objects.numel(), device=env_ids.device) * (adjusted_y_max - adjusted_y_min)
+                    + adjusted_y_min
+                )
+                z_pos = (
+                    torch.rand(objects.numel(), device=env_ids.device) * (adjusted_z_max - adjusted_z_min)
+                    + adjusted_z_min
+                    + self.true_tote_dim[2] * 0.01
+                )
+
+                # Stack positions into a single tensor
+                positions = torch.stack([x_pos, y_pos, z_pos], dim=1)  # Shape: [num_objects, 3]
+                positions += env.scene.env_origins[cur_env, :3]  # Adjust positions to the environment origin
+
+                # Update object positions using the new function
+                self.update_object_positions_in_sim(env, objects, positions, repeated_orientations, cur_env)
+
+                # Place the sampled objects in the specified tote
+                self.put_objects_in_tote(objects, tote_id, torch.tensor([cur_env], device=env_ids.device))
 
     def get_gcu(self, env_ids):
         """
@@ -229,19 +422,6 @@ class ToteManager:
         # Compute GCUs as the ratio of used volume to total tote volume
         gcus = obj_volumes / self.tote_volume
         return gcus
-
-    def get_fill_height(self, tote_ids, env_ids):
-        """
-        Compute fill height for the specified tote and environments.
-
-        Args:
-            tote_ids (torch.Tensor): Tensor containing tote IDs.
-            env_ids (torch.Tensor): Tensor containing environment IDs.
-
-        Raises:
-            NotImplementedError: This method is not implemented yet.
-        """
-        raise NotImplementedError("Fill height calculation is not implemented yet.")
 
     def is_tote_overfilled(self, tote_ids, env_ids):
         """Check if the specified tote is overfilled for given environments."""
@@ -281,3 +461,32 @@ class ToteManager:
             torch.Tensor: Indices of objects placed in the specified totes.
         """
         return self.tote_to_obj[env_ids, tote_ids]
+
+    def _calculate_rotated_bounding_box(self, object_bboxes, orientations, device):
+        """
+        Calculate rotated bounding boxes for objects efficiently.
+
+        Args:
+            object_bboxes (torch.Tensor): Bounding boxes of objects [N, 3].
+            orientations (torch.Tensor): Orientation quaternions [N, 4].
+            device (torch.device): Device to use for tensors.
+
+        Returns:
+            torch.Tensor: Dimensions of rotated bounding boxes.
+        """
+        # Calculate rotated bounding boxes efficiently
+        object_half_dims = object_bboxes[:, [1, 2, 0]] / 2.0 * 0.01  # cm to m
+
+        # Create corner coordinates and compute rotated bounds in one batch operation
+        corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
+            0
+        ) * object_half_dims.unsqueeze(1)
+        rot_matrices = math_utils.matrix_from_quat(orientations)
+        rotated_corners = torch.bmm(corners, rot_matrices.transpose(1, 2))
+
+        # Get bounds of rotated boxes
+        min_vals, _ = torch.min(rotated_corners, dim=1)
+        max_vals, _ = torch.max(rotated_corners, dim=1)
+        rotated_dims = max_vals - min_vals
+
+        return rotated_dims

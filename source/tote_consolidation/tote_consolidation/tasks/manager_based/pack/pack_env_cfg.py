@@ -139,7 +139,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                             disable_gravity=True,
                         ),
                     ),
-                    init_state=RigidObjectCfg.InitialStateCfg(pos=(1.0 + i / 5.0, 0.0, -0.7)),
+                    init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
                 ),
             )
 
@@ -283,6 +283,6 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 2
         self.sim.render_interval = self.decimation
         self.episode_length_s = 10.0
-        self.viewer.eye = (3.5, 3.5, 3.5)
+        self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
         self.sim.dt = 1.0 / 60.0
