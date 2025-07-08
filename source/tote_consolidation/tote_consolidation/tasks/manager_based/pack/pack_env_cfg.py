@@ -29,7 +29,7 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 gcu_objects_path = os.path.abspath("gcu_objects")
 
 num_object_per_env = 15
-num_objects_to_reserve = 10
+num_objects_to_reserve = 14
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -109,37 +109,35 @@ class PackSceneCfg(InteractiveSceneCfg):
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=sim_utils.MultiUsdFileCfg(
                         usd_path=[
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            # FIXME (kaikwan): Other YCB objects are still not working… only the given axis aligned items are working
-                            # Error:  Failed to find RigidObject at /primpath
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd")
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd")
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd")
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
                             disable_gravity=False,
-                            enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=8,
-                            solver_velocity_iteration_count=0,
+                            # enable_gyroscopic_forces=True,
+                            solver_position_iteration_count=120,
+                            # solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
                             max_depenetration_velocity=1000.0,
@@ -291,4 +289,4 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 60.0
+        self.sim.dt = 1.0 / 120.0
