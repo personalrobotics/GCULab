@@ -5,4 +5,4 @@
 
 """This sub-module contains the functions that are specific to the gcu environments."""
 
-from .gcu import *  # noqa: F401, F403
+from .tote_manager import *  # noqa: F401, F403
