@@ -398,6 +398,7 @@ class ToteManager:
                 # Place the sampled objects in the specified tote
                 self.put_objects_in_tote(objects, tote_id, torch.tensor([cur_env], device=env_ids.device))
 
+        return True
     def get_gcu(self, env_ids):
         """
         Compute GCUs (tote utilization) for all tote IDs for the specified environments.
