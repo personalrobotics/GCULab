@@ -40,7 +40,7 @@ class PackingAction(ActionTerm):
         # get pose of the asset
         self._asset_state = self._asset.get_world_poses()
         tote_keys = sorted(
-            [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.lstrip("tote"))
+            [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
         )
         self.num_totes = len(tote_keys)
 

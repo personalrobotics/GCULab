@@ -139,11 +139,6 @@ def main():
     tote_manager = env.unwrapped.tote_manager
     num_obj_per_env = tote_manager.num_objects
 
-    # Add counters to track packing order for drop height calculation
-    packing_counters = torch.ones(args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32)
-
-    pack_interval = 100  # Interval to pack objects
-
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
     # simulate environment

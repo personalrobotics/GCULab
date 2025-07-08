@@ -28,8 +28,8 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 10
-num_objects_to_reserve = 2
+num_object_per_env = 15
+num_objects_to_reserve = 10
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
