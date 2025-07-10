@@ -180,6 +180,8 @@ def randomize_object_pose_with_invalid_ranges(
                 ranges.append(invalid_range[dim])
         return ranges
 
+    env.tote_manager.reset()
+
     # Randomize poses in each environment independently
     for cur_env in env_ids.tolist():
         pose_list = []

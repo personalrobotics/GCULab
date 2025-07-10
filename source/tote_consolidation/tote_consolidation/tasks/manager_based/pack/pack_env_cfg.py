@@ -262,6 +262,7 @@ class CurriculumCfg:
 @configclass
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
+    animate_vis = True
 
 
 ##
