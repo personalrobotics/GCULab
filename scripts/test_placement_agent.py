@@ -147,7 +147,15 @@ def main():
         with torch.inference_mode():
             # compute zero actions
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
-            print("GCU is:", tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+            stats = tote_manager.get_stats_summary()
+            ejection_summary = tote_manager.stats.get_ejection_summary()
+            print("\n===== Ejection Summary =====")
+            print(f"Total steps: {stats['total_steps']}")
+            if ejection_summary != {}:
+                for i in range(len(ejection_summary.keys())):
+                    env_id = list(ejection_summary.keys())[i]
+                    print(ejection_summary[env_id])
+                print("==========================\n")
 
             num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
             # [0] is destination tote idx (ascending values for batch size)

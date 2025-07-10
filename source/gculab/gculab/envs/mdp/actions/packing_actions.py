@@ -134,7 +134,3 @@ class PackingAction(ActionTerm):
         self._env.tote_manager.put_objects_in_tote(
             object_ids, tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
         )
-
-        self._env.tote_manager.refill_source_totes(
-            self._env, dest_totes=tote_ids, env_ids=torch.arange(self.num_envs, device=self.device)
-        )

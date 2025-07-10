@@ -28,8 +28,8 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 15
-num_objects_to_reserve = 10
+num_object_per_env = 25
+num_objects_to_reserve = 25
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -109,17 +109,15 @@ class PackSceneCfg(InteractiveSceneCfg):
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=sim_utils.MultiUsdFileCfg(
                         usd_path=[
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            # FIXME (kaikwan): Other YCB objects are still not working… only the given axis aligned items are working
-                            # Error:  Failed to find RigidObject at /primpath
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd")
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd")
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd")
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
@@ -136,7 +134,13 @@ class PackSceneCfg(InteractiveSceneCfg):
                         random_choice=True,
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
-                            disable_gravity=True,
+                            disable_gravity=False,
+                            # enable_gyroscopic_forces=True,
+                            solver_position_iteration_count=60,
+                            solver_velocity_iteration_count=0,
+                            sleep_threshold=0.005,
+                            stabilization_threshold=0.0025,
+                            max_depenetration_velocity=1000.0,
                         ),
                     ),
                     init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
@@ -230,6 +234,11 @@ class EventCfg:
         },
     )
 
+    set_objects_to_invisible = EventTerm(
+        func=mdp.set_objects_to_invisible,
+        mode="post_reset",
+    )
+
 
 @configclass
 class RewardsCfg:
@@ -253,6 +262,7 @@ class CurriculumCfg:
 @configclass
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
+    animate_vis = True
 
 
 ##
