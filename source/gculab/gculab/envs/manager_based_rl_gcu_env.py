@@ -201,6 +201,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
 
+        self.tote_manager.refill_source_totes(self, env_ids=torch.arange(self.num_envs, device=self.device))
         wait_time = 100
         for i in range(wait_time):
             self.scene.write_data_to_sim()
@@ -213,6 +214,11 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.sim.forward()
 
         # post-step:
+        # Log the operation
+        if self.tote_manager.log_stats:
+            self.tote_manager.stats.log_obj_transfers(torch.arange(self.num_envs, device=self.device), num_objects=1)
+            self.tote_manager.log_current_gcu()
+
         # -- update env counters (used for curriculum generation)
         self.episode_length_buf += 1  # step in current episode (per env)
         self.common_step_counter += 1  # total step (common for all envs)

@@ -17,4 +17,3 @@ gym.register(
         "env_cfg_entry_point": f"{__name__}.joint_pos_env_cfg:NoArmPackEnvCfg",
     },
 )
- 
