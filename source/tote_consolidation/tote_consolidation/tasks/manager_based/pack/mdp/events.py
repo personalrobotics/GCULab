@@ -180,6 +180,8 @@ def randomize_object_pose_with_invalid_ranges(
                 ranges.append(invalid_range[dim])
         return ranges
 
+    env.tote_manager.reset()
+
     # Randomize poses in each environment independently
     for cur_env in env_ids.tolist():
         pose_list = []
@@ -243,6 +245,31 @@ def randomize_object_pose_with_invalid_ranges(
                 orientations=orientations,
                 cur_env=cur_env,
             )
+        env.tote_manager.refill_source_totes(env, env_ids=torch.arange(env.num_envs, device=env.device))
+
+
+def set_objects_to_invisible(
+    env: ManagerBasedRLGCUEnv,
+    env_ids: torch.Tensor,
+):
+    """Sets the visibility of objects to false in the simulation.
+
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+        asset_cfgs (list[SceneEntityCfg]): List of asset configurations to set invisible.
+    """
+    if env_ids is None:
+        return
+
+    visibility_mask = ~torch.any(env.tote_manager.tote_to_obj, dim=1)
+
+    for obj_id in range(env.tote_manager.num_objects):
+        envs_obj_in_reserve = torch.nonzero(visibility_mask[:, obj_id], as_tuple=True)[0].tolist()
+        if envs_obj_in_reserve:
+            asset_cfg = SceneEntityCfg(f"object{obj_id}")
+            asset = env.scene[asset_cfg.name]
+            asset.set_visibility(False, env_ids=envs_obj_in_reserve)
 
 
 def check_obj_out_of_bounds(
@@ -294,7 +321,6 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
     if env_ids is None:
         return
 
-    env.tote_manager.reset()
     for asset_cfg in asset_cfgs:
         asset = env.scene[asset_cfg.name]
         asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
