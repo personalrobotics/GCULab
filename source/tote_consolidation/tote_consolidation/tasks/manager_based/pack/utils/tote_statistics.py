@@ -177,6 +177,65 @@ class ToteStatistics:
         """Increment the step counter."""
         self.step_count += 1
 
+    def get_summary(self) -> dict[str, Any]:
+        """
+        Get a summary of all statistics.
+
+        Returns:
+            Dictionary containing summarized statistics and full history
+        """
+        summary = {
+            # General statistics
+            "total_steps": self.step_count,
+            # Operations history
+            "operations_history": {op_name: op_list for op_name, op_list in self.operations.items()},
+            # Current values
+            "current_object_transfers": self.obj_transfers.cpu().numpy().tolist(),
+            "current_source_tote_ejections": self.source_tote_ejections.cpu().numpy().tolist(),
+            "current_dest_tote_ejections": self.dest_tote_ejections.cpu().numpy().tolist(),
+            # Comprehensive ejection history
+            "ejection_snapshots": self.ejection_snapshots,
+            # Source tote ejection history
+            "source_tote_ejections_history": [
+                {
+                    "step": entry["step"],
+                    "values": entry["values"].cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                }
+                for entry in self.source_tote_ejections_history
+            ],
+            # Destination tote ejection history
+            "dest_tote_ejections_history": [
+                {
+                    "step": entry["step"],
+                    "values": entry["values"].cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                }
+                for entry in self.dest_tote_ejections_history
+            ],
+            # Object transfer history
+            "obj_transfers_history": [
+                {
+                    "step": entry["step"],
+                    "values": entry["values"].cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                }
+                for entry in self.obj_transfers_history
+            ],
+            # GCU history
+            "gcu_history": [
+                {
+                    "step": entry["step"],
+                    "values": entry["values"].cpu().numpy().tolist(),
+                    "env_ids": entry["env_ids"].cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                }
+                for entry in self.gcu_history
+            ],
+        }
+
+        return summary
+
     def get_ejection_summary(self) -> dict[str, Any]:
         """
         Get a summary of the most recent ejection statistics.
