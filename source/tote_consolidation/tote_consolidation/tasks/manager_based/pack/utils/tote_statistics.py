@@ -3,15 +3,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import logging
 import time
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Tuple
-
+from typing import Any
+from collections import deque
 import torch
-
-logger = logging.getLogger(__name__)
-
 
 class ToteStatistics:
     """
@@ -52,6 +48,10 @@ class ToteStatistics:
         self.dest_tote_ejections_history = []
         self.source_tote_ejections = torch.zeros(num_envs, device=device)
         self.dest_tote_ejections = torch.zeros(num_envs, device=device)
+        
+        # Inbound and outbound GCU values for each tote
+        self.inbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
+        self.outbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
 
         # Comprehensive history at destination tote ejections
         self.ejection_snapshots = [[] for _ in range(self.num_envs)]
@@ -78,11 +78,6 @@ class ToteStatistics:
             "timestamp": time.time() - self.start_time,
         })
 
-        # Log to console for visibility
-        mean_gcu = gcu_values.mean().item()
-        max_gcu = gcu_values.max().item()
-        logger.info(f"Step {self.step_count} - Mean GCU: {mean_gcu:.4f}, Max GCU: {max_gcu:.4f}")
-
     def log_obj_transfers(self, env_ids: torch.Tensor, num_objects: int = 1):
         """
         Log object transfer operations.
@@ -108,7 +103,19 @@ class ToteStatistics:
             "timestamp": time.time() - self.start_time,
         })
 
-        logger.debug(f"Object transfer: {num_objects} objects")
+    def log_tote_eject_gcus(self, inbound_gcus: torch.Tensor, outbound_gcus: torch.Tensor, totes_ejected: torch.Tensor):
+        """
+        Log GCU values for totes that were ejected.
+        Args:
+            inbound_gcus: Tensor of GCU values for inbound totes [num_envs, num_totes]
+            outbound_gcus: Tensor of GCU values for outbound totes   [num_envs, num_totes]
+            totes_ejected: Boolean tensor indicating which totes were ejected [num_envs, num_totes]
+        """
+        ejected_indices = totes_ejected.nonzero(as_tuple=False)  # Shape: [N, 2]
+
+        for env, tote in ejected_indices:
+            self.inbound_gcus[env][tote].append(inbound_gcus[env, tote].item())
+            self.outbound_gcus[env][tote].append(outbound_gcus[env, tote].item())
 
     def log_source_tote_ejection(self, env_ids: torch.Tensor):
         """
@@ -137,8 +144,6 @@ class ToteStatistics:
             "timestamp": time.time() - self.start_time,
         })
 
-        logger.info(f"Source tote ejection in {count} environments")
-
     def log_dest_tote_ejection(self, tote_ids: torch.Tensor, env_ids: torch.Tensor):
         """
         Log destination tote ejection events.
@@ -150,7 +155,7 @@ class ToteStatistics:
         self.dest_tote_ejections[env_ids] += 1
         count = len(env_ids)
         for idx, env_id in enumerate(env_ids):
-            self.ejection_snapshots[env_id].append([tote_ids[idx], self.get_summary()])
+            self.ejection_snapshots[env_id].append([tote_ids[idx], self.get_summary(env_id)])
             # Reset counts
             self.source_tote_ejections[env_id] = 0
             self.dest_tote_ejections[env_id] = 0
@@ -171,70 +176,85 @@ class ToteStatistics:
             "timestamp": time.time() - self.start_time,
         })
 
-        logger.info(f"Destination tote ejection in {count} environments")
-
     def increment_step(self):
         """Increment the step counter."""
         self.step_count += 1
-
-    def get_summary(self) -> dict[str, Any]:
+    def get_summary(self, env_ids: torch.Tensor | int | None = None) -> dict[str, Any]:
         """
-        Get a summary of all statistics.
+        Get a summary of statistics for specified environment IDs.
+
+        Args:
+            env_ids: Environment IDs to include in the summary. Can be a tensor, single integer, or None (for all environments)
 
         Returns:
-            Dictionary containing summarized statistics and full history
+            Dictionary containing summarized statistics and history for specified environments
         """
-        summary = {
-            # General statistics
+        # Handle different input types for env_ids
+        if isinstance(env_ids, int):
+            env_ids = torch.tensor([env_ids], device=self.device)
+        elif env_ids is None:
+            env_ids = torch.arange(self.num_envs, device=self.device)
+        
+        # Convert env_ids to list for easier filtering
+        env_id_list = env_ids.cpu().numpy().tolist()
+        if not isinstance(env_id_list, list):
+            env_id_list = [env_id_list]
+        
+        # Filter operations by environment IDs
+        filtered_operations = defaultdict(list)
+        for op_name, op_list in self.operations.items():
+            for entry in op_list:
+                entry_env_ids = entry["env_ids"] if isinstance(entry["env_ids"], list) else [entry["env_ids"]]
+                if any(env_id in env_id_list for env_id in entry_env_ids):
+                    filtered_operations[op_name].append(entry)
+        
+        # Create filtered history entries
+        def filter_history(history_list):
+            return [
+                {
+                    "step": entry["step"],
+                    "values": entry["values"][env_ids].cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                }
+                for entry in history_list
+            ]
+        
+        # Filter GCU history
+        filtered_gcu_history = []
+        for entry in self.gcu_history:
+            entry_env_ids = entry["env_ids"]
+            mask = torch.zeros_like(entry_env_ids, dtype=torch.bool)
+            
+            # Create mask for matching environment IDs
+            if env_ids.ndim == 0:
+                mask |= (entry_env_ids == env_ids.item())
+            else:
+                for env_id in env_ids:
+                    mask |= (entry_env_ids == env_id)
+            
+            if mask.any():
+                filtered_indices = torch.nonzero(mask, as_tuple=True)[0]
+                filtered_entry_env_ids = entry_env_ids[filtered_indices]
+                
+                filtered_gcu_history.append({
+                    "step": entry["step"],
+                    "values": entry["values"][filtered_entry_env_ids].cpu().numpy().tolist(),
+                    "env_ids": filtered_entry_env_ids.cpu().numpy().tolist(),
+                    "timestamp": entry["timestamp"],
+                })
+        
+        return {
             "total_steps": self.step_count,
-            # Operations history
-            "operations_history": {op_name: op_list for op_name, op_list in self.operations.items()},
-            # Current values
-            "current_object_transfers": self.obj_transfers.cpu().numpy().tolist(),
-            "current_source_tote_ejections": self.source_tote_ejections.cpu().numpy().tolist(),
-            "current_dest_tote_ejections": self.dest_tote_ejections.cpu().numpy().tolist(),
-            # Comprehensive ejection history
-            "ejection_snapshots": self.ejection_snapshots,
-            # Source tote ejection history
-            "source_tote_ejections_history": [
-                {
-                    "step": entry["step"],
-                    "values": entry["values"].cpu().numpy().tolist(),
-                    "timestamp": entry["timestamp"],
-                }
-                for entry in self.source_tote_ejections_history
-            ],
-            # Destination tote ejection history
-            "dest_tote_ejections_history": [
-                {
-                    "step": entry["step"],
-                    "values": entry["values"].cpu().numpy().tolist(),
-                    "timestamp": entry["timestamp"],
-                }
-                for entry in self.dest_tote_ejections_history
-            ],
-            # Object transfer history
-            "obj_transfers_history": [
-                {
-                    "step": entry["step"],
-                    "values": entry["values"].cpu().numpy().tolist(),
-                    "timestamp": entry["timestamp"],
-                }
-                for entry in self.obj_transfers_history
-            ],
-            # GCU history
-            "gcu_history": [
-                {
-                    "step": entry["step"],
-                    "values": entry["values"].cpu().numpy().tolist(),
-                    "env_ids": entry["env_ids"].cpu().numpy().tolist(),
-                    "timestamp": entry["timestamp"],
-                }
-                for entry in self.gcu_history
-            ],
+            "operations_history": dict(filtered_operations),
+            "current_object_transfers": self.obj_transfers[env_ids].cpu().numpy().tolist(),
+            "current_source_tote_ejections": self.source_tote_ejections[env_ids].cpu().numpy().tolist(),
+            "current_dest_tote_ejections": self.dest_tote_ejections[env_ids].cpu().numpy().tolist(),
+            "ejection_snapshots": [self.ejection_snapshots[i] for i in env_id_list if i < len(self.ejection_snapshots)],
+            "source_tote_ejections_history": filter_history(self.source_tote_ejections_history),
+            "dest_tote_ejections_history": filter_history(self.dest_tote_ejections_history),
+            "obj_transfers_history": filter_history(self.obj_transfers_history),
+            "gcu_history": filtered_gcu_history,
         }
-
-        return summary
 
     def get_ejection_summary(self) -> dict[str, Any]:
         """
@@ -246,22 +266,22 @@ class ToteStatistics:
         summary = {}
         # Check if there are any snapshots
         for env_id in range(self.num_envs):
-            if self.ejection_snapshots[env_id] and len(self.ejection_snapshots[env_id]) > 0:
+            if self.ejection_snapshots[env_id]:
                 # Return a summary of the last snapshot for this environment
                 tote_ids = self.ejection_snapshots[env_id][-1][0]
                 summary_env = self.ejection_snapshots[env_id][-1][1]
                 last_gcu = (
-                    summary_env["gcu_history"][-1]["values"][env_id][tote_ids]
+                    summary_env["gcu_history"][-1]["values"][0][tote_ids]
                     if "gcu_history" in summary_env and len(summary_env["gcu_history"]) > 0
                     else None
                 )
                 last_obj_transfers = (
-                    summary_env["obj_transfers_history"][-1]["values"][env_id]
+                    summary_env["obj_transfers_history"][-1]["values"]
                     if "obj_transfers_history" in summary_env and len(summary_env["obj_transfers_history"]) > 0
                     else None
                 )
                 last_source_ejection = (
-                    summary_env["source_tote_ejections_history"][-1]["values"][env_id]
+                    summary_env["source_tote_ejections_history"][-1]["values"]
                     if "source_tote_ejections_history" in summary_env
                     and len(summary_env["source_tote_ejections_history"]) > 0
                     else None
@@ -270,7 +290,50 @@ class ToteStatistics:
                 summary[env_id]["last_gcu"] = last_gcu
                 summary[env_id]["last_source_ejection"] = last_source_ejection
                 summary[env_id]["last_obj_transfers"] = last_obj_transfers
+        return summary
 
+    def get_full_ejection_summary(self) -> dict[str, Any]:
+        """
+        Get a comprehensive summary of all ejection statistics.
+        """
+        summary = {}
+        mean_gcus = 0
+        mean_obj_transfers = 0
+        mean_source_ejections = 0
+        data_count = 0
+        for env_id in range(self.num_envs):
+            if self.ejection_snapshots[env_id] is not None and len(self.ejection_snapshots[env_id]) > 0:
+                summary[env_id] = {'gcus': [], 'obj_transfers': [], 'source_ejections': []}
+                for i in range(len(self.ejection_snapshots[env_id])):
+                    tote_ids = self.ejection_snapshots[env_id][i][0]
+                    summary_env = self.ejection_snapshots[env_id][i][1]
+                    last_gcu = (
+                        summary_env["gcu_history"][-1]["values"][0][tote_ids]
+                        if "gcu_history" in summary_env and len(summary_env["gcu_history"]) > 0
+                        else None
+                    )
+                    last_obj_transfers = (
+                        summary_env["obj_transfers_history"][-1]["values"]
+                        if "obj_transfers_history" in summary_env and len(summary_env["obj_transfers_history"]) > 0
+                        else 0
+                    )
+                    last_source_ejection = (
+                        summary_env["source_tote_ejections_history"][-1]["values"]
+                        if "source_tote_ejections_history" in summary_env
+                        and len(summary_env["source_tote_ejections_history"]) > 0
+                        else 0
+                    )
+                    if last_gcu is not None:
+                        mean_gcus += last_gcu
+                    mean_obj_transfers += last_obj_transfers
+                    mean_source_ejections += last_source_ejection
+                    data_count += 1
+                    summary[env_id]['gcus'].append(last_gcu)
+                    summary[env_id]['obj_transfers'].append(last_obj_transfers)
+                    summary[env_id]['source_ejections'].append(last_source_ejection)
+        summary['mean_gcus'] = mean_gcus / data_count if data_count > 0 else 0
+        summary['mean_obj_transfers'] = mean_obj_transfers / data_count if data_count > 0 else 0
+        summary['mean_source_ejections'] = mean_source_ejections / data_count if data_count > 0 else 0
         return summary
 
     def save_to_file(self, filepath: str):
@@ -283,10 +346,7 @@ class ToteStatistics:
         import json
 
         # Convert data to JSON-serializable format
-        summary = self.get_summary()
+        summary = self.get_full_ejection_summary()
 
-        # Save to file
-        with open(filepath, "w") as f:
-            json.dump(summary, f, indent=2)
-
-        logger.info(f"Statistics saved to {filepath}")
+        with open(filepath, 'w') as f:
+            json.dump(summary, f, indent=4)
