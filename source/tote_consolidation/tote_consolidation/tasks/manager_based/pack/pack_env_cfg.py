@@ -10,7 +10,6 @@ import os
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
-import gculab.sim as gcu_sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import ActionTermCfg as ActionTerm
@@ -20,7 +19,6 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-import torch
 
 from . import mdp
 
@@ -109,7 +107,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                 f"object{i}",
                 RigidObjectCfg(
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
-                    spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
+                    spawn=sim_utils.MultiUsdFileCfg(
                         usd_path=[
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
@@ -134,7 +132,6 @@ class PackSceneCfg(InteractiveSceneCfg):
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
-                        distribution=None, # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
                             disable_gravity=False,

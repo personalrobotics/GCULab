@@ -183,9 +183,9 @@ def generate_orientations(objects, device=None):
     
     return repeated_orientations
 
-def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientations, min_separation=0.0, device=None, max_attempts=100):
+def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientations, device=None):
     """
-    Generate random positions within tote bounds for objects with minimum separation.
+    Generate random positions within tote bounds for objects.
 
     Args:
         objects (torch.Tensor): Tensor containing object IDs.
@@ -193,9 +193,7 @@ def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientation
         env_origin (torch.Tensor): Origin of the environment.
         obj_bboxes (torch.Tensor): Bounding boxes of objects.
         orientations (torch.Tensor): Orientations for each object.
-        min_separation (float): Minimum distance between objects (in meters).
         device (torch.device, optional): Device to use for tensors.
-        max_attempts (int): Maximum number of attempts to place an object.
 
     Returns:
         torch.Tensor: Positions for the objects.
@@ -209,45 +207,11 @@ def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientation
 
     # Calculate rotated bounding boxes
     rotated_dims = calculate_rotated_bounding_box(obj_bboxes, orientations, device)
-    
-    # Initialize positions list
-    positions = []
-    
-    for i in range(objects.numel()):
-        # Get margin to adjust boundaries for object size
-        margin = rotated_dims[i] / 2.0
-        
-        # Adjusted boundaries considering object size
-        adj_x_min = x_min + margin[0]
-        adj_x_max = x_max - margin[0]
-        adj_y_min = y_min + margin[1]
-        adj_y_max = y_max - margin[1]
-        adj_z_min = z_min + margin[2]
-        adj_z_max = z_max - margin[2]
-        
-        for attempt in range(max_attempts):
-            # Generate random position
-            x = torch.rand(1, device=device) * (adj_x_max - adj_x_min) + adj_x_min
-            y = torch.rand(1, device=device) * (adj_y_max - adj_y_min) + adj_y_min
-            z = torch.rand(1, device=device) * (adj_z_max - adj_z_min) + adj_z_min
-            
-            candidate_position = torch.tensor([x.item(), y.item(), z.item()], device=device)
-            
-            # Accept position if it's the first object or if reached max attempts
-            if len(positions) == 0 or attempt == max_attempts - 1:
-                positions.append(candidate_position)
-                break
-            
-            # Check separation from all previously placed objects
-            separation_check = all(
-                torch.norm(candidate_position - pos) >= min_separation for pos in positions
-            )
-            
-            if separation_check:
-                positions.append(candidate_position)
-                break
-    
-    # Stack positions into a tensor
-    positions_tensor = torch.stack(positions, dim=0)
-    
-    return positions_tensor + env_origin
+
+    # Adjust positions based on rotated dimensions to ensure objects fit within bounds
+    x_pos = torch.rand(objects.numel(), device=device) * (x_max - x_min - rotated_dims[:, 0]) + x_min + rotated_dims[:, 0]/2
+    y_pos = torch.rand(objects.numel(), device=device) * (y_max - y_min - rotated_dims[:, 1]) + y_min + rotated_dims[:, 1]/2
+    z_pos = torch.rand(objects.numel(), device=device) * (z_max - z_min - rotated_dims[:, 2]) + z_min + rotated_dims[:, 2]/2
+
+    positions = torch.stack([x_pos, y_pos, z_pos], dim=1)
+    return positions + env_origin
