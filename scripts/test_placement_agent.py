@@ -18,7 +18,6 @@ parser.add_argument(
 )
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
-parser.add_argument("--exp_name", type=str, default="test_placement", help="Name of the experiment.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -36,9 +35,6 @@ import torch
 from isaaclab_tasks.utils import parse_env_cfg
 
 import tote_consolidation.tasks  # noqa: F401
-
-import os
-from datetime import datetime
 
 
 # PLACEHOLDER: Extension template (do not remove this comment)
@@ -136,6 +132,7 @@ def main():
     # reset environment
     env.reset()
 
+    idx = 0
     obj_idx = torch.zeros(
         args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32
     )  # Track object indices per environment
@@ -144,21 +141,7 @@ def main():
 
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
-    stats_dir = "stats"
-
-    run_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # create stats and run name directory if it does not exist
-    if os.path.exists(stats_dir) is False:
-        os.makedirs(stats_dir)
-    run_name = f"{args_cli.task}_{run_dir}"
-    # create run name directory
-    run_path = os.path.join(stats_dir, run_name)
-    if os.path.exists(run_path) is False:
-        os.makedirs(run_path)
-    exp_log_interval = 50  # Log stats every 50 steps
-
-    step_count = 0
-
+    # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
@@ -219,15 +202,7 @@ def main():
 
             packable_objects = get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
 
-            if step_count % exp_log_interval == 0:
-                print(f"\nStep {step_count}:")
-                print("Saving stats to file...")
-                tote_manager.stats.save_to_file(
-                    os.path.join(run_path, f"{args_cli.exp_name}.json")
-                )
-                print("Saved stats to file.")
-
-            step_count += 1
+            idx += 1
 
     # close the simulator
     env.close()
