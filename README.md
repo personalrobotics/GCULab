@@ -10,8 +10,20 @@
 
 ### Key Features
 
+#### Heuristic-scoring based serach packing agent
+Packing agent based on *"Stable bin packing of non-convex 3D objects with a robot manipulator"* by Fan Wang and Kris Hauser.
+[arXiv:1812.04093](https://arxiv.org/abs/1812.04093)
+
+Notes: only works with `--num_envs 1` as of now
+Defaults to DBLF heuristic
+
+**Command:**
+```bash
+python scripts/fanwang_bpp/fanwang_bpp_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 1
+```
+
 #### Pack Task
-Packing gym environment for the Amazon task.
+Demo for Amazon Packing Task
 
 **Command:**
 ```bash
