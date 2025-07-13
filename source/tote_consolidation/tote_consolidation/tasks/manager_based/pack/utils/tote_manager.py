@@ -44,7 +44,7 @@ class ToteManager:
         overfill_threshold: Height threshold for tote overfilling
     """
 
-    def __init__(self, cfg, env, animate_vis=True):
+    def __init__(self, cfg, env):
         """
         Initialize the ToteManager.
 
@@ -65,18 +65,19 @@ class ToteManager:
         self.num_objects = cfg.num_object_per_env
         self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
         self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
+        self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.tote_to_obj = torch.zeros(
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
-        self.dest_totes = None
-        self.overfill_threshold = 0.2  # in meters
+        self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
+        self.overfill_threshold = 0.4  # in meters
         self.max_objects_per_tote = 2
 
         # Initialize statistics tracker
         self.stats = ToteStatistics(self.num_envs, self.num_totes, env.device)
         self.log_stats = True
-        self.animate = animate_vis
+        self.animate = cfg.animate_vis
 
     def set_object_volume(self, obj_volumes, env_ids):
         """
@@ -98,6 +99,16 @@ class ToteManager:
         """
         self.obj_bboxes[env_ids] = obj_bboxes
 
+    def set_object_voxels(self, obj_voxels):
+        """
+        Set object voxel representations for specified environments.
+
+        Args:
+            obj_voxels: List of voxel representations for each environment
+            env_ids: Environment IDs to update
+        """
+        self.obj_voxels = obj_voxels
+
     def put_objects_in_tote(self, object_ids, tote_ids, env_ids):
         """
         Mark objects as placed in specified totes.
@@ -113,11 +124,29 @@ class ToteManager:
         if self.obj_volumes[env_ids].numel() == 0:
             raise ValueError("Object volumes not set.")
 
-        self.dest_totes = tote_ids
         # Remove objects from their original tote
         self.tote_to_obj[env_ids, :, object_ids] = 0
         # Mark objects as placed in the specified tote
         self.tote_to_obj[env_ids, tote_ids, object_ids] = 1
+
+    def _create_dest_totes_mask(self, empty_totes, env_ids):
+        """
+        Create a mask of destination totes for each environment.
+
+        Args:
+            empty_totes: Tensor indicating empty totes
+            env_ids: Environment IDs
+
+        Returns:
+            Mask tensor for destination totes
+        """
+        dest_totes_mask = torch.zeros_like(empty_totes, dtype=torch.bool)
+        for i, env_id in enumerate(env_ids):
+            if self.dest_totes.dim() == 1:
+                dest_totes_mask[i, self.dest_totes[env_id]] = True
+            else:
+                dest_totes_mask[i, self.dest_totes[env_id, :]] = True
+        return dest_totes_mask
 
     def refill_source_totes(self, env, env_ids):
         """
@@ -129,6 +158,11 @@ class ToteManager:
         """
         # Check if all objects in each tote are zero
         empty_totes = torch.all(self.tote_to_obj[env_ids] == 0, dim=2)
+
+        dest_totes_mask = self._create_dest_totes_mask(empty_totes, env_ids)
+
+        # Mark destination totes as not empty to exclude them from refilling
+        empty_totes = empty_totes & ~dest_totes_mask
         empty_totes_init = empty_totes.clone()
 
         # Find first empty tote per environment (or -1 if none)
@@ -136,49 +170,49 @@ class ToteManager:
         refilled = False
         outbound_gcus = self.get_gcu(env_ids)
 
+        first_empty = torch.argmax(empty_totes.float(), dim=1)
+
         while has_empty.any():
             refilled = True
-            first_empty = torch.argmax(empty_totes.float(), dim=1)
 
-            # Create a mask for environments where first empty tote is a destination tote
-            # Reshape dest_totes to ensure proper broadcasting
-            if self.dest_totes is not None:
-                dest_totes_reshaped = self.dest_totes.view(-1, 1) if self.dest_totes.dim() == 1 else self.dest_totes
-                is_dest_tote = first_empty.unsqueeze(1) == dest_totes_reshaped
-                is_dest_tote_any = is_dest_tote.any(dim=1) if is_dest_tote.dim() > 1 else is_dest_tote
-
-                # Set first_empty to -1 if it's a destination tote
-                first_empty = torch.where(is_dest_tote_any, torch.full_like(first_empty, -1), first_empty)
-
-            # Update has_empty to exclude cases where first empty is a dest tote (now -1)
-            has_empty = has_empty & (first_empty != -1)
-
-            # Create empty tote tensor, -1 if no valid empty source tote
-            empty_tote_tensor = torch.where(has_empty, first_empty, torch.full_like(first_empty, -1))
+            # # Create empty tote tensor, -1 if no valid empty source tote
+            # empty_tote_tensor = torch.where(has_empty, first_empty, torch.full_like(first_empty, -1))
 
             # In all has-empty environments, teleport objects from reserve to the first empty tote
-            if has_empty.any():
-                if self.animate:
-                    reappear_tote_animation(env, env_ids, has_empty, empty_tote_tensor, self.tote_keys)
+            if self.animate:
+                reappear_tote_animation(env, env_ids, has_empty, first_empty, self.tote_keys)
 
-                self.sample_and_place_objects_in_totes(
-                    env, empty_tote_tensor[has_empty], env_ids[has_empty], self.max_objects_per_tote
-                )
+            self.sample_and_place_objects_in_totes(
+                env, first_empty[has_empty], env_ids[has_empty], self.max_objects_per_tote
+            )
 
-                # Log source tote ejections
-                if self.log_stats:
-                    self.stats.log_source_tote_ejection(env_ids[has_empty])
+            # Log source tote ejections
+            if self.log_stats:
+                self.stats.log_source_tote_ejection(env_ids[has_empty])
 
             # Check if all objects in each tote are zero
             empty_totes = torch.all(self.tote_to_obj[env_ids] == 0, dim=2)
 
+            # Check if all objects in each tote are zero
+            empty_totes = torch.all(self.tote_to_obj[env_ids] == 0, dim=2)
+
+            # Create a mask of destination totes for each environment
+            dest_totes_mask = self._create_dest_totes_mask(empty_totes, env_ids)
+            # Mark destination totes as not empty to exclude them from refilling
+            empty_totes = empty_totes & ~dest_totes_mask
+            empty_totes_init = empty_totes.clone()
+
             # Find first empty tote per environment (or -1 if none)
             has_empty = empty_totes.any(dim=1)
+            refilled = False
+            outbound_gcus = self.get_gcu(env_ids)
+
+            first_empty = torch.argmax(empty_totes.float(), dim=1)
 
         if refilled:
             inbound_gcus = self.get_gcu(env_ids)
             self.stats.log_tote_eject_gcus(inbound_gcus, outbound_gcus, totes_ejected=empty_totes_init)
-            
+
     def get_tote_fill_height(self, env, tote_ids, env_ids):
         """
         Calculate the maximum height of objects in specified totes.
@@ -217,7 +251,6 @@ class ToteManager:
             max_z_positions[object_in_dest_tote] = torch.maximum(
                 max_z_positions[object_in_dest_tote], top_z_positions[object_in_dest_tote]
             )
-        self.dest_totes = tote_ids
         self.refill_source_totes(env, env_ids)
 
         return max_z_positions
@@ -255,7 +288,9 @@ class ToteManager:
         outbound_gcus = self.get_gcu(env_ids)
         if self.log_stats:
             self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
-            self.stats.log_tote_eject_gcus(torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes)
+            self.stats.log_tote_eject_gcus(
+                torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
+            )
         assets_to_eject = []
         for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
             # Get all objects in the overfilled tote
@@ -337,7 +372,7 @@ class ToteManager:
             )
             asset.set_visibility(True, env_ids=env_id_tensor)
 
-    def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None, min_separation=0.1):
+    def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None, min_separation=0.3):
         """
         Sample objects from reserve and place them in specified totes.
 

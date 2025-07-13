@@ -9,8 +9,8 @@
 import os
 from dataclasses import MISSING
 
-import isaaclab.sim as sim_utils
 import gculab.sim as gcu_sim_utils
+import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import ActionTermCfg as ActionTerm
@@ -20,7 +20,6 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-import torch
 
 from . import mdp
 
@@ -30,8 +29,8 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 25
-num_objects_to_reserve = 25
+num_object_per_env = 20
+num_objects_to_reserve = 20
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -111,30 +110,30 @@ class PackSceneCfg(InteractiveSceneCfg):
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
                         usd_path=[
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
+                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
                             os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
                             # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
+                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
                         ],
                         random_choice=True,
-                        distribution=None, # None for uniform distribution
+                        distribution=None,  # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
                             disable_gravity=False,

@@ -15,6 +15,9 @@ from isaaclab.managers.action_manager import ActionTerm
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
 from isaacsim.core.prims import XFormPrim
+from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+    calculate_rotated_bounding_box,
+)
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
@@ -38,7 +41,10 @@ class PackingAction(ActionTerm):
         super().__init__(cfg, env)
 
         # get pose of the asset
-        self._asset_state = self._asset.get_world_poses()
+        self.place_obj_bottomLeft = (
+            cfg.place_obj_bottomLeft
+        )  # origin is bottom left of object placed at bottom left of tote
+        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100
         tote_keys = sorted(
             [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
         )
@@ -100,8 +106,27 @@ class PackingAction(ActionTerm):
         self._processed_actions[:, 2:5] += tote_state[:, :3].squeeze(1)
 
         # z offset to displace the object above the table
-        self._processed_actions[:, 2:5] += torch.tensor([0, 0, 0.1], device=self.device).repeat(self.num_envs, 1)
-        # # compute the command
+        self._processed_actions[:, 2:5] += torch.tensor([0, 0, 0.05], device=self.device).repeat(self.num_envs, 1)
+
+        if self.place_obj_bottomLeft:
+            # offset to bottom left of the object
+            self._processed_actions[:, 2:5] -= (
+                torch.tensor([self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device).repeat(
+                    self.num_envs, 1
+                )
+            )
+
+            bbox_offset = self._env.tote_manager.obj_bboxes[torch.arange(self.num_envs, device=self.device), actions[:, 1].long()]
+            rotated_half_dim = (
+                calculate_rotated_bounding_box(
+                    bbox_offset, self._processed_actions[:, 5:9].squeeze(1), device=self.device
+                )
+                / 2.0
+            )
+            # Get bounding box offset
+            self._processed_actions[:, 2:5] += rotated_half_dim
+
+        # compute the command
         # if self.cfg.clip is not None:
         #     self._processed_actions = torch.clamp(
         #         self._processed_actions, min=self._clip[:, :, 0], max=self._clip[:, :, 1]

@@ -3,7 +3,11 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Script to run an environment with zero action agent."""
+"""Script to run an environment with a 3D Bin Packing agent based on the paper:
+Stable bin packing of non-convex 3D objects with a robot manipulator
+Fan Wang, Kris Hauser
+https://arxiv.org/abs/1812.04093
+"""
 
 """Launch Isaac Sim Simulator first."""
 
@@ -36,9 +40,12 @@ from datetime import datetime
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
+import isaaclab.utils.math as math_utils
+import bpp_utils
 
+
+import tote_consolidation.tasks  # noqa: F401
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids):
@@ -72,53 +79,47 @@ def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote
 
     return valid_indices, mask
 
-
-def select_random_packable_objects(packable_objects, packable_mask, device, num_obj_per_env):
-    """Select random packable objects for each environment.
-
+def convert_transform_to_action_tensor(transform, obj_idx, device):
+    """Convert a transform object to an action tensor format.
+    
     Args:
-        packable_objects: List of tensors with packable object indices for each environment
-        packable_mask: Boolean mask of packable objects
-        device: Device to create tensors on
-        num_obj_per_env: Number of objects per environment
-
+        transform: Transform object with position and attitude (orientation)
+        obj_idx: Index of the object to place
+        device: The device to create tensors on
+        
     Returns:
-        Tensor of selected object indices (-1 for environments with no packable objects)
+        A tensor representing the object index and transform in the format
+        expected by the action space [obj_idx, pos_x, pos_y, pos_z, quat_w, quat_x, quat_y, quat_z]
     """
-    num_envs = len(packable_objects)
-    selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
+    rpy = transform.attitude
+    quat_init = torch.tensor([1, 0, 0, 0], device=device)  # Default quaternion
+    
+    # Convert degrees to radians first
+    roll_rad = torch.tensor([rpy.roll * torch.pi / 180.0], device=device)
+    pitch_rad = torch.tensor([rpy.pitch * torch.pi / 180.0], device=device)
+    yaw_rad = torch.tensor([rpy.yaw * torch.pi / 180.0], device=device)
+    
+    # Convert Euler angles to quaternion
+    quat = math_utils.quat_from_euler_xyz(
+        roll_rad,
+        pitch_rad,
+        yaw_rad
+    ).squeeze(0)
+    quat_final = math_utils.quat_mul(quat, quat_init)
 
-    # Count available objects per environment
-    available_obj_counts = packable_mask.sum(dim=1)
-    has_objects = available_obj_counts > 0
-
-    # Early return if no objects available
-    if not has_objects.any():
-        return selected_obj_indices
-
-    # Pad all objects into a single tensor
-    all_objects = torch.zeros(num_envs, num_obj_per_env, device=device)
-    for i, objs in enumerate(packable_objects):
-        if len(objs) > 0:
-            all_objects[i, : len(objs)] = objs
-
-    # Sample random indices based on available objects
-    random_values = torch.rand(num_envs, device=device)
-    random_indices = (random_values * available_obj_counts).to(torch.int64)
-
-    # Select objects using vectorized indexing
-    # We need to explicitly select each environment with its corresponding index
-    sampled_objects = all_objects[torch.arange(num_envs, device=device), random_indices]
-
-    # Apply mask for environments with objects
-    selected_obj_indices = torch.where(has_objects, sampled_objects.to(torch.int32), selected_obj_indices)
-
-    # Raise error if any indices are still -1, indicating no packable objects
-    if torch.any(selected_obj_indices == -1):
-        raise ValueError("No packable objects available for some environments")
-
-    return selected_obj_indices
-
+    # Scale position from cm to m
+    transform_tensor = torch.tensor([transform.position.x, transform.position.y, transform.position.z], device=device) / 100
+    
+    # Combine position and orientation
+    transform_tensor = torch.cat([transform_tensor, quat_final], dim=0)
+    
+    # Combine object index and transform
+    action_tensor = torch.cat([
+        obj_idx.unsqueeze(1),
+        transform_tensor.unsqueeze(0),
+    ], dim=1)
+    
+    return action_tensor
 
 def main():
     """Zero actions agent with Isaac Lab environment."""
@@ -140,6 +141,7 @@ def main():
     )  # Track object indices per environment
     tote_manager = env.unwrapped.tote_manager
     num_obj_per_env = tote_manager.num_objects
+    num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
 
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
@@ -154,9 +156,17 @@ def main():
     run_path = os.path.join(stats_dir, run_name)
     if os.path.exists(run_path) is False:
         os.makedirs(run_path)
-    exp_log_interval = 50  # Log stats every 50 steps
+    exp_log_interval = 1  # Log stats every 50 steps
 
     step_count = 0
+
+    # Preview the packing problem with only objects in current source totes
+    # packable_objects_init, packable_mask_init = get_packable_object_indices(
+    #     num_obj_per_env, tote_manager, env_indices, torch.zeros(args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32)
+    # )
+    # bpp_utils.preview_packing_problem(tote_manager, packable_objects_init)
+
+    problem, tote_dims, items, display = bpp_utils.create_packing_problem(tote_manager, torch.arange(num_obj_per_env, device=env.unwrapped.device))
 
     while simulation_app.is_running():
         # run everything in inference mode
@@ -165,6 +175,7 @@ def main():
             actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
             stats = tote_manager.get_stats_summary()
             ejection_summary = tote_manager.stats.get_ejection_summary()
+            print("GCU ", tote_manager.get_gcu(env_indices))
             print("\n===== Ejection Summary =====")
             print(f"Total steps: {stats['total_steps']}")
             if ejection_summary != {}:
@@ -173,7 +184,6 @@ def main():
                     print(ejection_summary[env_id])
                 print("==========================\n")
 
-            num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
             # [0] is destination tote idx (ascending values for batch size)
             # [1] currently is the object idx (0-indexed. -1 for no packable objects)
             # [2-9] is the desired object position and orientation
@@ -192,23 +202,8 @@ def main():
                 num_obj_per_env, tote_manager, env_indices, tote_ids
             )
 
-            # Select random packable objects
-            obj_idx = select_random_packable_objects(
-                packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env
-            )
-
-            actions[:, 1:9] = torch.cat(
-                [
-                    obj_idx.unsqueeze(1),
-                    torch.tensor([0, 0, 0, 1, 0, 0, 0], device=env.unwrapped.device).repeat(args_cli.num_envs, 1),
-                ],
-                dim=1,
-            )
-
-            # Fixed Drop height
-            drop_heights = torch.ones(args_cli.num_envs, device=env.unwrapped.device) * 0.3
-
-            actions[:, 4] = drop_heights
+            problem, transform, obj_idx = bpp_utils.get_action(problem, items, packable_objects, display)
+            actions[:, 1:9] = convert_transform_to_action_tensor(transform, obj_idx, env.unwrapped.device)
 
             # apply actions
             env.step(actions)
@@ -221,7 +216,9 @@ def main():
             if step_count % exp_log_interval == 0:
                 print(f"\nStep {step_count}:")
                 print("Saving stats to file...")
-                tote_manager.stats.save_to_file(os.path.join(run_path, f"{args_cli.exp_name}.json"))
+                tote_manager.stats.save_to_file(
+                    os.path.join(run_path, f"{args_cli.exp_name}.json")
+                )
                 print("Saved stats to file.")
 
             step_count += 1

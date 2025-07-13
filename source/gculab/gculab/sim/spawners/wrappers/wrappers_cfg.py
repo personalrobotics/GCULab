@@ -5,12 +5,18 @@
 
 from dataclasses import MISSING
 
-from isaaclab.sim.spawners.from_files import UsdFileCfg
-from isaaclab.sim.spawners.spawner_cfg import DeformableObjectSpawnerCfg, RigidObjectSpawnerCfg, SpawnerCfg
-from isaaclab.utils import configclass
 import torch
-from . import wrappers
 from isaaclab.sim import MultiUsdFileCfg
+from isaaclab.sim.spawners.from_files import UsdFileCfg
+from isaaclab.sim.spawners.spawner_cfg import (
+    DeformableObjectSpawnerCfg,
+    RigidObjectSpawnerCfg,
+    SpawnerCfg,
+)
+from isaaclab.utils import configclass
+
+from . import wrappers
+
 
 @configclass
 class MultiUsdFromDistFileCfg(UsdFileCfg):

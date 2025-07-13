@@ -80,11 +80,76 @@ def object_props(
         bbox = bbox[[2, 0, 1]]  # Reorder to (l, w, h)
         return bbox
 
+    def compute_voxelized_geometry(mesh, bbox, voxel_size=1, padding_factor=1.2):
+        """
+        Voxelize the mesh geometry into a grid where each voxel corresponds to voxel_size³ volume.
+        The grid is made larger than the actual mesh by scaling up the mesh and bounding box.
+
+        Parameters:
+            mesh          : UsdGeom.Mesh
+            bbox          : torch.Tensor (3,), represents the bounding box **size** of the object (max - min)
+            voxel_size    : int or float, size of each voxel
+            padding_factor: float, factor to scale up the bounding box (default: 1.2 = 20% larger)
+
+        Returns:
+            voxel_grid : torch.FloatTensor, shape determined by bbox and voxel_size
+        """
+        points_attr = mesh.GetPointsAttr()
+        points = torch.tensor(points_attr.Get(), dtype=torch.float32)
+
+        # Calculate bounding box minimum and maximum
+        bbox_min = points.min(dim=0).values
+        bbox_max = points.max(dim=0).values
+
+        # Calculate center of the bounding box
+        center = (bbox_min + bbox_max) / 2
+
+        # Scale up the bounding box around its center
+        scaled_min = center - (center - bbox_min) * padding_factor
+        scaled_max = center + (bbox_max - center) * padding_factor
+
+        # New scaled bbox size
+        scaled_bbox = scaled_max - scaled_min
+
+        # Compute grid size with explicit ceil
+        grid_size = torch.ceil(scaled_bbox / voxel_size).long()
+
+        voxel_grid = torch.zeros(grid_size.tolist(), dtype=torch.float32)
+
+        # Offset points so that scaled_min maps to zero index in grid
+        points_local = points - scaled_min
+
+        for point in points_local:
+            # Ensure indices are rounded properly (floor for point-to-voxel mapping)
+            voxel_index = torch.floor(point / voxel_size).long()
+            # Set voxel to 1 if within bounds
+            if (0 <= voxel_index).all() and (voxel_index < grid_size).all():
+                voxel_grid[tuple(voxel_index.tolist())] = 1.0
+
+        # Rearrange to (z, x, y) for consistency with other functions
+        voxel_grid = voxel_grid.permute(2, 0, 1)
+
+        # Optionally visualize the voxel grid
+        # voxels_np = voxel_grid.cpu().numpy()
+        # fig = plt.figure(figsize=(8, 6))
+        # ax = fig.add_subplot(projection='3d')
+        # ax.set_box_aspect(voxels_np.shape)
+
+        # # Plot the voxels
+        # ax.voxels(voxels_np, edgecolor='k')
+
+        # ax.set_xlabel('X')
+        # ax.set_ylabel('Y')
+        # ax.set_zlabel('Z')
+        # plt.title('3D Voxel Grid Visualization')
+        # plt.show()
+
+        return voxel_grid
+
     # Cache for storing volumes of already computed objects
     obj_volumes = torch.zeros((env.num_envs, num_objects), device=env.device)
     obj_bboxes = torch.zeros((env.num_envs, num_objects, 3), device=env.device)
-    volume_cache = {}
-    bbox_cache = {}
+    obj_voxels = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
 
     # Get mesh from the asset
     for asset_cfg in asset_cfgs:
@@ -93,25 +158,20 @@ def object_props(
         for prim_path in sim_utils.find_matching_prim_paths(prim_path_expr):
             prim = env.scene.stage.GetPrimAtPath(prim_path)
             for mesh in find_meshes(prim):
-                mesh_name = mesh.GetPath().__str__().split("/")[-1]  # Extract the last portion of the path
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
-                if mesh_name in volume_cache and mesh_name in bbox_cache:
-                    volume = volume_cache[mesh_name]
-                    bbox = bbox_cache[mesh_name]
-                else:
-                    volume = compute_mesh_volume(mesh)
-                    bbox = compute_mesh_bbox(mesh)
 
-                    # Cache the computed values
-                    volume_cache[mesh_name] = volume
-                    bbox_cache[mesh_name] = bbox
+                volume = compute_mesh_volume(mesh)
+                bbox = compute_mesh_bbox(mesh)
+                vox = compute_voxelized_geometry(mesh, bbox)
 
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
+                obj_voxels[env_idx][obj_idx] = vox
 
     env.tote_manager.set_object_volume(obj_volumes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
+    env.tote_manager.set_object_voxels(obj_voxels)
 
 
 def randomize_object_pose_with_invalid_ranges(
