@@ -150,6 +150,8 @@ def object_props(
     obj_volumes = torch.zeros((env.num_envs, num_objects), device=env.device)
     obj_bboxes = torch.zeros((env.num_envs, num_objects, 3), device=env.device)
     obj_voxels = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
+    
+    mesh_properties_cache = {}
 
     # Get mesh from the asset
     for asset_cfg in asset_cfgs:
@@ -157,13 +159,22 @@ def object_props(
         prim_path_expr = object.cfg.prim_path  # fix prim path is regex
         for prim_path in sim_utils.find_matching_prim_paths(prim_path_expr):
             prim = env.scene.stage.GetPrimAtPath(prim_path)
+            items = prim.GetMetadata('references').GetAddedOrExplicitItems()
+            asset_path = items[0].assetPath
+
+                
             for mesh in find_meshes(prim):
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
 
-                volume = compute_mesh_volume(mesh)
-                bbox = compute_mesh_bbox(mesh)
-                vox = compute_voxelized_geometry(mesh, bbox)
+                # Check if we've already calculated properties for this asset
+                if asset_path in mesh_properties_cache:
+                    volume, bbox, vox = mesh_properties_cache[asset_path]
+                else:
+                    volume = compute_mesh_volume(mesh)
+                    bbox = compute_mesh_bbox(mesh)
+                    vox = compute_voxelized_geometry(mesh, bbox)
+                    mesh_properties_cache[asset_path] = (volume, bbox, vox)
 
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
