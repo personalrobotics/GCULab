@@ -37,15 +37,14 @@ simulation_app = app_launcher.app
 import os
 from datetime import datetime
 
+import bpp_utils
 import gymnasium as gym
+import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401
 import torch
-from isaaclab_tasks.utils import parse_env_cfg
-import isaaclab.utils.math as math_utils
-import bpp_utils
-
-
 import tote_consolidation.tasks  # noqa: F401
+from isaaclab_tasks.utils import parse_env_cfg
+
 
 # PLACEHOLDER: Extension template (do not remove this comment)
 def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids):
@@ -79,47 +78,50 @@ def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote
 
     return valid_indices, mask
 
+
 def convert_transform_to_action_tensor(transform, obj_idx, device):
     """Convert a transform object to an action tensor format.
-    
+
     Args:
         transform: Transform object with position and attitude (orientation)
         obj_idx: Index of the object to place
         device: The device to create tensors on
-        
+
     Returns:
         A tensor representing the object index and transform in the format
         expected by the action space [obj_idx, pos_x, pos_y, pos_z, quat_w, quat_x, quat_y, quat_z]
     """
     rpy = transform.attitude
     quat_init = torch.tensor([1, 0, 0, 0], device=device)  # Default quaternion
-    
+
     # Convert degrees to radians first
     roll_rad = torch.tensor([rpy.roll * torch.pi / 180.0], device=device)
     pitch_rad = torch.tensor([rpy.pitch * torch.pi / 180.0], device=device)
     yaw_rad = torch.tensor([rpy.yaw * torch.pi / 180.0], device=device)
-    
+
     # Convert Euler angles to quaternion
-    quat = math_utils.quat_from_euler_xyz(
-        roll_rad,
-        pitch_rad,
-        yaw_rad
-    ).squeeze(0)
+    quat = math_utils.quat_from_euler_xyz(roll_rad, pitch_rad, yaw_rad).squeeze(0)
     quat_final = math_utils.quat_mul(quat, quat_init)
 
     # Scale position from cm to m
-    transform_tensor = torch.tensor([transform.position.x, transform.position.y, transform.position.z], device=device) / 100
-    
+    transform_tensor = (
+        torch.tensor([transform.position.x, transform.position.y, transform.position.z], device=device) / 100
+    )
+
     # Combine position and orientation
     transform_tensor = torch.cat([transform_tensor, quat_final], dim=0)
-    
+
     # Combine object index and transform
-    action_tensor = torch.cat([
-        obj_idx.unsqueeze(1),
-        transform_tensor.unsqueeze(0),
-    ], dim=1)
-    
+    action_tensor = torch.cat(
+        [
+            obj_idx.unsqueeze(1),
+            transform_tensor.unsqueeze(0),
+        ],
+        dim=1,
+    )
+
     return action_tensor
+
 
 def main():
     """Zero actions agent with Isaac Lab environment."""
@@ -160,13 +162,7 @@ def main():
 
     step_count = 0
 
-    # Preview the packing problem with only objects in current source totes
-    # packable_objects_init, packable_mask_init = get_packable_object_indices(
-    #     num_obj_per_env, tote_manager, env_indices, torch.zeros(args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32)
-    # )
-    # bpp_utils.preview_packing_problem(tote_manager, packable_objects_init)
-
-    problem, tote_dims, items, display = bpp_utils.create_packing_problem(tote_manager, torch.arange(num_obj_per_env, device=env.unwrapped.device))
+    bpp = bpp_utils.BPP(tote_manager, torch.arange(num_obj_per_env, device=env.unwrapped.device))
 
     while simulation_app.is_running():
         # run everything in inference mode
@@ -202,9 +198,9 @@ def main():
                 num_obj_per_env, tote_manager, env_indices, tote_ids
             )
 
-            problem, transform, obj_idx = bpp_utils.get_action(problem, items, packable_objects, display)
+            bpp.update_container_heightmap(env, env_indices, tote_ids)
+            transform, obj_idx = bpp.get_action(packable_objects)
             actions[:, 1:9] = convert_transform_to_action_tensor(transform, obj_idx, env.unwrapped.device)
-
             # apply actions
             env.step(actions)
 
@@ -216,9 +212,7 @@ def main():
             if step_count % exp_log_interval == 0:
                 print(f"\nStep {step_count}:")
                 print("Saving stats to file...")
-                tote_manager.stats.save_to_file(
-                    os.path.join(run_path, f"{args_cli.exp_name}.json")
-                )
+                tote_manager.stats.save_to_file(os.path.join(run_path, f"{args_cli.exp_name}.json"))
                 print("Saved stats to file.")
 
             step_count += 1

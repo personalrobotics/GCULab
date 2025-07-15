@@ -58,6 +58,7 @@ class ToteManager:
         )
         self.num_totes = len(self.tote_keys)
         self.tote_assets = [env.scene[key] for key in self.tote_keys]
+        self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self.tote_assets], dim=0)
 
         self.true_tote_dim = torch.tensor([54, 35, 26], device=env.device)  # in cm
         self.tote_volume = torch.prod(self.true_tote_dim).item()

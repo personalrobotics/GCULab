@@ -10,7 +10,7 @@
 
 ### Key Features
 
-#### Heuristic-scoring based serach packing agent
+#### Heuristic-scoring based search packing agent
 Packing agent based on *"Stable bin packing of non-convex 3D objects with a robot manipulator"* by Fan Wang and Kris Hauser.
 [arXiv:1812.04093](https://arxiv.org/abs/1812.04093)
 

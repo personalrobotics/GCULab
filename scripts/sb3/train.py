@@ -55,6 +55,7 @@ from datetime import datetime
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import numpy as np
+import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -70,8 +71,6 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback
 from stable_baselines3.common.logger import configure
 from stable_baselines3.common.vec_env import VecNormalize
-
-import tote_consolidation.tasks  # noqa: F401
 
 
 @hydra_task_config(args_cli.task, "sb3_cfg_entry_point")
