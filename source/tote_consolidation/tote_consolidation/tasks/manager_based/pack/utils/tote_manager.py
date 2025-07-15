@@ -72,7 +72,7 @@ class ToteManager:
         )
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
         self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
-        self.overfill_threshold = 0.4  # in meters
+        self.overfill_threshold = 0.3  # in meters
         self.max_objects_per_tote = 2
 
         # Initialize statistics tracker
@@ -256,7 +256,7 @@ class ToteManager:
 
         return max_z_positions
 
-    def eject_destination_totes(self, env, tote_ids, env_ids):
+    def eject_totes(self, env, tote_ids, env_ids, is_dest=True, overfill_check=True):
         """
         Reset overfilled destination totes by returning objects to reserve.
 
@@ -264,11 +264,16 @@ class ToteManager:
             env: Simulation environment
             tote_ids: Destination totes
             env_ids: Target environments
+            is_dest: Flag indicating if the totes are destination totes
+            overfill_check: Flag to enable/disable overfill checking
         """
         fill_heights = self.get_tote_fill_height(env, tote_ids, env_ids)
 
         # Check if any tote exceeds the overfill threshold
-        overfilled_envs = fill_heights > self.overfill_threshold
+        if overfill_check:
+            overfilled_envs = fill_heights > self.overfill_threshold
+        else:
+            overfilled_envs = torch.ones_like(fill_heights, dtype=torch.bool)
 
         if not overfilled_envs.any():
             return
@@ -288,7 +293,8 @@ class ToteManager:
         overfilled_totes[overfilled_envs, tote_ids[overfilled_envs]] = True
         outbound_gcus = self.get_gcu(env_ids)
         if self.log_stats:
-            self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
+            if is_dest:
+                self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
             self.stats.log_tote_eject_gcus(
                 torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
             )

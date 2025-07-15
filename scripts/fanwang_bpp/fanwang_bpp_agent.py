@@ -45,38 +45,7 @@ import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
-
 # PLACEHOLDER: Extension template (do not remove this comment)
-def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids):
-    """Get indices of objects that can be packed per environment.
-
-    Args:
-        num_obj_per_env: Number of objects per environment
-        tote_manager: The tote manager object
-        env_indices: Indices of environments to get packable objects for
-        tote_ids: Destination tote IDs for each environment
-
-    Returns:
-        List of tensors containing packable object indices for each environment
-    """
-    num_envs = env_indices.shape[0]
-
-    # Get objects that are reserved (already being picked up)
-    reserved_objs = tote_manager.get_reserved_objs_idx(env_indices)
-
-    # Get objects that are already in destination totes
-    objs_in_dest = tote_manager.get_tote_objs_idx(tote_ids, env_indices)
-
-    # Create a 2D tensor of object indices: shape (num_envs, num_obj_per_env)
-    obj_indices = torch.arange(0, num_obj_per_env, device=env_indices.device).expand(num_envs, -1)
-
-    # Compute mask of packable objects
-    mask = (~reserved_objs & ~objs_in_dest).bool()
-
-    # Use list comprehension to get valid indices per environment
-    valid_indices = [obj_indices[i][mask[i]] for i in range(num_envs)]
-
-    return valid_indices, mask
 
 
 def convert_transform_to_action_tensor(transform, obj_idx, device):
@@ -186,7 +155,7 @@ def main():
             # [10] is the action to indicate if an object is being placed
             actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
 
-            tote_manager.eject_destination_totes(
+            tote_manager.eject_totes(
                 env.unwrapped, actions[:, 0].to(torch.int32), env_indices
             )  # Eject destination totes
 
@@ -194,12 +163,10 @@ def main():
             tote_ids = actions[:, 0].to(torch.int32)
 
             # Get the objects that can be packed
-            packable_objects, packable_mask = get_packable_object_indices(
-                num_obj_per_env, tote_manager, env_indices, tote_ids
-            )
+            packable_objects = bpp.get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
 
             bpp.update_container_heightmap(env, env_indices, tote_ids)
-            transform, obj_idx = bpp.get_action(packable_objects)
+            transform, obj_idx = bpp.get_action(env, packable_objects, tote_ids)
             actions[:, 1:9] = convert_transform_to_action_tensor(transform, obj_idx, env.unwrapped.device)
             # apply actions
             env.step(actions)
@@ -207,7 +174,7 @@ def main():
             # Check that all environments have no packable objects
             tote_ids = actions[:, 0].to(torch.int32)  # Destination tote IDs for each environment
 
-            packable_objects = get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
+            packable_objects = bpp.get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
 
             if step_count % exp_log_interval == 0:
                 print(f"\nStep {step_count}:")

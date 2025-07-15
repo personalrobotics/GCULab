@@ -180,7 +180,7 @@ def main():
             # [10] is the action to indicate if an object is being placed
             actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
 
-            tote_manager.eject_destination_totes(
+            tote_manager.eject_totes(
                 env.unwrapped, actions[:, 0].to(torch.int32), env_indices
             )  # Eject destination totes
 

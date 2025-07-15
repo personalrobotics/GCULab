@@ -36,6 +36,9 @@ class PackingAction(ActionTerm):
     _clip: torch.Tensor
     """The clip applied to the input action."""
 
+    # Define constants
+    Z_OFFSET_ABOVE_TABLE = 0.02
+
     def __init__(self, cfg: actions_cfg.PackingActionCfg, env: ManagerBasedEnv) -> None:
         # initialize the action term
         super().__init__(cfg, env)
@@ -44,7 +47,7 @@ class PackingAction(ActionTerm):
         self.place_obj_bottomLeft = (
             cfg.place_obj_bottomLeft
         )  # origin is bottom left of object placed at bottom left of tote
-        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100
+        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100 * 0.95
         tote_keys = sorted(
             [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
         )
@@ -106,17 +109,19 @@ class PackingAction(ActionTerm):
         self._processed_actions[:, 2:5] += tote_state[:, :3].squeeze(1)
 
         # z offset to displace the object above the table
-        self._processed_actions[:, 2:5] += torch.tensor([0, 0, 0.05], device=self.device).repeat(self.num_envs, 1)
+        self._processed_actions[:, 2:5] += torch.tensor([0, 0, self.Z_OFFSET_ABOVE_TABLE], device=self.device).repeat(
+            self.num_envs, 1
+        )
 
         if self.place_obj_bottomLeft:
             # offset to bottom left of the object
-            self._processed_actions[:, 2:5] -= (
-                torch.tensor([self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device).repeat(
-                    self.num_envs, 1
-                )
-            )
+            self._processed_actions[:, 2:5] -= torch.tensor(
+                [self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device
+            ).repeat(self.num_envs, 1)
 
-            bbox_offset = self._env.tote_manager.obj_bboxes[torch.arange(self.num_envs, device=self.device), actions[:, 1].long()]
+            bbox_offset = self._env.tote_manager.obj_bboxes[
+                torch.arange(self.num_envs, device=self.device), actions[:, 1].long()
+            ]
             rotated_half_dim = (
                 calculate_rotated_bounding_box(
                     bbox_offset, self._processed_actions[:, 5:9].squeeze(1), device=self.device
