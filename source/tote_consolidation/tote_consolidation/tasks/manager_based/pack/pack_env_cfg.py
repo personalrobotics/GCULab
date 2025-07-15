@@ -7,6 +7,7 @@
 # Scene definition
 ##
 import os
+import glob
 from dataclasses import MISSING
 
 import gculab.sim as gcu_sim_utils
@@ -29,8 +30,44 @@ vention_table_usd_path = "gcu_objects/assets/vention/vention.usd"
 
 gcu_objects_path = os.path.abspath("gcu_objects")
 
-num_object_per_env = 20
-num_objects_to_reserve = 20
+# Dynamically build list of USD paths by scanning the directory
+ycb_physics_dir = os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics")
+all_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
+
+# Extract all available object IDs and names for reference
+available_objects = {}
+for usd_file in all_usd_files:
+    basename = os.path.basename(usd_file)
+    obj_id = basename[:3]
+    obj_name = basename[4:].replace('.usd', '')
+    available_objects[obj_id] = obj_name
+
+# Print available objects for reference
+print("Available YCB objects:")
+for obj_id, obj_name in sorted(available_objects.items()):
+    print(f"\"{obj_id}\", # {obj_name}")
+
+# Define which object IDs to include
+include_ids = [
+    "003",  # cracker_box
+    "004",  # sugar_box
+    "006",  # mustard_bottle
+    "008",  # pudding_box
+    "009",  # gelatin_box
+    "036",  # wood_block
+    "061",  # foam_brick
+]
+
+# Filter USD files based on ID prefixes
+usd_paths = []
+for usd_file in all_usd_files:
+    basename = os.path.basename(usd_file)
+    # Extract the 3-digit ID from filename (assuming format like "003_cracker_box.usd")
+    if basename[:3] in include_ids:
+        usd_paths.append(usd_file)
+
+num_object_per_env = 40
+num_objects_to_reserve = 40
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -109,29 +146,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                 RigidObjectCfg(
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
-                        usd_path=[
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/002_master_chef_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/003_cracker_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/004_sugar_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/006_mustard_bottle.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/007_tuna_fish_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/008_pudding_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/009_gelatin_box.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/010_potted_meat_can.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/011_banana.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/019_pitcher_base.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/021_bleach_cleanser.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/024_bowl.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/025_mug.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/035_power_drill.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/036_wood_block.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/037_scissors.usd"),
-                            # os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/040_large_marker.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/051_large_clamp.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/052_extra_large_clamp.usd"),
-                            os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics/061_foam_brick.usd"),
-                        ],
+                        usd_path=usd_paths,
                         random_choice=True,
                         distribution=None,  # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
