@@ -1,3 +1,6 @@
 [submodule "gcu_objects"]
 	path = gcu_objects
 	url = https://github.com/personalrobotics/gcu_objects.git
+[submodule "Packing-3D-RL"]
+	path = Packing-3D-RL
+	url = https://github.com/kaikwan/Packing-3D-RL.git
