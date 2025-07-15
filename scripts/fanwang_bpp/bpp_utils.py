@@ -188,11 +188,11 @@ class BPP:
                 self.source_eject_tries
             ].unsqueeze(0)
 
-            # Remove objects from unpackable list
+            # Remove objects to be ejected from unpackable list
             self.unpackable_obj_idx = [
                 idx
                 for idx in self.unpackable_obj_idx
-                if idx not in self.tote_manager.get_tote_objs_idx(tote_id, env_idx)
+                if idx not in torch.where(self.tote_manager.get_tote_objs_idx(source_tote_tensor, env_idx) == 1)[1]
             ]
 
             self.tote_manager.eject_totes(
