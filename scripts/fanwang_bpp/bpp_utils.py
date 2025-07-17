@@ -215,14 +215,16 @@ class BPP:
         t = time.time()
         obj_indicies[env_idx] = [obj for obj in obj_indicies[env_idx] if obj not in self.unpackable_obj_idx]
 
-        # Find the object with the largest volume
-        obj_vols = []
-        for idx in obj_indicies[env_idx]:
-            # Get dimensions of the object and compute its volume
-            obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
+        obj_idx = obj_indicies[env_idx][torch.randint(0, len(obj_indicies[env_idx]), (1,), device=env.unwrapped.device).item()]
+
+        # # Find the object with the largest volume
+        # obj_vols = []
+        # for idx in obj_indicies[env_idx]:
+        #     # Get dimensions of the object and compute its volume
+        #     obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
         
-        # Sort by volume (largest first) and get the index
-        obj_idx = sorted(obj_vols, key=lambda x: x[1], reverse=True)[0][0]
+        # # Sort by volume (largest first) and get the index
+        # obj_idx = sorted(obj_vols, key=lambda x: x[1], reverse=True)[0][0]
         curr_item = self.problem.items[obj_idx.item()]
         obj_idx = obj_idx.unsqueeze(0)
         transforms = self.problem.container.search_possible_position(curr_item, step_width=90)
