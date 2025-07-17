@@ -37,7 +37,7 @@ class PackingAction(ActionTerm):
     """The clip applied to the input action."""
 
     # Define constants
-    Z_OFFSET_ABOVE_TABLE = 0.02
+    Z_OFFSET_ABOVE_TABLE = 0.01
 
     def __init__(self, cfg: actions_cfg.PackingActionCfg, env: ManagerBasedEnv) -> None:
         # initialize the action term
@@ -47,7 +47,7 @@ class PackingAction(ActionTerm):
         self.place_obj_bottomLeft = (
             cfg.place_obj_bottomLeft
         )  # origin is bottom left of object placed at bottom left of tote
-        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100 * 0.95
+        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100 * 0.97
         tote_keys = sorted(
             [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
         )
