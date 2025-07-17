@@ -17,7 +17,7 @@ from packing3d import (
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
-
+from copy import deepcopy
 
 class BPP:
     def __init__(self, tote_manager, objects, scale=1.0):
@@ -91,7 +91,7 @@ class BPP:
         # and the rest of the objects are already packed in the container and unlikely to change or affect planning
         t = time.time()
         # Clear the current container geometry
-        self.problem.container = Container(self.problem.box_size)
+        self.problem.container.clear()
 
         # For each object in dest tote, get the current transform and add it to the container
         for env_idx in env_indices:
@@ -121,7 +121,7 @@ class BPP:
                 asset_pos[1] += self.tote_manager.true_tote_dim[1] / 2 * 0.01  # Adjust for center of tote
 
                 asset_pos = asset_pos - self.tote_manager._tote_assets_state.permute(1, 0, 2)[env_idx, tote_id]
-
+                
                 asset_pos = asset_pos * 100  # convert to cm resolution
 
                 euler_angles = math_utils.euler_xyz_from_quat(asset_quat.unsqueeze(0))
@@ -146,7 +146,7 @@ class BPP:
                 self.problem.container.add_item(curr_item)
         print("Time taken to update container heightmap: ", time.time() - t)
 
-    def get_action(self, env, obj_indicies, tote_ids):
+    def get_action(self, env, obj_indicies, tote_ids, plot=False):
         """
         Get the action for the current step in the packing problem.
 
@@ -168,7 +168,10 @@ class BPP:
             self.source_eject_tries >= self.max_source_eject_tries
             or self.tote_manager.get_reserved_objs_idx(env_idx).sum() == 0
         ):
-            print("No objects in reserve, force ejecting and loading destination tote.")
+            if self.tote_manager.get_reserved_objs_idx(env_idx).sum() == 0:
+                print("No objects in reserve, force ejecting and loading destination tote.")
+            else:
+                print("Max source eject tries reached, force ejecting and loading destination tote.")
             dest_tote_tensor = torch.tensor([tote_id], device=env.unwrapped.device)
 
             self.tote_manager.eject_totes(env.unwrapped, dest_tote_tensor, env_idx, is_dest=True, overfill_check=False)
@@ -179,6 +182,7 @@ class BPP:
             self.unpackable_obj_idx = []
             self.source_eject_tries = 0
             self.problem.container = Container(self.problem.box_size)
+            self.packed_obj_idx = []
             return self.get_action(env, new_packable_objects, tote_ids)
         # If all current objects are unpackable, force eject and load source tote
         elif len(obj_indicies[env_idx]) == 0:
@@ -187,48 +191,64 @@ class BPP:
             source_tote_tensor = torch.tensor(source_tote_ids, device=env.unwrapped.device)[
                 self.source_eject_tries
             ].unsqueeze(0)
-
-            # Remove objects from unpackable list
+            # Remove objects to be ejected from unpackable list
             self.unpackable_obj_idx = [
                 idx
                 for idx in self.unpackable_obj_idx
-                if idx not in self.tote_manager.get_tote_objs_idx(tote_id, env_idx)
+                if idx not in torch.where(self.tote_manager.get_tote_objs_idx(source_tote_tensor, env_idx) == 1)[1]
             ]
 
             self.tote_manager.eject_totes(
                 env.unwrapped, source_tote_tensor, env_idx, is_dest=False, overfill_check=False
             )
+            self.tote_manager.refill_source_totes(
+                env.unwrapped, env_idx
+            )
+
             new_packable_objects, _ = self.get_packable_object_indices(
                 self.tote_manager.num_objects, self.tote_manager, env_idx, tote_id
             )
-
-            # Remove previously unpackable objects from the list
-            new_packable_objects[env_idx] = [
-                idx for idx in new_packable_objects[env_idx] if idx not in self.unpackable_obj_idx
-            ]
 
             self.source_eject_tries += 1
             return self.get_action(env, new_packable_objects, tote_ids)
 
         t = time.time()
-        obj_idx = obj_indicies[torch.randint(0, len(obj_indicies), (1,))][0]
+        obj_indicies[env_idx] = [obj for obj in obj_indicies[env_idx] if obj not in self.unpackable_obj_idx]
+
+        # Find the object with the largest volume
+        obj_vols = []
+        for idx in obj_indicies[env_idx]:
+            # Get dimensions of the object and compute its volume
+            obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
+        
+        # Sort by volume (largest first) and get the index
+        obj_idx = sorted(obj_vols, key=lambda x: x[1], reverse=True)[0][0]
         curr_item = self.problem.items[obj_idx.item()]
         obj_idx = obj_idx.unsqueeze(0)
         transforms = self.problem.container.search_possible_position(curr_item, step_width=90)
-        if transforms:
-            transform = transforms[0]
+        stable_transform = None  # Initialize to None
+        for tf in transforms:
+            # Apply transform to a copy of the item
+            test_item = deepcopy(curr_item)
+            test_item.transform(tf)
+            if self.problem.container.check_stability_with_candidate(test_item, plot=plot):
+                stable_transform = tf
+                break
+        if stable_transform is not None:
+            transform = stable_transform
             curr_item.transform(transform)
             self.problem.container.add_item(curr_item)
             print("Time taken to find placement pose: ", time.time() - t)
-            self.display.show3d(self.problem.container.geometry)
             self.packed_obj_idx.append(obj_idx)
-            plt.savefig("packed_container.png")  # Save the figure
+            if plot:
+                self.display.show3d(self.problem.container.geometry)
+                plt.savefig("packed_container.png")  # Save the figure
             return transform, obj_idx
         # No valid position found
         print("Unpackable object found, adding to unpackable list. Trying other object in existing source totes.")
         self.unpackable_obj_idx.append(obj_idx)
-        # Remove unpackable object from list and try again
-        obj_indicies[env_idx] = [idx for idx in obj_indicies[env_idx] if idx != obj_idx]
+        # Remove unpackable object from obj_indicies list and try again
+        obj_indicies[env_idx] = [obj for obj in obj_indicies[env_idx] if obj not in self.unpackable_obj_idx]
 
         return self.get_action(env, obj_indicies, tote_ids)
 
@@ -260,5 +280,9 @@ class BPP:
 
         # Use list comprehension to get valid indices per environment
         valid_indices = [obj_indices[i][mask[i]] for i in range(num_envs)]
+
+        # Remove unpackable objects from valid indices
+        for i in range(num_envs):
+            valid_indices[i] = [obj for obj in valid_indices[i] if obj not in self.unpackable_obj_idx]
 
         return valid_indices, mask
