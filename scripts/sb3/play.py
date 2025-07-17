@@ -58,6 +58,7 @@ import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import numpy as np
 import torch
+import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
@@ -69,8 +70,6 @@ from isaaclab_tasks.utils.parse_cfg import (
 )
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import VecNormalize
-
-import tote_consolidation.tasks  # noqa: F401
 
 
 def main():

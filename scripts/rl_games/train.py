@@ -56,6 +56,7 @@ from datetime import datetime
 
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
+import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -71,8 +72,6 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 from rl_games.common import env_configurations, vecenv
 from rl_games.common.algo_observer import IsaacAlgoObserver
 from rl_games.torch_runner import Runner
-
-import tote_consolidation.tasks  # noqa: F401
 
 
 @hydra_task_config(args_cli.task, "rl_games_cfg_entry_point")

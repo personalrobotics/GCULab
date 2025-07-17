@@ -19,3 +19,5 @@ class PackingActionCfg(ActionTermCfg):
     """
 
     class_type: type[ActionTerm] = packing_actions.PackingAction
+
+    place_obj_bottomLeft: bool = True

@@ -10,16 +10,16 @@ import re
 from typing import TYPE_CHECKING
 
 import carb
+import isaaclab.sim as sim_utils
 import isaacsim.core.utils.prims as prim_utils
 import isaacsim.core.utils.stage as stage_utils
 import torch
-from pxr import Sdf, Usd
-
-import isaaclab.sim as sim_utils
 from isaaclab.sim.spawners.from_files import UsdFileCfg
+from pxr import Sdf, Usd
 
 if TYPE_CHECKING:
     from . import wrappers_cfg
+
 
 def spawn_multi_usd_from_dist_file(
     prim_path: str,
@@ -28,7 +28,7 @@ def spawn_multi_usd_from_dist_file(
     orientation: tuple[float, float, float, float] | None = None,
 ) -> Usd.Prim:
     """Spawn multiple USD files based on the provided configurations and distribution.
-    
+
     This function creates configuration instances corresponding to the individual USD files and
     calls the :meth:`spawn_multi_asset` method to spawn them into the scene.
 
@@ -49,7 +49,7 @@ def spawn_multi_usd_from_dist_file(
         usd_paths = [cfg.usd_path]
     else:
         usd_paths = cfg.usd_path
-        
+
     # Check if distribution is valid
     if cfg.distribution is not None:
         if cfg.distribution.dim() != 1 or cfg.distribution.numel() != len(usd_paths):
@@ -69,7 +69,7 @@ def spawn_multi_usd_from_dist_file(
     for usd_path in usd_paths:
         usd_cfg = usd_template_cfg.replace(usd_path=usd_path)
         multi_asset_cfg.assets_cfg.append(usd_cfg)
-    
+
     # set random choice
     multi_asset_cfg.random_choice = cfg.random_choice
 
@@ -77,16 +77,16 @@ def spawn_multi_usd_from_dist_file(
     if cfg.distribution is not None and cfg.random_choice:
         # Store original random_choice method
         original_random_choice = random.choice
-        
+
         # Define a custom choice function that uses the distribution
         def weighted_choice(choices):
             # Sample an index based on the distribution
             idx = torch.multinomial(cfg.distribution, 1).item() % len(choices)
             return choices[idx]
-        
+
         # Replace the random.choice function temporarily
         random.choice = weighted_choice
-    
+
     # propagate the contact sensor settings
     if hasattr(cfg, "activate_contact_sensors"):
         multi_asset_cfg.activate_contact_sensors = cfg.activate_contact_sensors

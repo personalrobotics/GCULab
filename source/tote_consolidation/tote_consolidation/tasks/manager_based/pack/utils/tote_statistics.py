@@ -4,10 +4,11 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import time
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Any
-from collections import deque
+
 import torch
+
 
 class ToteStatistics:
     """
@@ -48,7 +49,7 @@ class ToteStatistics:
         self.dest_tote_ejections_history = []
         self.source_tote_ejections = torch.zeros(num_envs, device=device)
         self.dest_tote_ejections = torch.zeros(num_envs, device=device)
-        
+
         # Inbound and outbound GCU values for each tote
         self.inbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
         self.outbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
@@ -179,6 +180,7 @@ class ToteStatistics:
     def increment_step(self):
         """Increment the step counter."""
         self.step_count += 1
+
     def get_summary(self, env_ids: torch.Tensor | int | None = None) -> dict[str, Any]:
         """
         Get a summary of statistics for specified environment IDs.
@@ -194,12 +196,12 @@ class ToteStatistics:
             env_ids = torch.tensor([env_ids], device=self.device)
         elif env_ids is None:
             env_ids = torch.arange(self.num_envs, device=self.device)
-        
+
         # Convert env_ids to list for easier filtering
         env_id_list = env_ids.cpu().numpy().tolist()
         if not isinstance(env_id_list, list):
             env_id_list = [env_id_list]
-        
+
         # Filter operations by environment IDs
         filtered_operations = defaultdict(list)
         for op_name, op_list in self.operations.items():
@@ -207,7 +209,7 @@ class ToteStatistics:
                 entry_env_ids = entry["env_ids"] if isinstance(entry["env_ids"], list) else [entry["env_ids"]]
                 if any(env_id in env_id_list for env_id in entry_env_ids):
                     filtered_operations[op_name].append(entry)
-        
+
         # Create filtered history entries
         def filter_history(history_list):
             return [
@@ -218,31 +220,31 @@ class ToteStatistics:
                 }
                 for entry in history_list
             ]
-        
+
         # Filter GCU history
         filtered_gcu_history = []
         for entry in self.gcu_history:
             entry_env_ids = entry["env_ids"]
             mask = torch.zeros_like(entry_env_ids, dtype=torch.bool)
-            
+
             # Create mask for matching environment IDs
             if env_ids.ndim == 0:
-                mask |= (entry_env_ids == env_ids.item())
+                mask |= entry_env_ids == env_ids.item()
             else:
                 for env_id in env_ids:
-                    mask |= (entry_env_ids == env_id)
-            
+                    mask |= entry_env_ids == env_id
+
             if mask.any():
                 filtered_indices = torch.nonzero(mask, as_tuple=True)[0]
                 filtered_entry_env_ids = entry_env_ids[filtered_indices]
-                
+
                 filtered_gcu_history.append({
                     "step": entry["step"],
                     "values": entry["values"][filtered_entry_env_ids].cpu().numpy().tolist(),
                     "env_ids": filtered_entry_env_ids.cpu().numpy().tolist(),
                     "timestamp": entry["timestamp"],
                 })
-        
+
         return {
             "total_steps": self.step_count,
             "operations_history": dict(filtered_operations),
@@ -303,7 +305,7 @@ class ToteStatistics:
         data_count = 0
         for env_id in range(self.num_envs):
             if self.ejection_snapshots[env_id] is not None and len(self.ejection_snapshots[env_id]) > 0:
-                summary[env_id] = {'gcus': [], 'obj_transfers': [], 'source_ejections': []}
+                summary[env_id] = {"gcus": [], "obj_transfers": [], "source_ejections": []}
                 for i in range(len(self.ejection_snapshots[env_id])):
                     tote_ids = self.ejection_snapshots[env_id][i][0]
                     summary_env = self.ejection_snapshots[env_id][i][1]
@@ -328,12 +330,12 @@ class ToteStatistics:
                     mean_obj_transfers += last_obj_transfers
                     mean_source_ejections += last_source_ejection
                     data_count += 1
-                    summary[env_id]['gcus'].append(last_gcu)
-                    summary[env_id]['obj_transfers'].append(last_obj_transfers)
-                    summary[env_id]['source_ejections'].append(last_source_ejection)
-        summary['mean_gcus'] = mean_gcus / data_count if data_count > 0 else 0
-        summary['mean_obj_transfers'] = mean_obj_transfers / data_count if data_count > 0 else 0
-        summary['mean_source_ejections'] = mean_source_ejections / data_count if data_count > 0 else 0
+                    summary[env_id]["gcus"].append(last_gcu)
+                    summary[env_id]["obj_transfers"].append(last_obj_transfers)
+                    summary[env_id]["source_ejections"].append(last_source_ejection)
+        summary["mean_gcus"] = mean_gcus / data_count if data_count > 0 else 0
+        summary["mean_obj_transfers"] = mean_obj_transfers / data_count if data_count > 0 else 0
+        summary["mean_source_ejections"] = mean_source_ejections / data_count if data_count > 0 else 0
         return summary
 
     def save_to_file(self, filepath: str):
@@ -348,5 +350,5 @@ class ToteStatistics:
         # Convert data to JSON-serializable format
         summary = self.get_full_ejection_summary()
 
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(summary, f, indent=4)
