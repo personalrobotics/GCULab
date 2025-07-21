@@ -48,46 +48,39 @@ from isaaclab_tasks.utils import parse_env_cfg
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 
-def convert_transform_to_action_tensor(transform, obj_idx, device):
+def convert_transform_to_action_tensor(transforms, obj_indicies, device):
     """Convert a transform object to an action tensor format.
 
     Args:
-        transform: Transform object with position and attitude (orientation)
-        obj_idx: Index of the object to place
+        transforms: Transform object with position and attitude (orientation)
+        obj_indicies: Index of the object to place
         device: The device to create tensors on
 
     Returns:
         A tensor representing the object index and transform in the format
         expected by the action space [obj_idx, pos_x, pos_y, pos_z, quat_w, quat_x, quat_y, quat_z]
     """
-    rpy = transform.attitude
-    quat_init = torch.tensor([1, 0, 0, 0], device=device)  # Default quaternion
+    # Get batch size from the transforms
+    batch_size = len(transforms)
+    action_tensor = torch.zeros((batch_size, 8), device=device)
 
-    # Convert degrees to radians first
-    roll_rad = torch.tensor([rpy.roll * torch.pi / 180.0], device=device)
-    pitch_rad = torch.tensor([rpy.pitch * torch.pi / 180.0], device=device)
-    yaw_rad = torch.tensor([rpy.yaw * torch.pi / 180.0], device=device)
+    # Extract position and attitude values in batch
+    positions = torch.tensor([[t.position.x, t.position.y, t.position.z] for t in transforms], device=device) / 100.0
 
-    # Convert Euler angles to quaternion
-    quat = math_utils.quat_from_euler_xyz(roll_rad, pitch_rad, yaw_rad).squeeze(0)
-    quat_final = math_utils.quat_mul(quat, quat_init)
+    # Convert Euler angles to radians (vectorized)
+    roll_rad = torch.tensor([t.attitude.roll for t in transforms], device=device) * torch.pi / 180.0
+    pitch_rad = torch.tensor([t.attitude.pitch for t in transforms], device=device) * torch.pi / 180.0
+    yaw_rad = torch.tensor([t.attitude.yaw for t in transforms], device=device) * torch.pi / 180.0
 
-    # Scale position from cm to m
-    transform_tensor = (
-        torch.tensor([transform.position.x, transform.position.y, transform.position.z], device=device) / 100
+    # Convert Euler angles to quaternions (vectorized)
+    quats = math_utils.quat_from_euler_xyz(roll_rad.unsqueeze(1), pitch_rad.unsqueeze(1), yaw_rad.unsqueeze(1)).squeeze(
+        1
     )
 
-    # Combine position and orientation
-    transform_tensor = torch.cat([transform_tensor, quat_final], dim=0)
-
-    # Combine object index and transform
-    action_tensor = torch.cat(
-        [
-            obj_idx.unsqueeze(1),
-            transform_tensor.unsqueeze(0),
-        ],
-        dim=1,
-    )
+    # Build action tensor
+    action_tensor[:, 0] = obj_indicies
+    action_tensor[:, 1:4] = positions
+    action_tensor[:, 4:8] = quats
 
     return action_tensor
 
@@ -131,7 +124,7 @@ def main():
 
     step_count = 0
 
-    bpp = bpp_utils.BPP(tote_manager, torch.arange(num_obj_per_env, device=env.unwrapped.device))
+    bpp = bpp_utils.BPP(tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device))
 
     while simulation_app.is_running():
         # run everything in inference mode
@@ -155,9 +148,7 @@ def main():
             # [10] is the action to indicate if an object is being placed
             actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
 
-            tote_manager.eject_totes(
-                env.unwrapped, actions[:, 0].to(torch.int32), env_indices
-            )  # Eject destination totes
+            tote_manager.eject_totes(actions[:, 0].to(torch.int32), env_indices)  # Eject destination totes
 
             # Destination tote IDs for each environment
             tote_ids = actions[:, 0].to(torch.int32)
@@ -166,8 +157,8 @@ def main():
             packable_objects = bpp.get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
 
             bpp.update_container_heightmap(env, env_indices, tote_ids)
-            transform, obj_idx = bpp.get_action(env, packable_objects, tote_ids)
-            actions[:, 1:9] = convert_transform_to_action_tensor(transform, obj_idx, env.unwrapped.device)
+            transforms, obj_indicies = bpp.get_action(env, packable_objects, tote_ids, env_indices)
+            actions[:, 1:9] = convert_transform_to_action_tensor(transforms, obj_indicies, env.unwrapped.device)
             # apply actions
             env.step(actions)
 

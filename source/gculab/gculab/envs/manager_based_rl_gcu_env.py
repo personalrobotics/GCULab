@@ -201,7 +201,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
 
-        self.tote_manager.refill_source_totes(self, env_ids=torch.arange(self.num_envs, device=self.device))
+        self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
         wait_time = 100
         for i in range(wait_time):
             self.scene.write_data_to_sim()

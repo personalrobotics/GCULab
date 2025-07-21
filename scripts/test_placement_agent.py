@@ -216,8 +216,6 @@ def main():
             # Check that all environments have no packable objects
             tote_ids = actions[:, 0].to(torch.int32)  # Destination tote IDs for each environment
 
-            packable_objects = get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
-
             if step_count % exp_log_interval == 0:
                 print(f"\nStep {step_count}:")
                 print("Saving stats to file...")

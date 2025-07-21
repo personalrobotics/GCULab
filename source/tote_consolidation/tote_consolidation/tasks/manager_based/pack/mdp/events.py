@@ -315,7 +315,7 @@ def randomize_object_pose_with_invalid_ranges(
                 orientations=orientations,
                 cur_env=cur_env,
             )
-        env.tote_manager.refill_source_totes(env, env_ids=torch.arange(env.num_envs, device=env.device))
+        env.tote_manager.refill_source_totes(env_ids=torch.arange(env.num_envs, device=env.device))
 
 
 def set_objects_to_invisible(
