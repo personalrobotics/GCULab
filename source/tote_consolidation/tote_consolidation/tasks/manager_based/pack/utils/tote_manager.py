@@ -11,6 +11,7 @@ import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
+
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
     calculate_tote_bounds,
@@ -294,6 +295,8 @@ class ToteManager:
 
         if not overfilled_envs.any():
             return
+
+        print(f"Overfilled totes detected in environments: {env_ids[overfilled_envs]}")
 
         # Animate tote ejection if enabled
         if self.animate:

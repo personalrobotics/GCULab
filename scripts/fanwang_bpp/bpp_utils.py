@@ -133,7 +133,7 @@ class BPP:
                 curr_item.transform(transform)
                 problem.container.add_item(curr_item)
                 container_items.append((obj["obj_idx"], transform))
-        return (env_idx, results, container_items)
+        return (env_idx, results, container_items, problem.container)
 
     def _extract_env_data(self, env, env_idx, tote_id):
         """
@@ -184,6 +184,8 @@ class BPP:
         with ProcessPoolExecutor(max_workers=20) as executor:
             for res in executor.map(BPP.update_container_worker_static, batch_args):
                 results.append(res)
+        for env_idx, res, container_items, container in results:
+            self.problems[env_idx].container = container
         print("Time taken for updating container heightmap: ", time.time() - t)
 
     @staticmethod
