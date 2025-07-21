@@ -23,6 +23,7 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--exp_name", type=str, default="test_placement", help="Name of the experiment.")
+parser.add_argument("--seed", type=int, default=0, help="Seed used for the environment")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -84,13 +85,13 @@ def convert_transform_to_action_tensor(transforms, obj_indicies, device):
 
     return action_tensor
 
-
 def main():
     """Zero actions agent with Isaac Lab environment."""
     # parse configuration
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+    env_cfg.seed = args_cli.seed
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
