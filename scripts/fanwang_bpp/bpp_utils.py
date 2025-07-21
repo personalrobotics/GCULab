@@ -5,6 +5,7 @@ import isaaclab.utils.math as math_utils
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend for saving figures
+import itertools
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from time import perf_counter
 
@@ -21,7 +22,7 @@ from packing3d import (
     Transform,
 )
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
-    calculate_rotated_bounding_box,
+    calculate_rotated_bounding_box_np,
 )
 
 
@@ -78,80 +79,112 @@ class BPP:
             )
         return tote_dims, obj_dims, obj_voxels
 
+    @staticmethod
+    def update_container_worker_static(args):
+        """
+        Static worker for multiprocessing. Now also applies the transforms to the container.
+        Args is a dict with keys: env_idx, tote_id, objects (list of dicts), problem, items.
+        Returns a tuple (env_idx, results, container_items) where container_items is a list of (obj_idx, transform) that were added to the container.
+        """
+        env_idx = args["env_idx"]
+        tote_id = args["tote_id"]
+        objects = args["objects"]
+        problem = args.get("problem")
+        items = args.get("items")
+        results = []
+        container_items = []
+        if tote_id < 0:
+            return (env_idx, results, container_items)
+        if problem is not None and items is not None:
+            problem.container.clear()
+        for obj in objects:
+            asset_pos = torch.tensor(obj["asset_pos"])
+            asset_quat = torch.tensor(obj["asset_quat"])
+            bbox_offset = torch.tensor(obj["bbox_offset"])
+            true_tote_dim = torch.tensor(obj["true_tote_dim"])
+            tote_assets_state = torch.tensor(obj["tote_assets_state"])
+            quat_init = torch.tensor([1, 0, 0, 0])
+            asset_quat = math_utils.quat_mul(math_utils.quat_inv(quat_init), asset_quat)
+            rotated_half_dim = (
+                calculate_rotated_bounding_box_np(bbox_offset.unsqueeze(0), asset_quat.unsqueeze(0), device="cpu") / 2.0
+            ).squeeze(0)
+            asset_pos = asset_pos - rotated_half_dim
+            asset_pos[0] += true_tote_dim[0] / 2 * 0.01
+            asset_pos[1] += true_tote_dim[1] / 2 * 0.01
+            asset_pos = asset_pos - tote_assets_state
+            asset_pos = asset_pos * 100  # convert to cm resolution
+            euler_angles = math_utils.euler_xyz_from_quat(asset_quat.unsqueeze(0))
+            if isinstance(euler_angles, tuple):
+                euler_angles = torch.tensor(euler_angles)
+            euler_angles = euler_angles.squeeze(0) * 180 / np.pi
+            transform = Transform(
+                position=Position(
+                    max(0, math.floor(asset_pos[0].item())),
+                    max(0, math.floor(asset_pos[1].item())),
+                    max(0, math.floor(asset_pos[2].item())),
+                ),
+                attitude=Attitude(
+                    roll=euler_angles[0].item(), pitch=euler_angles[1].item(), yaw=euler_angles[2].item()
+                ),
+            )
+            results.append((obj["obj_idx"], transform))
+            if problem is not None and items is not None:
+                curr_item = items[obj["obj_idx"]]
+                curr_item.transform(transform)
+                problem.container.add_item(curr_item)
+                container_items.append((obj["obj_idx"], transform))
+        return (env_idx, results, container_items)
+
+    def _extract_env_data(self, env, env_idx, tote_id):
+        """
+        Extract all necessary data from env for a single environment index.
+        Returns a list of dicts, one per packed object in this env.
+        Prints device/type info for debugging CUDA issues.
+        """
+        data = []
+        for obj_idx in self.packed_obj_idx[env_idx]:
+            obj_idx_val = obj_idx.item()
+            asset_name = "object" + str(obj_idx_val)
+            asset = env.unwrapped.scene[asset_name]
+            asset_pos = asset.data.root_state_w[env_idx, :3].detach().cpu().numpy()
+            asset_quat = asset.data.root_state_w[env_idx, 3:7].detach().cpu().numpy()
+            bbox_offset = self.tote_manager.obj_bboxes[env_idx, obj_idx_val].detach().cpu().numpy()
+            true_tote_dim = self.tote_manager.true_tote_dim.detach().cpu().numpy()
+            tote_assets_state = self.tote_manager._tote_assets_state.permute(1, 0, 2).detach().cpu().numpy()
+            data.append({
+                "obj_idx": obj_idx_val,
+                "asset_pos": asset_pos,
+                "asset_quat": asset_quat,
+                "bbox_offset": bbox_offset,
+                "true_tote_dim": true_tote_dim,
+                "tote_assets_state": tote_assets_state[env_idx, tote_id],
+            })
+        return data
+
     def update_container_heightmap(self, env, env_indices, tote_ids):
         """
         Update the heightmap of the container in the packing problem with updated
-        object poses in sim.
-
-        Args:
-            problem: The packing problem containing the container and items
-            tote_manager: The sim tote manager containing the current state of the environment
-            env_indices: Indices of the environments being updated
-            tote_ids: IDs of the destination totes for each environment
-
-        Returns:
-            PackingProblem: Updated packing problem
+        object poses in sim, using batched multiprocessing per environment.
         """
-        # TODO (kaikwan): Potential optimization: Only update the top most objects in the container
-        # This is because the container heightmap is only used for the top most objects
-        # and the rest of the objects are already packed in the container and unlikely to change or affect planning
         t = time.time()
-
-        # For each object in dest tote, get the current transform and add it to the container
+        batch_args = []
         for env_idx in env_indices:
-            # Clear the current container geometry
-            self.problems[env_idx].container.clear()
-
             tote_id = tote_ids[env_idx].item()
             if tote_id < 0:
                 continue
-            for obj_idx in self.packed_obj_idx[env_idx]:
-                obj_idx = obj_idx.item()
-                asset_name = "object" + str(obj_idx)
-                asset = env.unwrapped.scene[asset_name]
-                asset_pos = asset.data.root_state_w[env_idx, :3]
-                asset_quat = asset.data.root_state_w[env_idx, 3:7]
-
-                quat_init = torch.tensor([1, 0, 0, 0], device=env.unwrapped.device)
-                asset_quat = math_utils.quat_mul(math_utils.quat_inv(quat_init), asset_quat)
-
-                bbox_offset = self.tote_manager.obj_bboxes[env_idx, obj_idx]
-                rotated_half_dim = (
-                    calculate_rotated_bounding_box(
-                        bbox_offset.unsqueeze(0), asset_quat.unsqueeze(0), device=env.unwrapped.device
-                    )
-                    / 2.0
-                ).squeeze(0)
-                asset_pos = asset_pos - rotated_half_dim
-
-                asset_pos[0] += self.tote_manager.true_tote_dim[0] / 2 * 0.01  # Adjust for center of tote
-                asset_pos[1] += self.tote_manager.true_tote_dim[1] / 2 * 0.01  # Adjust for center of tote
-
-                asset_pos = asset_pos - self.tote_manager._tote_assets_state.permute(1, 0, 2)[env_idx, tote_id]
-
-                asset_pos = asset_pos * 100  # convert to cm resolution
-
-                euler_angles = math_utils.euler_xyz_from_quat(asset_quat.unsqueeze(0))
-                # Convert tuple to tensor if it's a tuple
-                if isinstance(euler_angles, tuple):
-                    euler_angles = torch.tensor(euler_angles, device=env.unwrapped.device)
-                # radians to degrees
-                euler_angles = euler_angles.squeeze(0) * 180 / np.pi
-                curr_item = self.problems[env_idx].items[obj_idx]
-                curr_item.transform(
-                    Transform(
-                        position=Position(
-                            max(0, math.floor(asset_pos[0].item())),
-                            max(0, math.floor(asset_pos[1].item())),
-                            max(0, math.floor(asset_pos[2].item())),
-                        ),
-                        attitude=Attitude(
-                            roll=euler_angles[0].item(), pitch=euler_angles[1].item(), yaw=euler_angles[2].item()
-                        ),
-                    )
-                )
-                self.problems[env_idx].container.add_item(curr_item)
-        print("Time taken to update container heightmap: ", time.time() - t)
+            objects = self._extract_env_data(env, env_idx, tote_id)
+            batch_args.append({
+                "env_idx": env_idx.detach().cpu().item(),
+                "tote_id": tote_id,
+                "objects": objects,
+                "problem": self.problems[env_idx],
+                "items": self.problems[env_idx].items,
+            })
+        results = []
+        with ProcessPoolExecutor(max_workers=20) as executor:
+            for res in executor.map(BPP.update_container_worker_static, batch_args):
+                results.append(res)
+        print("Time taken for updating container heightmap: ", time.time() - t)
 
     @staticmethod
     def _env_worker(args):

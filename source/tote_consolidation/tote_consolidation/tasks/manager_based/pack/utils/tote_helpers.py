@@ -6,6 +6,7 @@
 import itertools
 
 import isaaclab.utils.math as math_utils
+import numpy as np
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
@@ -35,6 +36,32 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
     max_vals, _ = torch.max(rotated_corners, dim=1)
     rotated_dims = max_vals - min_vals
 
+    return rotated_dims
+
+
+def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
+    """
+    Calculate rotated bounding boxes for objects efficiently.
+
+    Args:
+        object_bboxes (torch.Tensor): Bounding boxes of objects [N, 3].
+        orientations (torch.Tensor): Orientation quaternions [N, 4].
+        device (torch.device): Device to use for tensors.
+
+    Returns:
+        torch.Tensor: Dimensions of rotated bounding boxes.
+    """
+    object_half_dims = object_bboxes[:, [1, 2, 0]] / 2.0 * 0.01  # cm to m
+
+    corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
+        0
+    ) * object_half_dims.unsqueeze(1)
+    rot_matrices = math_utils.matrix_from_quat(orientations)
+    rotated_corners = torch.bmm(corners, rot_matrices.transpose(1, 2)).detach().cpu()
+    rotated_corners_np = rotated_corners.numpy()
+    min_vals = np.min(rotated_corners_np, axis=1)
+    max_vals = np.max(rotated_corners_np, axis=1)
+    rotated_dims = max_vals - min_vals
     return rotated_dims
 
 
