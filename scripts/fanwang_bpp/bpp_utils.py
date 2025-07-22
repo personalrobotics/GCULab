@@ -114,6 +114,7 @@ class BPP:
             rotated_half_dim = (
                 calculate_rotated_bounding_box_np(bbox_offset.unsqueeze(0), asset_quat.unsqueeze(0), device="cpu") / 2.0
             ).squeeze(0)
+            # Bring asset position back to bottom left corner of the bounding box and to tote coordinate system
             asset_pos = asset_pos - rotated_half_dim
             asset_pos[0] += true_tote_dim[0] / 2 * 0.01
             asset_pos[1] += true_tote_dim[1] / 2 * 0.01
