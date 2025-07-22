@@ -69,9 +69,6 @@ class BPP:
         tote_dims = self.tote_manager.true_tote_dim.tolist()
         tote_dims = [int(tote_dims[2] * self.scale), int(tote_dims[0] * self.scale), int(tote_dims[1] * self.scale)]
 
-        # obj_dims = self.tote_manager.obj_bboxes.tolist()[0]  # Only first environment for now
-        # obj_dims = [[int(dim * self.scale) for dim in dims] for dims in obj_dims]
-
         obj_dims = self.tote_manager.obj_bboxes * self.scale  # Scale the bounding boxes
         obj_dims = obj_dims.to(dtype=torch.int32).tolist()
 
@@ -309,6 +306,7 @@ class BPP:
                         transforms_list[i] = transform
                         obj_idx_list[i] = obj_idx_tensor
                         self.packed_obj_idx[env_idx].append(obj_idx_tensor)
+                        # Debugging: Uncomment to visualize the packed container
                         # curr_item = self.problems[env_idx].items[obj_idx_tensor.item()]
                         # curr_item.transform(transform)
                         # self.problems[env_idx].container.add_item(curr_item)

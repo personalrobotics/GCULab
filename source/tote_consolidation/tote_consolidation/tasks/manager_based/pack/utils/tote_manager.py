@@ -188,7 +188,6 @@ class ToteManager:
 
         # Mark destination totes as not empty to exclude them from refilling
         empty_totes = empty_totes & ~dest_totes_mask
-        empty_totes_init = empty_totes.clone()
 
         # Find first empty tote per environment (or -1 if none)
         has_empty = empty_totes.any(dim=1)
@@ -225,7 +224,6 @@ class ToteManager:
             dest_totes_mask = self._create_dest_totes_mask(empty_totes, env_ids)
             # Mark destination totes as not empty to exclude them from refilling
             empty_totes = empty_totes & ~dest_totes_mask
-            empty_totes_init = empty_totes.clone()
 
             # Find first empty tote per environment (or -1 if none)
             has_empty = empty_totes.any(dim=1)
@@ -236,7 +234,7 @@ class ToteManager:
 
         if refilled:
             inbound_gcus = self.get_gcu(env_ids)
-            self.stats.log_tote_eject_gcus(inbound_gcus, outbound_gcus, totes_ejected=empty_totes_init)
+            self.stats.log_tote_eject_gcus(inbound_gcus, outbound_gcus, totes_ejected=empty_totes)
 
     def get_tote_fill_height(self, tote_ids, env_ids):
         """

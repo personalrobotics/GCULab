@@ -143,18 +143,7 @@ def main():
 
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
-    stats_dir = "stats"
-
-    run_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # create stats and run name directory if it does not exist
-    if os.path.exists(stats_dir) is False:
-        os.makedirs(stats_dir)
-    run_name = f"{args_cli.task}_{run_dir}"
-    # create run name directory
-    run_path = os.path.join(stats_dir, run_name)
-    if os.path.exists(run_path) is False:
-        os.makedirs(run_path)
-    exp_log_interval = 50  # Log stats every 50 steps
+    exp_log_interval = 1  # Log stats every 50 steps
 
     step_count = 0
 
@@ -180,9 +169,7 @@ def main():
             # [10] is the action to indicate if an object is being placed
             actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
 
-            tote_manager.eject_totes(
-                env.unwrapped, actions[:, 0].to(torch.int32), env_indices
-            )  # Eject destination totes
+            tote_manager.eject_totes(actions[:, 0].to(torch.int32), env_indices)  # Eject destination totes
 
             # Destination tote IDs for each environment
             tote_ids = actions[:, 0].to(torch.int32)
@@ -218,8 +205,7 @@ def main():
 
             if step_count % exp_log_interval == 0:
                 print(f"\nStep {step_count}:")
-                print("Saving stats to file...")
-                tote_manager.stats.save_to_file(os.path.join(run_path, f"{args_cli.exp_name}.json"))
+                tote_manager.stats.save_to_file()
                 print("Saved stats to file.")
 
             step_count += 1

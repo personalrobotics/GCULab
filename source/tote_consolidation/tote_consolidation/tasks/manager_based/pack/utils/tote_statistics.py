@@ -446,7 +446,7 @@ class ToteStatistics:
         if filepath is None:
             if self.save_path is None:
                 raise ValueError("No filepath provided for saving statistics")
-            
+
             # Generate a new filename in the same directory with a different name
             base_dir = os.path.dirname(self.save_path)
             base_name = os.path.splitext(os.path.basename(self.save_path))[0]
