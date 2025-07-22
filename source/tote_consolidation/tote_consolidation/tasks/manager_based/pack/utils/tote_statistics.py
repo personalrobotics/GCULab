@@ -440,13 +440,18 @@ class ToteStatistics:
         Save statistics to a file.
 
         Args:
-            filepath: Path to save the statistics (if None, uses self.save_path)
+            filepath: Path to save the statistics (if None, uses self.save_path with a different filename)
         """
         # If no filepath provided, use the one set during initialization
         if filepath is None:
             if self.save_path is None:
                 raise ValueError("No filepath provided for saving statistics")
-            filepath = self.save_path
+            
+            # Generate a new filename in the same directory with a different name
+            base_dir = os.path.dirname(self.save_path)
+            base_name = os.path.splitext(os.path.basename(self.save_path))[0]
+            new_filename = f"{base_name}_summary.json"
+            filepath = os.path.join(base_dir, new_filename)
 
         # Get summary data
         summary = self.get_full_ejection_summary()
