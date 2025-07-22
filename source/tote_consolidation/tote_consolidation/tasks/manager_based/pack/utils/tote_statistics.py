@@ -5,11 +5,13 @@
 
 import json
 import os
+import pickle
 import time
 from collections import defaultdict, deque
 from typing import Any, Optional
 
 import torch
+from packing3d import Container
 
 
 class ToteStatistics:
@@ -40,6 +42,8 @@ class ToteStatistics:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump({"environments": {str(i): {} for i in range(num_envs)}, "summary": {}}, f, indent=4)
+            self.pkl_dir = os.path.join(os.path.dirname(save_path), "containers")
+            os.makedirs(self.pkl_dir, exist_ok=True)
 
         # Initialize statistics trackers
         self.step_count = 0
@@ -61,6 +65,8 @@ class ToteStatistics:
         # Inbound and outbound GCU values for each tote
         self.inbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
         self.outbound_gcus = [[deque() for _ in range(num_totes)] for _ in range(num_envs)]
+
+        self.containers = [None for _ in range(num_envs)]
 
         # Track only the most recent ejection snapshot for each environment
         self.recent_ejection_data = [None for _ in range(self.num_envs)]
@@ -221,6 +227,33 @@ class ToteStatistics:
                         "timestamp": current_time,
                     },
                 )
+
+    def log_container(self, env_idx: int, container: Container):
+        self.containers[env_idx] = container
+
+        if self.save_path and self.pkl_dir:
+            current_time = time.time() - self.start_time
+
+            # Create per-env subdir
+            env_dir = os.path.join(self.pkl_dir, f"env_{env_idx}")
+            os.makedirs(env_dir, exist_ok=True)
+
+            # Save the container as step.pkl (e.g., 42.pkl)
+            pkl_filename = f"{self.step_count}.pkl"
+            pkl_path = os.path.join(env_dir, pkl_filename)
+            with open(pkl_path, "wb") as f:
+                pickle.dump(container, f)
+
+            # Log pointer to JSON
+            self._append_to_file(
+                env_idx,
+                "container",
+                {
+                    "step": self.step_count,
+                    "pickle_file": f"env_{env_idx}/{pkl_filename}",
+                    "timestamp": current_time,
+                },
+            )
 
     def log_dest_tote_ejection(self, tote_ids: torch.Tensor, env_ids: torch.Tensor):
         """

@@ -21,6 +21,7 @@ from packing3d import (
     Position,
     Transform,
 )
+
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box_np,
 )
@@ -41,9 +42,15 @@ class BPP:
         self.packed_obj_idx = [[] for _ in range(num_envs)]  # Packed objects per environment
         self.unpackable_obj_idx = [[] for _ in range(num_envs)]  # Unpackable objects per environment
         self.source_eject_tries = [0] * num_envs  # Number of tries to eject source totes
-        self.max_source_eject_tries = 3  # Maximum number of ejects allowed
+        self.max_source_eject_tries = 1  # Maximum number of ejects allowed
         self.num_envs = num_envs
-        items = [[Item(np.array(self.obj_voxels[i][j], dtype=np.float32)) for j in objects] for i in range(num_envs)]
+        items = [
+            [
+                Item(np.array(self.obj_voxels[i][j], dtype=np.float32), self.tote_manager.obj_asset_paths[i][j])
+                for j in objects
+            ]
+            for i in range(num_envs)
+        ]
 
         # # x y z to z x y
         self.display = Display(self.tote_dims)
@@ -186,6 +193,7 @@ class BPP:
                 results.append(res)
         for env_idx, res, container_items, container in results:
             self.problems[env_idx].container = container
+            self.tote_manager.stats.log_container(env_idx, container)
         print("Time taken for updating container heightmap: ", time.time() - t)
 
     @staticmethod
@@ -195,6 +203,7 @@ class BPP:
             return (i, (None, None, None))
 
         item = problem.items[obj_indices[0]]
+
         obj_idx = obj_indices[0].item()
         transforms = problem.container.search_possible_position(item, grid_num=30, step_width=90)
         if len(transforms) != 0:
@@ -254,6 +263,10 @@ class BPP:
 
             # Submit initial jobs
             for i, env_idx, curr_obj_indices in pending_envs:
+                obj_vols = []
+                for idx in curr_obj_indices:
+                    obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
+                curr_obj_indices = [idx for idx, _ in sorted(obj_vols, key=lambda x: x[1], reverse=True)]
                 job_args = (i, env_idx.cpu(), curr_obj_indices, self.problems[env_idx], plot)
                 futures[executor.submit(self._env_worker, job_args)] = (i, env_idx, curr_obj_indices)
 
@@ -332,7 +345,7 @@ class BPP:
         Args:
             num_obj_per_env: Number of objects per environment
             tote_manager: The tote manager object
-            env_indices: Indices of environments to get packable objects for
+            env_indices: indices of environments to get packable objects for
             tote_ids: Destination tote IDs for each environment
 
         Returns:

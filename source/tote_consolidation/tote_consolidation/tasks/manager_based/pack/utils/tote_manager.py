@@ -70,6 +70,7 @@ class ToteManager:
         self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
         self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
         self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
+        self.obj_asset_paths = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.tote_to_obj = torch.zeros(
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
@@ -97,6 +98,12 @@ class ToteManager:
 
         self.env = env
         self.device = env.device
+
+    def set_object_asset_paths(self, obj_asset_paths, env_ids):
+        """
+        Set asset paths for objects in the simulation.
+        """
+        self.obj_asset_paths = obj_asset_paths
 
     def set_object_volume(self, obj_volumes, env_ids):
         """
@@ -478,17 +485,26 @@ class ToteManager:
         Raises:
             ValueError: If object volumes aren't set
         """
-        if self.obj_volumes[env_ids].numel() == 0:
-            raise ValueError("Object volumes not set.")
-        # Select the relevant totes for the given environments
-        tote_selection = self.tote_to_obj[env_ids]  # Shape: [num_envs, num_totes, num_objects]
-        # Multiply object volumes with tote selection and sum over the object dimension
-        obj_volumes = torch.sum(
-            self.obj_volumes[env_ids].unsqueeze(1) * tote_selection, dim=2
-        )  # Shape: [num_envs, num_totes]
-        # Compute GCUs as the ratio of used volume to total tote volume
-        gcus = obj_volumes / self.tote_volume
-        return gcus
+        if self.obj_voxels is None or len(self.obj_voxels) == 0:
+            raise ValueError("Object voxels not set.")
+
+        gcus = []
+
+        for i, env_id in enumerate(env_ids.tolist()):
+            tote_mask = self.tote_to_obj[env_id]  # [num_totes, num_objects]
+            voxel_counts = []
+
+            for obj_idx in range(self.num_objects):
+                voxel = self.obj_voxels[env_id][obj_idx]
+                count = voxel.sum().item() if voxel is not None else 0.0
+                voxel_counts.append(count)
+
+            voxel_counts_tensor = torch.tensor(voxel_counts, device=tote_mask.device)
+            used_voxels = (tote_mask * voxel_counts_tensor).sum(dim=1)  # [num_totes]
+            gcu = used_voxels / self.tote_volume  # scalar or tensor [num_totes]
+            gcus.append(gcu)
+
+        return torch.stack(gcus, dim=0)  # [num_envs, num_totes]
 
     def log_current_gcu(self, env_ids=None):
         """
