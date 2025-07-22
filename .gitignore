@@ -70,3 +70,4 @@ tests/
 
 # Statistics
 stats/
+**/temp_figures/
