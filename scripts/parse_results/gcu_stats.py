@@ -22,7 +22,7 @@ def compute_stats(values):
 
 
 def main(data_path, max_rows):
-    json_file = "test_placement.json"
+    json_file = "tote_stats_summary.json"
     json_path = os.path.join(data_path, json_file)
 
     with open(json_path) as f:

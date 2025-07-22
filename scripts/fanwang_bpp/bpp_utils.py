@@ -5,9 +5,8 @@ import isaaclab.utils.math as math_utils
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend for saving figures
-import itertools
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from time import perf_counter
+from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,12 +26,13 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
 
 
 class BPP:
-    def __init__(self, tote_manager, num_envs, objects, scale=1.0):
+    def __init__(self, tote_manager, num_envs, objects, scale=1.0, **kwargs):
         """
         Initialize the BPP utility class.
 
         Args:
             scale (float): Scale factor for dimensions
+            kwargs: Additional keyword arguments
         """
         self.scale = scale
         self.objects = objects
@@ -56,6 +56,8 @@ class BPP:
 
         self.problems = [PackingProblem(self.tote_dims, items[i]) for i in range(num_envs)]
 
+        self.kwargs = kwargs
+
     def get_packing_variables(self):
         """
         Extract and format packing variables from the tote manager.
@@ -73,11 +75,10 @@ class BPP:
         obj_dims = obj_dims.to(dtype=torch.int32).tolist()
 
         obj_voxels = self.tote_manager.obj_voxels
-        # TODO (kaikwan): Scale voxel grid as well
         if self.scale != 1.0:
-            # Warn if scaling is applied
-            print(
-                "Warning: Scaling is applied to tote dimensions but not to voxel grid. This may lead to inaccuracies in"
+            # Throw error if scaling is applied
+            raise ValueError(
+                "Error: Scaling is applied to tote dimensions but not to voxel grid. This may lead to inaccuracies in"
                 " packing."
             )
         return tote_dims, obj_dims, obj_voxels
@@ -195,7 +196,7 @@ class BPP:
 
     @staticmethod
     def _env_worker(args):
-        i, env_idx, obj_indices, problem, plot = args
+        i, env_idx, obj_indices, problem, use_stability, plot = args
         if len(obj_indices) == 0:
             return (i, (None, None, None))
 
@@ -203,14 +204,15 @@ class BPP:
 
         obj_idx = obj_indices[0].item()
         transforms = problem.container.search_possible_position(item, grid_num=30, step_width=90)
-        if len(transforms) != 0:
-            return (i, (obj_idx, torch.tensor([obj_idx]), transforms[0]))
-        # For stability check transforms
-        # for transform in transforms:
-        #     test_item = deepcopy(item)
-        #     test_item.transform(transform)
-        #     if container.check_stability_with_candidate(test_item, plot=plot):
-        #         return (i, (obj_idx, torch.tensor([obj_idx]), transform))
+        if use_stability:
+            for transform in transforms:
+                test_item = deepcopy(item)
+                test_item.transform(transform)
+                if problem.container.check_stability_with_candidate(test_item, plot=plot):
+                    return (i, (obj_idx, torch.tensor([obj_idx]), transform))
+        else:
+            if len(transforms) != 0:
+                return (i, (obj_idx, torch.tensor([obj_idx]), transforms[0]))
         return (i, (None, torch.tensor([obj_idx]), None))
 
     def _eject_and_reload(self, env_idx, tote_ids, is_dest, overfill_check=False):
@@ -260,11 +262,19 @@ class BPP:
 
             # Submit initial jobs
             for i, env_idx, curr_obj_indices in pending_envs:
-                obj_vols = []
-                for idx in curr_obj_indices:
-                    obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
-                curr_obj_indices = [idx for idx, _ in sorted(obj_vols, key=lambda x: x[1], reverse=True)]
-                job_args = (i, env_idx.cpu(), curr_obj_indices, self.problems[env_idx], plot)
+                descVol = self.kwargs["decreasing_vol"]
+                if descVol and len(curr_obj_indices) > 1:
+                    # Sort objects by volume in descending order
+                    obj_vols = []
+                    for idx in curr_obj_indices:
+                        obj_vols.append((idx, self.tote_manager.obj_volumes[env_idx, idx].item()))
+                    curr_obj_indices = [idx for idx, _ in sorted(obj_vols, key=lambda x: x[1], reverse=True)]
+                else:
+                    shuffled = torch.randperm(len(curr_obj_indices), device="cpu")
+                    curr_obj_indices = [curr_obj_indices[i] for i in shuffled]
+
+                use_stability = self.kwargs.get("use_stability", False)
+                job_args = (i, env_idx.cpu(), curr_obj_indices, self.problems[env_idx], use_stability, plot)
                 futures[executor.submit(self._env_worker, job_args)] = (i, env_idx, curr_obj_indices)
 
             while futures:
