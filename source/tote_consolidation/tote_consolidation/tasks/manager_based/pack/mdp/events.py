@@ -7,16 +7,20 @@ from __future__ import annotations
 
 import math
 import random
+from itertools import product
 from typing import TYPE_CHECKING
 
 import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
+import numpy as np
 import torch
+import trimesh
 from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
 from pxr import UsdGeom
+from scipy.ndimage import binary_fill_holes, generate_binary_structure, label
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLGCUEnv
@@ -38,37 +42,14 @@ def object_props(
             meshes.extend(find_meshes(child))
         return meshes
 
-    def compute_mesh_volume(mesh):
-        """Compute volume of a triangulated, watertight mesh using PyTorch.
-        Assumes 1 unit = 1 cm (0.01 meters).
-        """
-        meters_per_unit = 0.01  # 1 unit = 1 cm (0.01 meters)
-
-        # Get mesh attributes
-        points_attr = mesh.GetPointsAttr()
-        face_counts_attr = mesh.GetFaceVertexCountsAttr()
-        face_indices_attr = mesh.GetFaceVertexIndicesAttr()
-
-        points = torch.tensor(points_attr.Get(), dtype=torch.float32)
-        face_counts = face_counts_attr.Get()
-        face_indices = face_indices_attr.Get()
-
-        # Ensure all faces are triangles
-        if not all(count == 3 for count in face_counts):
-            raise ValueError("Mesh must be triangulated for volume calculation.")
-
-        face_indices = torch.tensor(face_indices, dtype=torch.long).reshape(-1, 3)
-
-        v0 = points[face_indices[:, 0]]
-        v1 = points[face_indices[:, 1]]
-        v2 = points[face_indices[:, 2]]
-
-        # Use the scalar triple product: volume of tetrahedron
-        cross = torch.cross(v0, v1, dim=1)
-        dot = torch.sum(cross * v2, dim=1)
-        volume = torch.sum(dot) / 6.0
-
-        return volume.abs().item() * (meters_per_unit**3) * 1e6  # Convert to cubic centimeters (1 m^3 = 1e6 cm^3)
+    def compute_voxel_volume(vox: torch.Tensor) -> float:
+        """Computes the volume of a voxelized object."""
+        if vox is None:
+            return 0.0
+        # Count the number of filled voxels (1s)
+        filled_voxels = torch.sum(vox > 0).item()
+        # Volume is number of filled voxels times voxel size (assumed to be 1.0)
+        return float(filled_voxels)
 
     def compute_mesh_bbox(mesh):
         """Compute the l, w, h bounding box of a mesh."""
@@ -80,11 +61,72 @@ def object_props(
         bbox = bbox[[2, 0, 1]]  # Reorder to (l, w, h)
         return bbox
 
+    def usdmesh_to_trimesh(mesh: UsdGeom.Mesh) -> trimesh.Trimesh:
+        """Converts a UsdGeom.Mesh to a Trimesh object."""
+        points_attr = mesh.GetPointsAttr()
+        vertices = np.array(points_attr.Get(), dtype=np.float32)
+
+        face_vertex_counts = mesh.GetFaceVertexCountsAttr().Get()
+        face_vertex_indices = mesh.GetFaceVertexIndicesAttr().Get()
+        assert all(c == 3 for c in face_vertex_counts), "Only triangle faces supported"
+        faces = np.array(face_vertex_indices, dtype=np.int32).reshape(-1, 3)
+
+        return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+    def compute_voxelized_geometry(mesh, bbox_size, voxel_size=1.0, padding_factor=1.1):
+        """
+        Voxelize the mesh solidly into a 3D grid that fits the specified bbox size (X, Y, Z).
+        """
+        tri_mesh = usdmesh_to_trimesh(mesh)
+        if not tri_mesh.is_watertight:
+            tri_mesh.fill_holes()
+
+        # Apply padding to bbox size
+        padded_bbox = np.array(bbox_size * 2, dtype=np.float32) * padding_factor
+
+        # Compute scaling factor to fit mesh into padded bbox
+        mesh_size = tri_mesh.extents
+        scale = np.min(padded_bbox / mesh_size)
+
+        # Scale and center mesh within bbox
+        tri_mesh = tri_mesh.copy()
+        tri_mesh.apply_scale(scale)
+
+        mesh_min, mesh_max = tri_mesh.bounds
+        mesh_center = (mesh_min + mesh_max) / 2.0
+        bbox_center = padded_bbox / 2.0
+        tri_mesh.apply_translation(bbox_center - mesh_center)
+
+        # Final voxel grid size (number of voxels in each axis)
+        grid_size = np.ceil(padded_bbox / voxel_size).astype(int)
+
+        # Voxelize mesh and fill solid interior
+        voxelized = tri_mesh.voxelized(pitch=voxel_size)
+        matrix = voxelized.matrix.astype(np.uint8)
+
+        # Fill holes (solidify)
+        filled = binary_fill_holes(matrix).astype(np.float32)
+
+        # Pad/crop to exact size (Z, Y, X) from computed grid_size
+        current_shape = np.array(filled.shape)
+        target_shape = grid_size[::-1]  # reverse to Z, Y, X
+
+        pad_amount = np.maximum(target_shape - current_shape, 0)
+        pad_width = [(0, pad) for pad in pad_amount]
+        filled_padded = np.pad(filled, pad_width, mode="constant", constant_values=0)
+
+        # Crop if oversized
+        filled_cropped = filled_padded[: target_shape[0], : target_shape[1], : target_shape[2]]
+
+        return torch.from_numpy(filled_cropped).permute(2, 0, 1).float()  # Convert to (Z, Y, X) format
+
     # Cache for storing volumes of already computed objects
     obj_volumes = torch.zeros((env.num_envs, num_objects), device=env.device)
     obj_bboxes = torch.zeros((env.num_envs, num_objects, 3), device=env.device)
-    volume_cache = {}
-    bbox_cache = {}
+    obj_voxels = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
+    obj_asset_paths = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
+
+    mesh_properties_cache = {}
 
     # Get mesh from the asset
     for asset_cfg in asset_cfgs:
@@ -92,26 +134,31 @@ def object_props(
         prim_path_expr = object.cfg.prim_path  # fix prim path is regex
         for prim_path in sim_utils.find_matching_prim_paths(prim_path_expr):
             prim = env.scene.stage.GetPrimAtPath(prim_path)
+            items = prim.GetMetadata("references").GetAddedOrExplicitItems()
+            asset_path = items[0].assetPath
+
             for mesh in find_meshes(prim):
-                mesh_name = mesh.GetPath().__str__().split("/")[-1]  # Extract the last portion of the path
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
-                if mesh_name in volume_cache and mesh_name in bbox_cache:
-                    volume = volume_cache[mesh_name]
-                    bbox = bbox_cache[mesh_name]
+
+                # Check if we've already calculated properties for this asset
+                if asset_path in mesh_properties_cache:
+                    volume, bbox, vox = mesh_properties_cache[asset_path]
                 else:
-                    volume = compute_mesh_volume(mesh)
                     bbox = compute_mesh_bbox(mesh)
+                    vox = compute_voxelized_geometry(mesh, bbox)
+                    volume = compute_voxel_volume(vox)
 
-                    # Cache the computed values
-                    volume_cache[mesh_name] = volume
-                    bbox_cache[mesh_name] = bbox
-
+                    mesh_properties_cache[asset_path] = (volume, bbox, vox)
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
+                obj_voxels[env_idx][obj_idx] = vox
+                obj_asset_paths[env_idx][obj_idx] = asset_path
 
+    env.tote_manager.set_object_asset_paths(obj_asset_paths, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_volume(obj_volumes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
+    env.tote_manager.set_object_voxels(obj_voxels)
 
 
 def randomize_object_pose_with_invalid_ranges(
@@ -245,7 +292,7 @@ def randomize_object_pose_with_invalid_ranges(
                 orientations=orientations,
                 cur_env=cur_env,
             )
-        env.tote_manager.refill_source_totes(env, env_ids=torch.arange(env.num_envs, device=env.device))
+        env.tote_manager.refill_source_totes(env_ids=torch.arange(env.num_envs, device=env.device))
 
 
 def set_objects_to_invisible(

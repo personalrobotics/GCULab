@@ -37,9 +37,8 @@ simulation_app = app_launcher.app
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-from isaaclab_tasks.utils import parse_env_cfg
-
 import tote_consolidation.tasks  # noqa: F401
+from isaaclab_tasks.utils import parse_env_cfg
 
 
 def main():

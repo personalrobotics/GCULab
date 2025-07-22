@@ -80,6 +80,7 @@ from datetime import datetime
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
+import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -93,8 +94,6 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from rsl_rl.runners import OnPolicyRunner
-
-import tote_consolidation.tasks  # noqa: F401
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

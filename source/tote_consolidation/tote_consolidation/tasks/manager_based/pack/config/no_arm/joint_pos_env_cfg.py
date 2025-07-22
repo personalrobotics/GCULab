@@ -20,7 +20,9 @@ class NoArmPackEnvCfg(PackEnvCfg):
 
         # switch robot to franka
         self.scene.robot = None
-        self.actions.packing_action = mdp.PackingActionCfg(asset_name="tote1")  # asset name is not used in this env
+        self.actions.packing_action = mdp.PackingActionCfg(
+            asset_name="tote1", place_obj_bottomLeft=True
+        )  # asset name is not used in this env
 
 
 @configclass

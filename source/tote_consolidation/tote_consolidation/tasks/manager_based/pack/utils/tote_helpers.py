@@ -4,10 +4,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
-import torch
+
 import isaaclab.utils.math as math_utils
+import numpy as np
+import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
+
 
 def calculate_rotated_bounding_box(object_bboxes, orientations, device):
     """
@@ -35,6 +38,33 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
 
     return rotated_dims
 
+
+def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
+    """
+    Calculate rotated bounding boxes for objects efficiently.
+
+    Args:
+        object_bboxes (torch.Tensor): Bounding boxes of objects [N, 3].
+        orientations (torch.Tensor): Orientation quaternions [N, 4].
+        device (torch.device): Device to use for tensors.
+
+    Returns:
+        torch.Tensor: Dimensions of rotated bounding boxes.
+    """
+    object_half_dims = object_bboxes[:, [1, 2, 0]] / 2.0 * 0.01  # cm to m
+
+    corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
+        0
+    ) * object_half_dims.unsqueeze(1)
+    rot_matrices = math_utils.matrix_from_quat(orientations)
+    rotated_corners = torch.bmm(corners, rot_matrices.transpose(1, 2)).detach().cpu()
+    rotated_corners_np = rotated_corners.numpy()
+    min_vals = np.min(rotated_corners_np, axis=1)
+    max_vals = np.max(rotated_corners_np, axis=1)
+    rotated_dims = max_vals - min_vals
+    return rotated_dims
+
+
 def step_in_sim(env, num_steps=1):
     """
     Step the simulation for a specified number of steps.
@@ -50,6 +80,7 @@ def step_in_sim(env, num_steps=1):
             env.sim.render()
         step += 1
         env.scene.update(dt=env.physics_dt)
+
 
 def reappear_tote_animation(env, env_ids, eject_envs, eject_tote_ids, tote_keys):
     """
@@ -75,6 +106,7 @@ def reappear_tote_animation(env, env_ids, eject_envs, eject_tote_ids, tote_keys)
             tote_asset = env.scene[tote_keys[tote_idx.item()]]
             tote_asset.set_visibilities([True], [env_idx.item()])
 
+
 def calculate_tote_bounds(tote_assets, true_tote_dim, env):
     """
     Calculate bounding box limits for each tote.
@@ -98,6 +130,7 @@ def calculate_tote_bounds(tote_assets, true_tote_dim, env):
         ]
         tote_bounds.append(bounds)
     return tote_bounds
+
 
 def update_object_positions_in_sim(env, objects, positions, orientations, cur_env):
     """
@@ -161,6 +194,7 @@ def update_object_positions_in_sim(env, objects, positions, orientations, cur_en
         )
         asset.set_visibility(True, env_ids=env_id_tensor)
 
+
 def generate_orientations(objects, device=None):
     """
     Generate default orientations for objects.
@@ -175,15 +209,18 @@ def generate_orientations(objects, device=None):
     device = objects.device if device is None else device
     orientations_init = torch.tensor([1, 0, 0, 0], device=device)
     orientations_to_apply = torch.tensor([1, 0, 0, 0], device=device)
-    
+
     # Create repeated orientations by multiplying the initial and to-apply quaternions
     repeated_orientations = torch.stack(
         [math_utils.quat_mul(orientations_init, orientations_to_apply)] * objects.numel()
     )
-    
+
     return repeated_orientations
 
-def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientations, min_separation=0.0, device=None, max_attempts=100):
+
+def generate_positions(
+    objects, tote_bounds, env_origin, obj_bboxes, orientations, min_separation=0.0, device=None, max_attempts=100
+):
     """
     Generate random positions within tote bounds for objects with minimum separation.
 
@@ -201,7 +238,7 @@ def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientation
         torch.Tensor: Positions for the objects.
     """
     device = env_origin.device if device is None else device
-    
+
     # Extract tote boundaries
     x_min, x_max = tote_bounds[0]
     y_min, y_max = tote_bounds[1]
@@ -209,14 +246,14 @@ def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientation
 
     # Calculate rotated bounding boxes
     rotated_dims = calculate_rotated_bounding_box(obj_bboxes, orientations, device)
-    
+
     # Initialize positions list
     positions = []
-    
+
     for i in range(objects.numel()):
         # Get margin to adjust boundaries for object size
         margin = rotated_dims[i] / 2.0
-        
+
         # Adjusted boundaries considering object size
         adj_x_min = x_min + margin[0]
         adj_x_max = x_max - margin[0]
@@ -224,30 +261,28 @@ def generate_positions(objects, tote_bounds, env_origin, obj_bboxes, orientation
         adj_y_max = y_max - margin[1]
         adj_z_min = z_min + margin[2]
         adj_z_max = z_max - margin[2]
-        
+
         for attempt in range(max_attempts):
             # Generate random position
             x = torch.rand(1, device=device) * (adj_x_max - adj_x_min) + adj_x_min
             y = torch.rand(1, device=device) * (adj_y_max - adj_y_min) + adj_y_min
             z = torch.rand(1, device=device) * (adj_z_max - adj_z_min) + adj_z_min
-            
+
             candidate_position = torch.tensor([x.item(), y.item(), z.item()], device=device)
-            
+
             # Accept position if it's the first object or if reached max attempts
             if len(positions) == 0 or attempt == max_attempts - 1:
                 positions.append(candidate_position)
                 break
-            
+
             # Check separation from all previously placed objects
-            separation_check = all(
-                torch.norm(candidate_position - pos) >= min_separation for pos in positions
-            )
-            
+            separation_check = all(torch.norm(candidate_position - pos) >= min_separation for pos in positions)
+
             if separation_check:
                 positions.append(candidate_position)
                 break
-    
+
     # Stack positions into a tensor
     positions_tensor = torch.stack(positions, dim=0)
-    
+
     return positions_tensor + env_origin
