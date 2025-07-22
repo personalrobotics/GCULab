@@ -115,7 +115,14 @@ def main():
 
     step_count = 0
 
-    bpp = bpp_utils.BPP(tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device))
+    args = {
+        "decreasing_vol": False,  # Whether to use decreasing volume for packing
+        "use_stability": True,  # Whether to use stability checks for packing
+    }
+
+    bpp = bpp_utils.BPP(
+        tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
+    )
 
     while simulation_app.is_running():
         # run everything in inference mode
