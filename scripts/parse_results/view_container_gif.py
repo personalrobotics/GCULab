@@ -1,9 +1,10 @@
+import argparse
 import os
 import pickle
-import argparse
+from concurrent.futures import ProcessPoolExecutor
+
 import matplotlib.pyplot as plt
 from packing3d import Display
-from concurrent.futures import ProcessPoolExecutor
 from PIL import Image
 
 
@@ -43,12 +44,11 @@ def main():
     os.makedirs(temp_env_img_dir, exist_ok=True)
 
     step_files = sorted(
-        [f for f in os.listdir(container_dir) if f.endswith(".pkl")],
-        key=lambda x: int(os.path.splitext(x)[0])
+        [f for f in os.listdir(container_dir) if f.endswith(".pkl")], key=lambda x: int(os.path.splitext(x)[0])
     )
 
     if args.max_steps is not None:
-        step_files = step_files[:args.max_steps]
+        step_files = step_files[: args.max_steps]
 
     with open(os.path.join(container_dir, step_files[0]), "rb") as f:
         first_container = pickle.load(f)
@@ -67,11 +67,11 @@ def main():
 
     img_files = sorted(
         [f for f in os.listdir(temp_env_img_dir) if f.endswith(".png")],
-        key=lambda x: int(x.split('_')[1].split('.')[0])
+        key=lambda x: int(x.split("_")[1].split(".")[0]),
     )
 
     if args.max_steps is not None:
-        img_files = img_files[:args.max_steps]
+        img_files = img_files[: args.max_steps]
 
     images = []
     for img_file in img_files:
@@ -81,13 +81,7 @@ def main():
 
     if images:
         gif_path = os.path.join(temp_env_img_dir, f"animation_env_{args.env_id}.gif")
-        images[0].save(
-            gif_path,
-            save_all=True,
-            append_images=images[1:],
-            duration=500,
-            loop=0
-        )
+        images[0].save(gif_path, save_all=True, append_images=images[1:], duration=500, loop=0)
         print(f"Saved animated GIF: {gif_path}")
     else:
         print("No images found to create GIF.")

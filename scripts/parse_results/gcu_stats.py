@@ -1,11 +1,14 @@
 import argparse
 import json
-import numpy as np
 import os
+
+import numpy as np
+
 
 def flatten(values):
     """Flatten nested lists of values."""
     return [v for sublist in values for v in (sublist if isinstance(sublist, list) else [sublist])]
+
 
 def compute_stats(values):
     arr = np.array(values)
@@ -14,14 +17,15 @@ def compute_stats(values):
         f"{np.std(arr):.4f}",
         f"{np.percentile(arr, 25):.4f}",
         f"{np.percentile(arr, 50):.4f}",
-        f"{np.percentile(arr, 75):.4f}"
+        f"{np.percentile(arr, 75):.4f}",
     ]
+
 
 def main(data_path, max_rows):
     json_file = "test_placement.json"
     json_path = os.path.join(data_path, json_file)
 
-    with open(json_path, 'r') as f:
+    with open(json_path) as f:
         data = json.load(f)
 
     gcus = []
@@ -52,6 +56,7 @@ def main(data_path, max_rows):
 
     # Print values, with a label at the front
     print("Base " + " ".join(gcus_stats + transfers_stats + ejections_stats))
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Summarize metrics for Google Sheets.")

@@ -1,10 +1,11 @@
+import argparse
 import os
 import pickle
-import argparse
-import numpy as np
+
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Slider
+import numpy as np
 from matplotlib.colors import to_rgba
+from matplotlib.widgets import Slider
 from packing3d import Display
 
 
@@ -25,18 +26,38 @@ def plot_cross_section(container_path):
     print(f"Fill ratio: {fill_ratio:.3%}")
 
     # Color mapping
-    colors = ['lightcoral', 'lightsalmon', 'gold', 'olive',
-              'mediumaquamarine', 'deepskyblue', 'blueviolet', 'pink',
-              'brown', 'darkorange', 'yellow', 'lawngreen', 'turquoise',
-              'dodgerblue', 'darkorchid', 'hotpink', 'deeppink', 'peru',
-              'orange', 'darkolivegreen', 'cyan', 'purple', 'crimson']
+    colors = [
+        "lightcoral",
+        "lightsalmon",
+        "gold",
+        "olive",
+        "mediumaquamarine",
+        "deepskyblue",
+        "blueviolet",
+        "pink",
+        "brown",
+        "darkorange",
+        "yellow",
+        "lawngreen",
+        "turquoise",
+        "dodgerblue",
+        "darkorchid",
+        "hotpink",
+        "deeppink",
+        "peru",
+        "orange",
+        "darkolivegreen",
+        "cyan",
+        "purple",
+        "crimson",
+    ]
     color_rgba = np.asarray([to_rgba(c) for c in colors])
 
     fig, ax = plt.subplots()
     plt.subplots_adjust(bottom=0.2)
 
     z_max = cube.shape[0] - 1
-    slice_ax = ax.imshow(np.zeros(cube.shape[1:]), origin='lower')
+    slice_ax = ax.imshow(np.zeros(cube.shape[1:]), origin="lower")
     title = ax.set_title("Cross-section Z=0 | Filled Area = 0 unit²")
 
     ax_z = plt.axes([0.2, 0.05, 0.65, 0.03])

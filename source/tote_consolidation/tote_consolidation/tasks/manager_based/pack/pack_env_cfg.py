@@ -3,11 +3,12 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import glob
+
 ##
 # Scene definition
 ##
 import os
-import glob
 from dataclasses import MISSING
 
 import gculab.sim as gcu_sim_utils
@@ -39,13 +40,13 @@ available_objects = {}
 for usd_file in all_usd_files:
     basename = os.path.basename(usd_file)
     obj_id = basename[:3]
-    obj_name = basename[4:].replace('.usd', '')
+    obj_name = basename[4:].replace(".usd", "")
     available_objects[obj_id] = obj_name
 
 # Print available objects for reference
 print("Available YCB objects:")
 for obj_id, obj_name in sorted(available_objects.items()):
-    print(f"\"{obj_id}\", # {obj_name}")
+    print(f'"{obj_id}", # {obj_name}')
 
 # Define which object IDs to include
 include_ids = [
@@ -66,8 +67,8 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 40
-num_objects_to_reserve = 40
+num_object_per_env = 50
+num_objects_to_reserve = 50
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes

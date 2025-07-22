@@ -85,6 +85,7 @@ def convert_transform_to_action_tensor(transforms, obj_indicies, device):
 
     return action_tensor
 
+
 def main():
     """Zero actions agent with Isaac Lab environment."""
     # parse configuration
