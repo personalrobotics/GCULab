@@ -73,7 +73,7 @@ def object_props(
 
         return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
 
-    def compute_voxelized_geometry(mesh, bbox_size, voxel_size=1.0, padding_factor=1.1):
+    def compute_voxelized_geometry(mesh, bbox_size, voxel_size=1.0, padding_factor=1.15):
         """
         Voxelize the mesh solidly into a 3D grid that fits the specified bbox size (X, Y, Z).
         """

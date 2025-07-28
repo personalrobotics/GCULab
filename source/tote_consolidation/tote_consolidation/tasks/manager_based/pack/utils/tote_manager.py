@@ -76,7 +76,11 @@ class ToteManager:
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
         self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
         self.overfill_threshold = 0.3  # in meters
-        self.max_objects_per_tote = 2
+        self.max_objects_per_tote = 5
+
+        self.source_tote_ejected = torch.zeros(
+            self.num_envs, dtype=torch.bool, device="cpu"
+        )
 
         stats_dir = "stats"
         run_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -195,13 +199,10 @@ class ToteManager:
         outbound_gcus = self.get_gcu(env_ids)
 
         first_empty = torch.argmax(empty_totes.float(), dim=1)
+        self.source_tote_ejected[env_ids[has_empty]] = True
 
         while has_empty.any():
             refilled = True
-
-            # # Create empty tote tensor, -1 if no valid empty source tote
-            # empty_tote_tensor = torch.where(has_empty, first_empty, torch.full_like(first_empty, -1))
-
             # In all has-empty environments, teleport objects from reserve to the first empty tote
             if self.animate:
                 reappear_tote_animation(self.env, env_ids, has_empty, first_empty, self.tote_keys)
@@ -295,12 +296,14 @@ class ToteManager:
         if overfill_check:
             overfilled_envs = fill_heights > self.overfill_threshold
         else:
+            # Mock that the desired totes are overfilled, so that they are ejected
             overfilled_envs = torch.ones_like(fill_heights, dtype=torch.bool)
 
         if not overfilled_envs.any():
             return
 
-        print(f"Overfilled totes detected in environments: {env_ids[overfilled_envs]}")
+        if is_dest:
+            print(f"Overfilled totes detected in environments: {env_ids[overfilled_envs]}")
 
         # Animate tote ejection if enabled
         if self.animate:

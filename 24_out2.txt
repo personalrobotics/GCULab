@@ -1,0 +1,28 @@
+Loading user config located at: '/home/henri/isaacsim/kit/data/Kit/Isaac-Sim/4.5/user.config.json'
+[Info] [carb] Logging to file: /home/henri/isaacsim/kit/logs/Kit/Isaac-Sim/4.5/kit_20250724_074650.log
+2025-07-24 14:46:50 [0ms] [Warning] [omni.kit.app.plugin] No crash reporter present, dumps uploading isn't available.
+2025-07-24 14:46:50 [1ms] [Warning] [omni.ext.plugin] [ext: rendering_modes] Extensions config 'extension.toml' doesn't exist '/home/henri/prl_cp/IsaacLab/apps/rendering_modes' or '/home/henri/prl_cp/IsaacLab/apps/rendering_modes/config'
+2025-07-24 14:46:50 [272ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2025-07-24 14:46:50 [570ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 575.57.08     | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 4090          | Yes: 0 |     | 24564   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2684      | ad07cb6b.. |
+|     |                                  |        |     |            | 1         |            |
+|=============================================================================================|
+| OS: 22.04.5 LTS (Jammy Jellyfish) ubuntu, Version: 22.04.5, Kernel: 6.8.0-59-generic
+| XServer Vendor: The X.Org Foundation, XServer Version: 12101004 (1.21.1.4)
+| Processor: 13th Gen Intel(R) Core(TM) i9-13900KF
+| Bare Metal Cores: 24 | Bare Metal Logical Cores: 48
+| Available Cores:  32 
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 64126 | Free Memory: 42074
+| Total Page/Swap (MB): 65535 | Free Page/Swap: 63571
+|---------------------------------------------------------------------------------------------|
+2025-07-24 14:46:53 [2,826ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.

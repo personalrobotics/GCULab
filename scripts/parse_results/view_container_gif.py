@@ -81,7 +81,7 @@ def main():
 
     if images:
         gif_path = os.path.join(temp_env_img_dir, f"animation_env_{args.env_id}.gif")
-        images[0].save(gif_path, save_all=True, append_images=images[1:], duration=100, loop=0)
+        images[0].save(gif_path, save_all=True, append_images=images[1:], duration=500, loop=0)
         print(f"Saved animated GIF: {gif_path}")
     else:
         print("No images found to create GIF.")

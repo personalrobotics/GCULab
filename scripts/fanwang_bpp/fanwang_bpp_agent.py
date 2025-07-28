@@ -42,6 +42,8 @@ import bpp_utils
 import gymnasium as gym
 import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401
+import numpy as np
+import random
 import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
@@ -93,6 +95,11 @@ def main():
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
     env_cfg.seed = args_cli.seed
+    random.seed(args_cli.seed)
+    np.random.seed(args_cli.seed)
+    torch.manual_seed(args_cli.seed)
+    torch.cuda.manual_seed_all(args_cli.seed)
+
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
@@ -111,13 +118,14 @@ def main():
 
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
-    exp_log_interval = 1  # Log stats every 50 steps
+    exp_log_interval = 1
 
     step_count = 0
 
     args = {
         "decreasing_vol": False,  # Whether to use decreasing volume for packing
-        "use_stability": True,  # Whether to use stability checks for packing
+        "use_stability": False,  # Whether to use stability checks for packing
+        "use_subset_sum": True,  # Whether to use subset sum for packing
     }
 
     bpp = bpp_utils.BPP(

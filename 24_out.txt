@@ -1,0 +1,1287 @@
+[INFO][AppLauncher]: Using device: cuda:0
+[INFO][AppLauncher]: Loading experience file: /home/henri/prl_cp/IsaacLab/apps/isaaclab.python.headless.kit
+Available YCB objects:
+"002", # master_chef_can
+"003", # cracker_box
+"004", # sugar_box
+"005", # tomato_soup_can
+"006", # mustard_bottle
+"007", # tuna_fish_can
+"008", # pudding_box
+"009", # gelatin_box
+"010", # potted_meat_can
+"011", # banana
+"019", # pitcher_base
+"021", # bleach_cleanser
+"024", # bowl
+"025", # mug
+"035", # power_drill
+"036", # wood_block
+"037", # scissors
+"040", # large_marker
+"051", # large_clamp
+"052", # extra_large_clamp
+"061", # foam_brick
+[INFO]: Parsing configuration from: tote_consolidation.tasks.manager_based.pack.config.no_arm.joint_pos_env_cfg:NoArmPackEnvCfg
+Setting seed: 0
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : 0
+	Physics step-size     : 0.011111111111111112
+	Rendering step-size   : 0.022222222222222223
+	Environment step-size : 0.022222222222222223
+[INFO]: Time taken for scene creation : 1.347662 seconds
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 20
+	Environment spacing   : 2.5
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : []
+	Replicate physics     : False
+[INFO]: Starting the simulation. This may take a few seconds. Please wait...
+[INFO]: Time taken for simulation start : 1.752832 seconds
+[INFO] Command Manager:  <CommandManager> contains 0 active terms.
++------------------------+
+|  Active Command Terms  |
++--------+-------+-------+
+| Index  | Name  |  Type |
++--------+-------+-------+
++--------+-------+-------+
+
+[INFO] Event Manager:  <EventManager> contains 3 active terms.
++-----------------------------------+
+| Active Event Terms in Mode: 'startup' |
++------------+----------------------+
+|   Index    | Name                 |
++------------+----------------------+
+|     0      | obj_volume           |
++------------+----------------------+
++------------------------------------+
+| Active Event Terms in Mode: 'reset' |
++---------+--------------------------+
+|  Index  | Name                     |
++---------+--------------------------+
+|    0    | reset_all                |
+|    1    | randomize_objects        |
++---------+--------------------------+
++-------------------------------------------+
+|  Active Event Terms in Mode: 'post_reset' |
++---------+---------------------------------+
+|  Index  | Name                            |
++---------+---------------------------------+
+|    0    | check_obj_out_of_bounds         |
+|    1    | detect_objects_in_tote          |
+|    2    | set_objects_to_invisible        |
++---------+---------------------------------+
+
+[INFO] Recorder Manager:  <RecorderManager> contains 0 active terms.
++---------------------+
+| Active Recorder Terms |
++-----------+---------+
+|   Index   | Name    |
++-----------+---------+
++-----------+---------+
+
+[INFO] Action Manager:  <ActionManager> contains 1 active terms.
++------------------------------------+
+|   Active Action Terms (shape: 9)   |
++-------+----------------+-----------+
+| Index | Name           | Dimension |
++-------+----------------+-----------+
+|   0   | packing_action |         9 |
++-------+----------------+-----------+
+
+[INFO] Observation Manager: <ObservationManager> contains 1 groups.
++----------------------------------------------------+
+| Active Observation Terms in Group: 'policy' (shape: (9,)) |
++---------------+--------------------+---------------+
+|     Index     | Name               |     Shape     |
++---------------+--------------------+---------------+
+|       0       | actions            |      (9,)     |
++---------------+--------------------+---------------+
+
+[INFO] Termination Manager:  <TerminationManager> contains 0 active terms.
++----------------------------+
+|  Active Termination Terms  |
++--------+-------+-----------+
+| Index  | Name  |  Time Out |
++--------+-------+-----------+
++--------+-------+-----------+
+
+[INFO] Reward Manager:  <RewardManager> contains 0 active terms.
++-----------------------+
+|  Active Reward Terms  |
++-------+------+--------+
+| Index | Name | Weight |
++-------+------+--------+
++-------+------+--------+
+
+[INFO] Curriculum Manager:  <CurriculumManager> contains 0 active terms.
++----------------------+
+| Active Curriculum Terms |
++-----------+----------+
+|   Index   | Name     |
++-----------+----------+
++-----------+----------+
+
+[INFO]: Completed setting up the environment...
+[INFO]: Gym observation space: Dict('policy': Box(-inf, inf, (20, 9), float32))
+[INFO]: Gym action space: Box(-inf, inf, (20, 9), float32)
+GCU  tensor([[0.0000, 0.1137, 0.0947, 0.2255],
+        [0.2071, 0.0000, 0.1945, 0.1078],
+        [0.0883, 0.1496, 0.0000, 0.1164],
+        [0.1391, 0.1816, 0.1924, 0.0000],
+        [0.0000, 0.1124, 0.1088, 0.0900],
+        [0.1809, 0.0000, 0.1572, 0.1430],
+        [0.0883, 0.1925, 0.0000, 0.1733],
+        [0.1423, 0.1444, 0.1681, 0.0000],
+        [0.0000, 0.1910, 0.1406, 0.1615],
+        [0.2109, 0.0000, 0.1214, 0.0856],
+        [0.1622, 0.1521, 0.0000, 0.1061],
+        [0.1133, 0.1873, 0.1879, 0.0000],
+        [0.0000, 0.1924, 0.1740, 0.1572],
+        [0.1297, 0.0000, 0.1423, 0.1545],
+        [0.1387, 0.1504, 0.0000, 0.0901],
+        [0.2126, 0.1559, 0.1061, 0.0000],
+        [0.0000, 0.1228, 0.1387, 0.2095],
+        [0.1099, 0.0000, 0.1834, 0.1565],
+        [0.1674, 0.1840, 0.0000, 0.1513],
+        [0.1078, 0.1454, 0.1764, 0.0000]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 0
+Time taken for updating container heightmap:  0.6219003200531006
+V:  3.6084  object volumes:  [tensor(0.0969), tensor(0.0311), tensor(0.0168), tensor(0.2100), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.0311), tensor(0.0969), tensor(0.1235), tensor(0.2932), tensor(0.0311), tensor(0.2932), tensor(0.0168)]
+V:  3.6084  object volumes:  [tensor(0.0311), tensor(0.0168), tensor(0.2932), tensor(0.2932), tensor(0.1235), tensor(0.0311), tensor(0.1235), tensor(0.2932), tensor(0.2932), tensor(0.0311), tensor(0.0168), tensor(0.0168), tensor(0.0969), tensor(0.2932), tensor(0.0969)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.1376), tensor(0.2100), tensor(0.1376), tensor(0.1235), tensor(0.2100), tensor(0.2932), tensor(0.2932), tensor(0.0969), tensor(0.0168), tensor(0.2100), tensor(0.0969), tensor(0.2100), tensor(0.0168), tensor(0.1235)]
+V:  3.6084  object volumes:  [tensor(0.2100), tensor(0.1376), tensor(0.0311), tensor(0.1235), tensor(0.0168), tensor(0.1376), tensor(0.0311), tensor(0.2100), tensor(0.1235), tensor(0.0969), tensor(0.0168), tensor(0.0311), tensor(0.0969), tensor(0.1235), tensor(0.0168)]
+V:  3.6084  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.2932), tensor(0.0969), tensor(0.2100), tensor(0.0969), tensor(0.1376), tensor(0.0168), tensor(0.0969), tensor(0.1235), tensor(0.1376), tensor(0.1376), tensor(0.0969), tensor(0.1376), tensor(0.0311)]
+V:  3.6084  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.2100), tensor(0.1376), tensor(0.0168), tensor(0.0969), tensor(0.1376), tensor(0.1376), tensor(0.2100), tensor(0.2100), tensor(0.0311), tensor(0.2932), tensor(0.1235), tensor(0.0969)]
+V:  3.6084  object volumes:  [tensor(0.0311), tensor(0.1376), tensor(0.2100), tensor(0.1235), tensor(0.2100), tensor(0.2100), tensor(0.1235), tensor(0.0969), tensor(0.0969), tensor(0.1235), tensor(0.0969), tensor(0.2100), tensor(0.1235), tensor(0.2100), tensor(0.2932)]
+V:  3.6084  object volumes:  [tensor(0.2100), tensor(0.1376), tensor(0.0311), tensor(0.0969), tensor(0.1376), tensor(0.0311), tensor(0.0969), tensor(0.0969), tensor(0.1235), tensor(0.0969), tensor(0.1235), tensor(0.2932), tensor(0.2932), tensor(0.1376), tensor(0.0168)]
+V:  3.6084  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.1235), tensor(0.0311), tensor(0.1235), tensor(0.1376), tensor(0.2932), tensor(0.0311), tensor(0.2100), tensor(0.1376), tensor(0.0311), tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.0969)]
+SUBSET: New subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(17), tensor(18), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(32), tensor(34), tensor(39), tensor(42), tensor(44)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.1376), tensor(0.2932), tensor(0.0969), tensor(0.1376), tensor(0.1376), tensor(0.0168), tensor(0.2932), tensor(0.0969), tensor(0.2100), tensor(0.0311), tensor(0.1235), tensor(0.1376), tensor(0.2932), tensor(0.1235)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.2932), tensor(0.1376), tensor(0.1235), tensor(0.1376), tensor(0.0311), tensor(0.0969), tensor(0.0168), tensor(0.2100), tensor(0.1235), tensor(0.0969), tensor(0.2100), tensor(0.1376), tensor(0.2932), tensor(0.1235)]
+V:  3.6084  object volumes:  [tensor(0.0168), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.2100), tensor(0.2100), tensor(0.1235), tensor(0.2932), tensor(0.1376), tensor(0.0311), tensor(0.0311), tensor(0.1235)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.0168), tensor(0.2100), tensor(0.2100), tensor(0.1235), tensor(0.1235), tensor(0.2100), tensor(0.1376), tensor(0.0311), tensor(0.0311), tensor(0.0311), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.0969)]
+V:  3.6084  object volumes:  [tensor(0.1235), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.1235), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.0168), tensor(0.1235), tensor(0.0311), tensor(0.1235), tensor(0.0969), tensor(0.0168), tensor(0.2932)]
+V:  3.6084  object volumes:  [tensor(0.1235), tensor(0.0168), tensor(0.0168), tensor(0.1376), tensor(0.0168), tensor(0.1235), tensor(0.2100), tensor(0.0969), tensor(0.2932), tensor(0.1376), tensor(0.2932), tensor(0.0168), tensor(0.2932), tensor(0.1376), tensor(0.2100)]
+V:  3.6084  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.0168), tensor(0.0969), tensor(0.0969), tensor(0.2100), tensor(0.0969), tensor(0.2932), tensor(0.1376), tensor(0.2100), tensor(0.0168), tensor(0.0969), tensor(0.1235), tensor(0.2100), tensor(0.2932)]
+V:  3.6084  object volumes:  [tensor(0.1235), tensor(0.2932), tensor(0.1376), tensor(0.0168), tensor(0.1376), tensor(0.1235), tensor(0.2100), tensor(0.2100), tensor(0.0311), tensor(0.2100), tensor(0.2932), tensor(0.2100), tensor(0.1376), tensor(0.0168), tensor(0.2100)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.0969), tensor(0.0311), tensor(0.0969), tensor(0.0311), tensor(0.0311), tensor(0.0168), tensor(0.0168), tensor(0.2100), tensor(0.0969), tensor(0.2932), tensor(0.1235), tensor(0.2100), tensor(0.2932)]
+V:  3.6084  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.0311), tensor(0.0168), tensor(0.0168), tensor(0.1235), tensor(0.2932), tensor(0.1235), tensor(0.0311), tensor(0.0168), tensor(0.0168), tensor(0.1235), tensor(0.1235), tensor(0.1235), tensor(0.2100)]
+V:  3.6084  object volumes:  [tensor(0.0969), tensor(0.1235), tensor(0.0969), tensor(0.2932), tensor(0.2100), tensor(0.1376), tensor(0.1376), tensor(0.0311), tensor(0.1376), tensor(0.2932), tensor(0.0311), tensor(0.0168), tensor(0.2100), tensor(0.0311), tensor(0.2932)]
+Placement Time taken for environment 4: 3.3508036136627197
+Placement Time taken for environment 9: 3.641552686691284
+Placement Time taken for environment 7: 5.045997142791748
+Placement Time taken for environment 3: 5.184045314788818
+Placement Time taken for environment 19: 5.397326707839966
+Placement Time taken for environment 13: 5.419404745101929
+Placement Time taken for environment 17: 5.455946683883667
+Placement Time taken for environment 1: 5.985989093780518
+Placement Time taken for environment 18: 5.999194145202637
+Placement Time taken for environment 0: 7.136770725250244
+Placement Time taken for environment 14: 7.385985374450684
+Placement Time taken for environment 5: 7.682704448699951
+Placement Time taken for environment 2: 8.102140426635742
+Placement Time taken for environment 6: 8.213783264160156
+Placement Time taken for environment 11: 8.663264036178589
+Placement Time taken for environment 16: 8.703856468200684
+Placement Time taken for environment 8: 8.968441009521484
+Placement Time taken for environment 10: 9.428446769714355
+Placement Time taken for environment 15: 9.762896537780762
+Placement Time taken for environment 12: 11.184351205825806
+
+Step 0:
+Saved stats to file.
+GCU  tensor([[0.0215, 0.1137, 0.0947, 0.2040],
+        [0.1420, 0.0650, 0.1945, 0.1078],
+        [0.0417, 0.1496, 0.0466, 0.1164],
+        [0.1391, 0.1542, 0.1924, 0.0274],
+        [0.0037, 0.1124, 0.1051, 0.0900],
+        [0.1535, 0.0274, 0.1572, 0.1430],
+        [0.0883, 0.1651, 0.0274, 0.1733],
+        [0.1208, 0.1444, 0.1681, 0.0215],
+        [0.0650, 0.1910, 0.0755, 0.1615],
+        [0.2109, 0.0037, 0.1176, 0.0856],
+        [0.0972, 0.1521, 0.0650, 0.1061],
+        [0.1133, 0.1222, 0.1879, 0.0650],
+        [0.0466, 0.1459, 0.1740, 0.1572],
+        [0.1260, 0.0037, 0.1423, 0.1545],
+        [0.1387, 0.1504, 0.0215, 0.0686],
+        [0.2126, 0.0909, 0.1061, 0.0650],
+        [0.0466, 0.0762, 0.1387, 0.2095],
+        [0.1099, 0.0215, 0.1619, 0.1565],
+        [0.1400, 0.1840, 0.0274, 0.1513],
+        [0.1078, 0.1385, 0.1764, 0.0069]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 1
+Time taken for updating container heightmap:  0.8093070983886719
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(17), tensor(18), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(32), tensor(34), tensor(39), tensor(42)]
+Placement Time taken for environment 2: 3.2727394104003906
+Placement Time taken for environment 6: 3.627068519592285
+Placement Time taken for environment 4: 4.290310859680176
+Placement Time taken for environment 16: 4.957793235778809
+Placement Time taken for environment 0: 5.083054542541504
+Placement Time taken for environment 3: 5.183292627334595
+Placement Time taken for environment 9: 6.254994869232178
+Placement Time taken for environment 11: 6.32980751991272
+Placement Time taken for environment 17: 6.5265514850616455
+Placement Time taken for environment 10: 6.704911708831787
+Placement Time taken for environment 8: 6.882303714752197
+Placement Time taken for environment 5: 7.175793409347534
+Placement Time taken for environment 1: 7.2287437915802
+Placement Time taken for environment 18: 7.849457740783691
+Placement Time taken for environment 14: 7.962267160415649
+Placement Time taken for environment 7: 8.855778694152832
+Placement Time taken for environment 13: 8.974958419799805
+Placement Time taken for environment 12: 9.28841781616211
+Placement Time taken for environment 15: 10.11661958694458
+Placement Time taken for environment 19: 10.941914558410645
+
+Step 1:
+Saved stats to file.
+GCU  tensor([[0.0489, 0.0863, 0.0947, 0.2040],
+        [0.0955, 0.1116, 0.1945, 0.1078],
+        [0.0380, 0.1496, 0.0503, 0.1164],
+        [0.1117, 0.1542, 0.1924, 0.0548],
+        [0.0075, 0.1124, 0.1051, 0.0863],
+        [0.1229, 0.0579, 0.1572, 0.1430],
+        [0.0846, 0.1651, 0.0311, 0.1733],
+        [0.0934, 0.1444, 0.1681, 0.0489],
+        [0.0865, 0.1910, 0.0540, 0.1615],
+        [0.1835, 0.0311, 0.1176, 0.0856],
+        [0.0972, 0.1521, 0.0865, 0.0846],
+        [0.1133, 0.1222, 0.1605, 0.0924],
+        [0.0771, 0.1459, 0.1740, 0.1267],
+        [0.1260, 0.0342, 0.1423, 0.1239],
+        [0.1387, 0.1504, 0.0489, 0.0412],
+        [0.2126, 0.0909, 0.0595, 0.1116],
+        [0.0503, 0.0725, 0.1387, 0.2095],
+        [0.1099, 0.0520, 0.1619, 0.1260],
+        [0.1400, 0.1535, 0.0579, 0.1513],
+        [0.1078, 0.1385, 0.1298, 0.0535]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 2
+Time taken for updating container heightmap:  1.0353374481201172
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(17), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(32), tensor(34), tensor(39), tensor(42)]
+Placement Time taken for environment 2: 3.243849277496338
+Placement Time taken for environment 0: 3.9396655559539795
+Placement Time taken for environment 12: 4.2490692138671875
+Placement Time taken for environment 1: 5.061811208724976
+Placement Time taken for environment 11: 5.242101430892944
+Placement Time taken for environment 3: 5.319021224975586
+Placement Time taken for environment 4: 5.726585149765015
+Placement Time taken for environment 5: 6.234108209609985
+Placement Time taken for environment 7: 6.2562737464904785
+Placement Time taken for environment 10: 6.395662546157837
+Placement Time taken for environment 16: 6.99689793586731
+Placement Time taken for environment 8: 7.501953125
+Placement Time taken for environment 18: 7.543222188949585
+Placement Time taken for environment 13: 7.651577711105347
+Placement Time taken for environment 15: 8.525881290435791
+Placement Time taken for environment 9: 8.90162992477417
+Placement Time taken for environment 19: 8.911746740341187
+Placement Time taken for environment 14: 10.475313901901245
+Placement Time taken for environment 17: 10.819723844528198
+Placement Time taken for environment 6: 11.003381729125977
+
+Step 2:
+Saved stats to file.
+GCU  tensor([[0.0558, 0.0863, 0.0878, 0.2040],
+        [0.0955, 0.1390, 0.1671, 0.1078],
+        [0.0380, 0.1459, 0.0540, 0.1164],
+        [0.1117, 0.1542, 0.1619, 0.0853],
+        [0.0348, 0.1124, 0.0777, 0.0863],
+        [0.1229, 0.0853, 0.1298, 0.1430],
+        [0.0846, 0.1185, 0.0777, 0.1733],
+        [0.0934, 0.1444, 0.1031, 0.1139],
+        [0.1080, 0.1695, 0.0540, 0.1615],
+        [0.1370, 0.0777, 0.1176, 0.0856],
+        [0.0972, 0.1521, 0.0934, 0.0777],
+        [0.0859, 0.1222, 0.1605, 0.1198],
+        [0.0808, 0.1421, 0.1740, 0.1267],
+        [0.1260, 0.0557, 0.1423, 0.1025],
+        [0.1387, 0.1038, 0.0955, 0.0412],
+        [0.1476, 0.0909, 0.0595, 0.1766],
+        [0.0808, 0.0725, 0.1082, 0.2095],
+        [0.1099, 0.0986, 0.1619, 0.0794],
+        [0.1400, 0.1535, 0.0794, 0.1298],
+        [0.0863, 0.1385, 0.1298, 0.0750]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 3
+Time taken for updating container heightmap:  1.2439565658569336
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(32), tensor(34), tensor(39), tensor(42)]
+Placement Time taken for environment 11: 4.176506280899048
+Placement Time taken for environment 18: 4.207875967025757
+Placement Time taken for environment 5: 4.958322525024414
+Placement Time taken for environment 2: 5.037381887435913
+Placement Time taken for environment 8: 5.053663969039917
+Placement Time taken for environment 0: 5.37296199798584
+Placement Time taken for environment 4: 5.376047134399414
+Placement Time taken for environment 15: 5.434877157211304
+Placement Time taken for environment 7: 5.581668376922607
+Placement Time taken for environment 16: 5.791822671890259
+Placement Time taken for environment 9: 5.891658782958984
+Placement Time taken for environment 6: 6.020421743392944
+Placement Time taken for environment 1: 6.15371036529541
+Placement Time taken for environment 14: 6.6380531787872314
+Placement Time taken for environment 10: 7.347158193588257
+Placement Time taken for environment 13: 7.9796531200408936
+Placement Time taken for environment 17: 8.036125898361206
+Placement Time taken for environment 12: 8.449292421340942
+Placement Time taken for environment 19: 8.877556800842285
+Placement Time taken for environment 3: 9.695429563522339
+
+Step 3:
+Saved stats to file.
+GCU  tensor([[0.0627, 0.0863, 0.0809, 0.2040],
+        [0.0955, 0.1605, 0.1671, 0.0863],
+        [0.0343, 0.1459, 0.0578, 0.1164],
+        [0.1117, 0.1076, 0.1619, 0.1319],
+        [0.0386, 0.1124, 0.0740, 0.0863],
+        [0.1229, 0.1068, 0.1298, 0.1216],
+        [0.0846, 0.1185, 0.1427, 0.1082],
+        [0.0934, 0.1407, 0.1031, 0.1176],
+        [0.1117, 0.1695, 0.0503, 0.1615],
+        [0.1370, 0.1051, 0.0903, 0.0856],
+        [0.0757, 0.1521, 0.1149, 0.0777],
+        [0.0859, 0.1153, 0.1605, 0.1267],
+        [0.1459, 0.1421, 0.1740, 0.0616],
+        [0.0986, 0.0831, 0.1423, 0.1025],
+        [0.1387, 0.1038, 0.1024, 0.0343],
+        [0.1476, 0.0840, 0.0595, 0.1835],
+        [0.1459, 0.0075, 0.1082, 0.2095],
+        [0.1099, 0.1452, 0.1153, 0.0794],
+        [0.1331, 0.1535, 0.0863, 0.1298],
+        [0.0863, 0.1385, 0.0993, 0.1055]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 4
+Time taken for updating container heightmap:  1.2815289497375488
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(34), tensor(39), tensor(42)]
+Placement Time taken for environment 3: 3.169130325317383
+Placement Time taken for environment 11: 3.5590405464172363
+Placement Time taken for environment 12: 4.533413887023926
+Placement Time taken for environment 6: 4.966735601425171
+Placement Time taken for environment 2: 5.412223815917969
+Placement Time taken for environment 16: 5.5402891635894775
+Placement Time taken for environment 0: 6.00955057144165
+Placement Time taken for environment 7: 6.1348044872283936
+Placement Time taken for environment 4: 6.578993320465088
+Placement Time taken for environment 15: 6.757982492446899
+Placement Time taken for environment 17: 7.5766212940216064
+Placement Time taken for environment 5: 8.165591716766357
+Placement Time taken for environment 19: 8.674118757247925
+Placement Time taken for environment 13: 8.914691686630249
+Placement Time taken for environment 18: 9.143468379974365
+Placement Time taken for environment 14: 9.231797456741333
+Placement Time taken for environment 9: 9.784864664077759
+Placement Time taken for environment 10: 9.9240140914917
+Placement Time taken for environment 1: 10.281170129776001
+Placement Time taken for environment 8: 10.329400539398193
+
+Step 4:
+Saved stats to file.
+GCU  tensor([[0.1277, 0.0863, 0.0809, 0.1390],
+        [0.0955, 0.2071, 0.1206, 0.0863],
+        [0.0343, 0.1459, 0.0852, 0.0890],
+        [0.1117, 0.1076, 0.1582, 0.1356],
+        [0.0660, 0.1124, 0.0740, 0.0589],
+        [0.0579, 0.1718, 0.1298, 0.1216],
+        [0.0846, 0.1116, 0.1496, 0.1082],
+        [0.0284, 0.1407, 0.1031, 0.1827],
+        [0.1583, 0.1229, 0.0503, 0.1615],
+        [0.0719, 0.1701, 0.0903, 0.0856],
+        [0.0757, 0.1055, 0.1615, 0.0777],
+        [0.0859, 0.1116, 0.1605, 0.1304],
+        [0.1496, 0.1421, 0.1740, 0.0579],
+        [0.0681, 0.1137, 0.1423, 0.1025],
+        [0.0922, 0.1038, 0.1489, 0.0343],
+        [0.1476, 0.0771, 0.0595, 0.1904],
+        [0.1764, 0.0075, 0.1082, 0.1790],
+        [0.1099, 0.1726, 0.1153, 0.0520],
+        [0.0681, 0.1535, 0.1513, 0.1298],
+        [0.0558, 0.1385, 0.0993, 0.1360]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 5
+Time taken for updating container heightmap:  1.3921804428100586
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(27), tensor(28), tensor(29), tensor(30), tensor(34), tensor(39)]
+Placement Time taken for environment 4: 4.175981044769287
+Placement Time taken for environment 8: 4.98542332649231
+Placement Time taken for environment 1: 5.451209783554077
+Placement Time taken for environment 18: 5.572633504867554
+Placement Time taken for environment 7: 5.748806715011597
+Placement Time taken for environment 0: 5.906616687774658
+Placement Time taken for environment 5: 6.040665149688721
+Placement Time taken for environment 2: 6.266348838806152
+Placement Time taken for environment 10: 6.627848386764526
+Placement Time taken for environment 11: 7.597285985946655
+Placement Time taken for environment 17: 7.647634267807007
+Placement Time taken for environment 13: 7.948270082473755
+Placement Time taken for environment 19: 8.352853298187256
+Placement Time taken for environment 12: 8.37630295753479
+Placement Time taken for environment 3: 8.90708875656128
+Placement Time taken for environment 15: 8.961920499801636
+Placement Time taken for environment 6: 9.854973554611206
+Placement Time taken for environment 16: 10.055891990661621
+Placement Time taken for environment 14: 11.0313720703125
+Placement Time taken for environment 9: 11.40502381324768
+
+Step 5:
+Saved stats to file.
+GCU  tensor([[0.1928, 0.0863, 0.0809, 0.0740],
+        [0.0681, 0.2345, 0.1206, 0.0863],
+        [0.0343, 0.0809, 0.1502, 0.0890],
+        [0.0467, 0.1076, 0.1582, 0.2006],
+        [0.0729, 0.1055, 0.0740, 0.0589],
+        [0.0579, 0.1933, 0.1298, 0.1001],
+        [0.0846, 0.0466, 0.2147, 0.1082],
+        [0.0284, 0.1407, 0.0757, 0.2101],
+        [0.1798, 0.1229, 0.0503, 0.1400],
+        [0.0719, 0.2167, 0.0903, 0.0390],
+        [0.0688, 0.1055, 0.1684, 0.0777],
+        [0.0859, 0.0466, 0.1605, 0.1955],
+        [0.1962, 0.1421, 0.1275, 0.0579],
+        [0.0466, 0.1351, 0.1423, 0.1025],
+        [0.0922, 0.0572, 0.1955, 0.0343],
+        [0.1170, 0.0771, 0.0595, 0.2210],
+        [0.2230, 0.0075, 0.0616, 0.1790],
+        [0.1099, 0.1941, 0.1153, 0.0305],
+        [0.0681, 0.1535, 0.1551, 0.1261],
+        [0.0558, 0.1080, 0.0993, 0.1665]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 6
+Time taken for updating container heightmap:  1.6499731540679932
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(28), tensor(29), tensor(30), tensor(34), tensor(39)]
+Placement Time taken for environment 7: 5.4303436279296875
+Placement Time taken for environment 2: 5.51441764831543
+Placement Time taken for environment 14: 5.863893508911133
+Placement Time taken for environment 1: 5.864867687225342
+Placement Time taken for environment 17: 6.027606964111328
+Placement Time taken for environment 8: 6.192157983779907
+Placement Time taken for environment 13: 6.525904417037964
+Placement Time taken for environment 9: 6.589770555496216
+Placement Time taken for environment 6: 6.797669172286987
+Placement Time taken for environment 0: 6.873446702957153
+Placement Time taken for environment 16: 7.214237213134766
+Placement Time taken for environment 12: 7.418709754943848
+Placement Time taken for environment 3: 7.527842283248901
+Placement Time taken for environment 4: 7.794222593307495
+Placement Time taken for environment 11: 7.923457145690918
+Placement Time taken for environment 10: 7.958168029785156
+Placement Time taken for environment 19: 8.028346061706543
+Placement Time taken for environment 18: 8.261290788650513
+Placement Time taken for environment 5: 8.826385021209717
+Placement Time taken for environment 15: 10.881343126296997
+
+Step 6:
+Saved stats to file.
+GCU  tensor([[0.2393, 0.0863, 0.0809, 0.0274],
+        [0.0681, 0.2619, 0.0932, 0.0863],
+        [0.0343, 0.0809, 0.1776, 0.0616],
+        [0.0467, 0.1076, 0.1116, 0.2472],
+        [0.0944, 0.0840, 0.0740, 0.0589],
+        [0.0274, 0.2238, 0.1298, 0.1001],
+        [0.0777, 0.0466, 0.2216, 0.1082],
+        [0.0069, 0.1407, 0.0757, 0.2316],
+        [0.2072, 0.0956, 0.0503, 0.1400],
+        [0.0719, 0.2236, 0.0903, 0.0321],
+        [0.0688, 0.1055, 0.1958, 0.0503],
+        [0.0859, 0.0466, 0.1390, 0.2170],
+        [0.2267, 0.1421, 0.1275, 0.0274],
+        [0.0466, 0.2002, 0.1423, 0.0374],
+        [0.0922, 0.0535, 0.1993, 0.0343],
+        [0.1170, 0.0305, 0.0595, 0.2675],
+        [0.2880, 0.0075, 0.0616, 0.1139],
+        [0.0449, 0.2591, 0.1153, 0.0305],
+        [0.0681, 0.1535, 0.1856, 0.0956],
+        [0.0558, 0.0865, 0.0993, 0.1880]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 7
+Time taken for updating container heightmap:  1.7261056900024414
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(28), tensor(29), tensor(30), tensor(34)]
+Placement Time taken for environment 5: 2.8838586807250977
+Placement Time taken for environment 0: 3.462806463241577
+Placement Time taken for environment 15: 3.7425546646118164
+Placement Time taken for environment 19: 4.5324037075042725
+Placement Time taken for environment 1: 4.983521938323975
+Placement Time taken for environment 2: 5.354543447494507
+Placement Time taken for environment 8: 5.452004909515381
+Placement Time taken for environment 10: 5.526571035385132
+Placement Time taken for environment 11: 5.558436393737793
+Placement Time taken for environment 16: 5.583591461181641
+Placement Time taken for environment 17: 5.6336023807525635
+Placement Time taken for environment 18: 6.4894020557403564
+Placement Time taken for environment 3: 7.068743705749512
+Placement Time taken for environment 13: 7.652976751327515
+Placement Time taken for environment 7: 7.924565315246582
+Placement Time taken for environment 4: 8.267024278640747
+Placement Time taken for environment 14: 8.396446704864502
+Placement Time taken for environment 9: 8.750557661056519
+Placement Time taken for environment 12: 9.42205023765564
+Placement Time taken for environment 6: 9.542119026184082
+
+Step 7:
+Saved stats to file.
+GCU  tensor([[0.2462, 0.0863, 0.0740, 0.0274],
+        [0.0466, 0.2834, 0.0932, 0.0863],
+        [0.0343, 0.0809, 0.2050, 0.0342],
+        [0.0467, 0.1076, 0.0466, 0.3123],
+        [0.1409, 0.0840, 0.0274, 0.0589],
+        [0.0274, 0.2276, 0.1261, 0.1001],
+        [0.0311, 0.0466, 0.2681, 0.1082],
+        [0.0069, 0.0757, 0.0757, 0.2966],
+        [0.2722, 0.0305, 0.0503, 0.1400],
+        [0.0719, 0.2886, 0.0252, 0.0321],
+        [0.0688, 0.1055, 0.1995, 0.0466],
+        [0.0859, 0.0466, 0.1116, 0.2444],
+        [0.2733, 0.1421, 0.0809, 0.0274],
+        [0.0466, 0.2217, 0.1208, 0.0374],
+        [0.0616, 0.0535, 0.2298, 0.0343],
+        [0.1170, 0.0305, 0.0526, 0.2744],
+        [0.3095, 0.0075, 0.0616, 0.0924],
+        [0.0144, 0.2896, 0.1153, 0.0305],
+        [0.0681, 0.1535, 0.2506, 0.0305],
+        [0.0558, 0.0865, 0.0956, 0.1918]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 8
+Time taken for updating container heightmap:  2.0065505504608154
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(29), tensor(30), tensor(34)]
+Placement Time taken for environment 11: 3.5572264194488525
+Placement Time taken for environment 10: 3.699171781539917
+Placement Time taken for environment 1: 3.88167667388916
+Placement Time taken for environment 3: 3.994884729385376
+Placement Time taken for environment 2: 4.5621984004974365
+Placement Time taken for environment 9: 5.069166660308838
+Placement Time taken for environment 18: 5.616480112075806
+Placement Time taken for environment 13: 5.992559432983398
+Placement Time taken for environment 12: 6.225065469741821
+Placement Time taken for environment 16: 6.453730821609497
+Placement Time taken for environment 0: 6.457910537719727
+Placement Time taken for environment 19: 6.494192361831665
+Placement Time taken for environment 14: 6.677922248840332
+Placement Time taken for environment 15: 6.692739486694336
+Placement Time taken for environment 8: 6.730505704879761
+Placement Time taken for environment 7: 6.735464811325073
+Placement Time taken for environment 4: 7.063046216964722
+Placement Time taken for environment 17: 7.972978830337524
+Placement Time taken for environment 6: 9.499192237854004
+Placement Time taken for environment 5: 9.737057447433472
+
+Step 8:
+Saved stats to file.
+GCU  tensor([[0.2928, 0.0863, 0.0274, 0.0274],
+        [0.0466, 0.3049, 0.0932, 0.0648],
+        [0.0343, 0.0740, 0.2119, 0.0342],
+        [0.0252, 0.1076, 0.0466, 0.3338],
+        [0.1683, 0.0840, 0.2109, 0.0589],
+        [0.0274, 0.2742, 0.1261, 0.0535],
+        [0.0311, 0.0991, 0.3147, 0.1082],
+        [0.0069, 0.0106, 0.0757, 0.3616],
+        [0.3028, 0.1949, 0.0503, 0.1400],
+        [0.0719, 0.2955, 0.0252, 0.0252],
+        [0.0650, 0.1055, 0.2032, 0.0466],
+        [0.0822, 0.0466, 0.1116, 0.2481],
+        [0.2802, 0.1421, 0.0740, 0.0274],
+        [0.0466, 0.2491, 0.0934, 0.0374],
+        [0.0616, 0.0535, 0.2367, 0.0274],
+        [0.0865, 0.0305, 0.0526, 0.3050],
+        [0.3745, 0.0075, 0.0616, 0.0274],
+        [0.0144, 0.3201, 0.1153, 0.0869],
+        [0.0466, 0.1535, 0.2721, 0.0305],
+        [0.0343, 0.0865, 0.0956, 0.2132]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 9
+Time taken for updating container heightmap:  2.1267709732055664
+V:  1.6936  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.0969), tensor(0.0168), tensor(0.1376), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.0311), tensor(0.0168)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(12), tensor(23), tensor(30), tensor(34)]
+V:  1.8206  object volumes:  [tensor(0.1376), tensor(0.2932), tensor(0.0311), tensor(0.0168), tensor(0.0311), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.2100), tensor(0.0969), tensor(0.2932)]
+V:  2.545  object volumes:  [tensor(0.2100), tensor(0.0168), tensor(0.1376), tensor(0.2932), tensor(0.0311), tensor(0.1376), tensor(0.0969), tensor(0.1376), tensor(0.2100), tensor(0.2932), tensor(0.0311)]
+V:  1.7717  object volumes:  [tensor(0.0168), tensor(0.0311), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.0168), tensor(0.1235), tensor(0.1235), tensor(0.1376), tensor(0.1376), tensor(0.1376)]
+Placement Time taken for environment 17: 2.913846492767334
+Placement Time taken for environment 9: 2.9689407348632812
+Placement Time taken for environment 16: 3.066771984100342
+Placement Time taken for environment 2: 4.187815427780151
+Placement Time taken for environment 0: 4.547643661499023
+Placement Time taken for environment 8: 4.769937753677368
+Placement Time taken for environment 7: 5.037605047225952
+Placement Time taken for environment 15: 5.211248159408569
+Placement Time taken for environment 4: 5.376561880111694
+Placement Time taken for environment 13: 5.444603681564331
+Placement Time taken for environment 1: 6.454303026199341
+Placement Time taken for environment 12: 6.707027196884155
+Placement Time taken for environment 3: 6.960163593292236
+Placement Time taken for environment 5: 7.0459229946136475
+Placement Time taken for environment 10: 7.27461051940918
+Placement Time taken for environment 18: 7.383800983428955
+Placement Time taken for environment 19: 7.6910459995269775
+Placement Time taken for environment 6: 7.708131790161133
+Placement Time taken for environment 11: 8.670814275741577
+Placement Time taken for environment 14: 9.77241849899292
+
+Step 9:
+Saved stats to file.
+GCU  tensor([[0.3202, 0.0863, 0.0274, 0.0691],
+        [0.0466, 0.3514, 0.0466, 0.0648],
+        [0.0274, 0.0740, 0.2188, 0.0342],
+        [0.0252, 0.0610, 0.0466, 0.3803],
+        [0.1752, 0.0771, 0.2109, 0.0589],
+        [0.0274, 0.3047, 0.0956, 0.0535],
+        [0.0311, 0.0991, 0.3452, 0.0777],
+        [0.0069, 0.0106, 0.0106, 0.4267],
+        [0.3678, 0.1298, 0.0503, 0.1400],
+        [0.0719, 0.2993, 0.0252, 0.0215],
+        [0.0650, 0.0840, 0.2247, 0.0466],
+        [0.0822, 0.0466, 0.0466, 0.3131],
+        [0.3107, 0.1116, 0.0740, 0.0274],
+        [0.0466, 0.2560, 0.0934, 0.0305],
+        [0.0616, 0.0069, 0.2832, 0.0274],
+        [0.0650, 0.0305, 0.0526, 0.3265],
+        [0.3782, 0.0075, 0.0579, 0.0274],
+        [0.0144, 0.3239, 0.1153, 0.0831],
+        [0.0466, 0.0884, 0.3371, 0.0305],
+        [0.0343, 0.0865, 0.0305, 0.2783]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 10
+Overfilled totes detected in environments: tensor([8], device='cuda:0')
+Time taken for updating container heightmap:  2.310590982437134
+V:  1.6837  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.1235), tensor(0.0168), tensor(0.1376), tensor(0.1235), tensor(0.1376), tensor(0.0311), tensor(0.0168), tensor(0.0168)]
+SUBSET: New subset indices for environment 0: [tensor(6), tensor(11), tensor(13), tensor(16), tensor(23), tensor(26), tensor(30), tensor(33), tensor(34), tensor(41)]
+Placement Time taken for environment 17: 2.664034843444824
+Placement Time taken for environment 15: 3.239959478378296
+Placement Time taken for environment 7: 3.2409491539001465
+Placement Time taken for environment 16: 3.4605650901794434
+Placement Time taken for environment 4: 3.9499223232269287
+Placement Time taken for environment 2: 5.703693628311157
+Placement Time taken for environment 8: 5.730351209640503
+Placement Time taken for environment 10: 6.0231852531433105
+Placement Time taken for environment 3: 6.0765697956085205
+Placement Time taken for environment 0: 6.155704021453857
+Placement Time taken for environment 14: 6.202439785003662
+Placement Time taken for environment 5: 6.354965686798096
+Placement Time taken for environment 1: 6.877476453781128
+Placement Time taken for environment 18: 6.996176481246948
+Placement Time taken for environment 9: 7.187700510025024
+Placement Time taken for environment 13: 7.774496793746948
+Placement Time taken for environment 19: 7.833664178848267
+Placement Time taken for environment 11: 7.991281032562256
+Placement Time taken for environment 12: 8.999772071838379
+Placement Time taken for environment 6: 9.19378924369812
+
+Step 10:
+Saved stats to file.
+GCU  tensor([[0.3507, 0.0557, 0.0274, 0.0691],
+        [0.0466, 0.3980, 0.1980, 0.0648],
+        [0.0664, 0.0740, 0.2462, 0.0342],
+        [0.0037, 0.0610, 0.0466, 0.4018],
+        [0.1821, 0.0771, 0.2109, 0.0520],
+        [0.0274, 0.3513, 0.0956, 0.0069],
+        [0.0311, 0.0991, 0.3918, 0.0311],
+        [0.0069, 0.0069, 0.0106, 0.4304],
+        [0.0069, 0.1229, 0.0503, 0.1400],
+        [0.0069, 0.3643, 0.0252, 0.0215],
+        [0.0664, 0.0840, 0.2898, 0.0466],
+        [0.0548, 0.0466, 0.0466, 0.3405],
+        [0.3573, 0.0650, 0.0740, 0.0274],
+        [0.0466, 0.3210, 0.0284, 0.0305],
+        [0.0616, 0.0069, 0.3106, 0.1124],
+        [0.0650, 0.0305, 0.0489, 0.3302],
+        [0.3820, 0.0037, 0.0579, 0.0274],
+        [0.0106, 0.3276, 0.1153, 0.0831],
+        [0.0466, 0.0610, 0.3645, 0.0305],
+        [0.0343, 0.0865, 0.1009, 0.3088]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 11
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  2.520622968673706
+V:  1.7235  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.2932), tensor(0.0969), tensor(0.1235), tensor(0.0168), tensor(0.0168), tensor(0.0969)]
+V:  2.2058  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.0969), tensor(0.0311), tensor(0.1235), tensor(0.0168), tensor(0.0311), tensor(0.0168), tensor(0.1235)]
+V:  1.956  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.0311), tensor(0.1235), tensor(0.0311), tensor(0.0168), tensor(0.0969), tensor(0.2100), tensor(0.0311)]
+V:  1.3508  object volumes:  [tensor(0.0311), tensor(0.1376), tensor(0.1376), tensor(0.1376), tensor(0.0311), tensor(0.2100), tensor(0.2932), tensor(0.2932), tensor(0.1235)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(13), tensor(16), tensor(26), tensor(30), tensor(33), tensor(34), tensor(41)]
+V:  1.895  object volumes:  [tensor(0.1376), tensor(0.0168), tensor(0.1235), tensor(0.0311), tensor(0.0311), tensor(0.0311), tensor(0.0969), tensor(0.1376), tensor(0.2100)]
+Placement Time taken for environment 0: 2.004899740219116
+Placement Time taken for environment 7: 2.288829803466797
+Placement Time taken for environment 19: 4.332569360733032
+Placement Time taken for environment 15: 4.541600704193115
+No valid transform found for object index tensor([2]) in environment 3. Adding to unpackable objects.
+Placement Time taken for environment 2: 5.236538410186768
+Placement Time taken for environment 17: 5.3840086460113525
+Placement Time taken for environment 18: 5.481294631958008
+Placement Time taken for environment 8: 5.499876499176025
+Placement Time taken for environment 4: 5.725021839141846
+Placement Time taken for environment 5: 5.7569005489349365
+Placement Time taken for environment 9: 5.8700714111328125
+Placement Time taken for environment 12: 6.095607042312622
+Placement Time taken for environment 6: 6.273691892623901
+Placement Time taken for environment 10: 6.385819673538208
+Placement Time taken for environment 1: 6.9652886390686035
+Placement Time taken for environment 16: 7.375692129135132
+Placement Time taken for environment 11: 7.6443235874176025
+Placement Time taken for environment 14: 8.844341516494751
+Placement Time taken for environment 13: 9.448429346084595
+Placement Time taken for environment 3: 10.375205278396606
+
+Step 11:
+Saved stats to file.
+GCU  tensor([[0.3544, 0.0557, 0.0274, 0.0654],
+        [0.0466, 0.4630, 0.1330, 0.0648],
+        [0.0390, 0.0740, 0.2736, 0.0342],
+        [0.0037, 0.0610, 0.1674, 0.4484],
+        [0.2472, 0.0771, 0.1459, 0.0520],
+        [0.0274, 0.3818, 0.0650, 0.0069],
+        [0.0311, 0.0685, 0.4223, 0.0311],
+        [0.0069, 0.0069, 0.0037, 0.4373],
+        [0.0284, 0.1229, 0.0503, 0.1185],
+        [0.0069, 0.3858, 0.0037, 0.0215],
+        [0.0595, 0.0840, 0.2967, 0.0466],
+        [0.0274, 0.0466, 0.0466, 0.3679],
+        [0.3847, 0.0650, 0.0740, 0.2270],
+        [0.1513, 0.3676, 0.0284, 0.0305],
+        [0.0616, 0.0069, 0.3572, 0.0658],
+        [0.0650, 0.0305, 0.0274, 0.3517],
+        [0.4094, 0.0037, 0.0579, 0.1196],
+        [0.0037, 0.3345, 0.1153, 0.0831],
+        [0.0466, 0.0305, 0.3951, 0.0305],
+        [0.0343, 0.0865, 0.0794, 0.3303]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 12
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  2.5418434143066406
+V:  1.4682  object volumes:  [tensor(0.1235), tensor(0.0168), tensor(0.1235), tensor(0.1376), tensor(0.1235), tensor(0.0168), tensor(0.1376), tensor(0.1376)]
+V:  1.6577  object volumes:  [tensor(0.1235), tensor(0.1376), tensor(0.1376), tensor(0.0311), tensor(0.0311), tensor(0.0969), tensor(0.0969), tensor(0.2932)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(13), tensor(16), tensor(26), tensor(30), tensor(33), tensor(34)]
+V:  1.3711  object volumes:  [tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.2932), tensor(0.2100), tensor(0.1235), tensor(0.2100), tensor(0.2932)]
+V:  1.0869  object volumes:  [tensor(0.1376), tensor(0.1376), tensor(0.2100), tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.0969)]
+V:  1.2056  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.1235), tensor(0.1376), tensor(0.2932), tensor(0.1376), tensor(0.0311)]
+V:  1.2056  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.1235), tensor(0.0311)]
+V:  1.2056  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.1235), tensor(0.2932), tensor(0.1376), tensor(0.0311)]
+V:  1.2056  object volumes:  [tensor(0.1376), tensor(0.2100), tensor(0.1235), tensor(0.1376), tensor(0.0311)]
+Placement Time taken for environment 6: 1.9645943641662598
+Placement Time taken for environment 7: 2.422377109527588
+Placement Time taken for environment 3: 2.894883155822754
+Placement Time taken for environment 19: 4.1004698276519775
+Placement Time taken for environment 1: 4.171777725219727
+Placement Time taken for environment 14: 4.265061616897583
+Placement Time taken for environment 2: 4.285094499588013
+Placement Time taken for environment 16: 4.4840967655181885
+Placement Time taken for environment 4: 5.013842821121216
+Placement Time taken for environment 15: 5.343048095703125
+No valid transform found for object index tensor([32]) in environment 9. Adding to unpackable objects.
+Placement Time taken for environment 13: 5.635234594345093
+Placement Time taken for environment 10: 5.72999382019043
+Placement Time taken for environment 17: 6.377406120300293
+Placement Time taken for environment 11: 6.640265941619873
+Placement Time taken for environment 0: 6.759523868560791
+No valid transform found for object index tensor([27]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 5: 7.027127027511597
+Placement Time taken for environment 12: 8.954442262649536
+Placement Time taken for environment 8: 8.997502088546753
+Placement Time taken for environment 9: 8.997838258743286
+No valid transform found for object index tensor([17]) in environment 18. Adding to unpackable objects.
+No packable objects left in environment 18. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([18], device='cuda:0')
+New packable objects for environment 18: [tensor(3), tensor(8), tensor(9), tensor(17), tensor(29), tensor(33), tensor(35)]
+No valid transform found for object index tensor([17]) in environment 18. Adding to unpackable objects.
+No valid transform found for object index tensor([29]) in environment 18. Adding to unpackable objects.
+No valid transform found for object index tensor([33]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 18: 27.3094379901886
+
+Step 12:
+Saved stats to file.
+GCU  tensor([[0.3818, 0.0557, 0.0274, 0.0380],
+        [0.0466, 0.4936, 0.1025, 0.0648],
+        [0.0390, 0.0466, 0.3009, 0.0342],
+        [0.0037, 0.0610, 0.1636, 0.4521],
+        [0.2777, 0.0466, 0.1459, 0.0520],
+        [0.1060, 0.4092, 0.0650, 0.0069],
+        [0.0311, 0.0648, 0.4261, 0.0311],
+        [0.0069, 0.1528, 0.0037, 0.4442],
+        [0.0750, 0.1229, 0.0037, 0.1185],
+        [0.0069, 0.3895, 0.1124, 0.0215],
+        [0.0526, 0.0840, 0.3036, 0.0466],
+        [0.1859, 0.0466, 0.0466, 0.3953],
+        [0.4312, 0.0650, 0.0740, 0.1804],
+        [0.1444, 0.3745, 0.0284, 0.0305],
+        [0.0616, 0.1412, 0.3641, 0.0658],
+        [0.1534, 0.0305, 0.0274, 0.4167],
+        [0.4368, 0.0037, 0.0305, 0.1196],
+        [0.0037, 0.3650, 0.1153, 0.0526],
+        [0.1695, 0.0305, 0.4020, 0.0305],
+        [0.0343, 0.0650, 0.0794, 0.3518]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 13
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  2.7761433124542236
+V:  1.393  object volumes:  [tensor(0.0311), tensor(0.0311), tensor(0.2100), tensor(0.0311), tensor(0.0969), tensor(0.1376)]
+V:  1.4275  object volumes:  [tensor(0.2100), tensor(0.2932), tensor(0.0969), tensor(0.1235), tensor(0.2100), tensor(0.0311), tensor(0.2932)]
+V:  1.2468  object volumes:  [tensor(0.1235), tensor(0.1376), tensor(0.1235), tensor(0.0969), tensor(0.1376), tensor(0.1235), tensor(0.2100)]
+V:  1.118  object volumes:  [tensor(0.0168), tensor(0.0168), tensor(0.1376), tensor(0.0311), tensor(0.2932), tensor(0.0311), tensor(0.2100)]
+V:  1.242  object volumes:  [tensor(0.2932), tensor(0.0969), tensor(0.0311), tensor(0.2100), tensor(0.0168), tensor(0.1376), tensor(0.0168)]
+V:  1.393  object volumes:  [tensor(0.0311), tensor(0.0311), tensor(0.0311), tensor(0.0969), tensor(0.1376)]
+V:  1.542  object volumes:  [tensor(0.1376), tensor(0.0168), tensor(0.0168), tensor(0.1235), tensor(0.0168), tensor(0.0168), tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.2932), tensor(0.0969), tensor(0.1376)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(13), tensor(16), tensor(30), tensor(33), tensor(34)]
+Placement Time taken for environment 2: 2.6954667568206787
+Placement Time taken for environment 5: 3.283205986022949
+Placement Time taken for environment 16: 3.2907464504241943
+Placement Time taken for environment 1: 3.550046682357788
+Placement Time taken for environment 0: 4.184415340423584
+Placement Time taken for environment 14: 4.70925760269165
+Placement Time taken for environment 10: 5.4129087924957275
+Placement Time taken for environment 18: 5.563498258590698
+Placement Time taken for environment 8: 6.0864808559417725
+Placement Time taken for environment 19: 6.134018421173096
+No valid transform found for object index tensor([19]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([25]) in environment 9. Adding to unpackable objects.
+Placement Time taken for environment 11: 6.469151496887207
+Placement Time taken for environment 4: 6.623960018157959
+Placement Time taken for environment 13: 6.772558689117432
+Placement Time taken for environment 15: 6.880743980407715
+Placement Time taken for environment 7: 7.200649976730347
+Placement Time taken for environment 17: 7.484278202056885
+Placement Time taken for environment 6: 7.531223297119141
+No valid transform found for object index tensor([12]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 9: 8.20705795288086
+No valid transform found for object index tensor([25]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([14]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 3: 12.50601053237915
+No valid transform found for object index tensor([32]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 12: 20.119786024093628
+
+Step 13:
+Saved stats to file.
+GCU  tensor([[0.4124, 0.0252, 0.0274, 0.0380],
+        [0.0466, 0.5210, 0.1025, 0.0374],
+        [0.0353, 0.0466, 0.3047, 0.0342],
+        [0.0037, 0.0610, 0.1421, 0.4736],
+        [0.2992, 0.0466, 0.1459, 0.0305],
+        [0.1023, 0.4129, 0.0650, 0.0069],
+        [0.0311, 0.0374, 0.4535, 0.0311],
+        [0.0069, 0.0877, 0.0037, 0.5092],
+        [0.1400, 0.0579, 0.0037, 0.1185],
+        [0.0069, 0.3964, 0.1055, 0.0215],
+        [0.0489, 0.0840, 0.3073, 0.0466],
+        [0.1859, 0.0466, 0.1335, 0.4419],
+        [0.4586, 0.0650, 0.0466, 0.1804],
+        [0.1444, 0.3960, 0.0069, 0.0305],
+        [0.0616, 0.1412, 0.3710, 0.0589],
+        [0.1229, 0.0305, 0.0274, 0.4472],
+        [0.4405, 0.0037, 0.0305, 0.1158],
+        [0.0037, 0.3924, 0.1153, 0.0252],
+        [0.1421, 0.0305, 0.4294, 0.0305],
+        [0.0069, 0.0650, 0.0794, 0.3792]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 14
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  2.9035634994506836
+V:  1.1826  object volumes:  [tensor(0.2100), tensor(0.2932), tensor(0.0969), tensor(0.1235), tensor(0.0168), tensor(0.2932), tensor(0.0311), tensor(0.1376), tensor(0.1376), tensor(0.0168), tensor(0.2932)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(16), tensor(33), tensor(34)]
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(13), tensor(16), tensor(33), tensor(34)]
+V:  0.9307  object volumes:  [tensor(0.0311), tensor(0.2100), tensor(0.1376), tensor(0.2100), tensor(0.0969), tensor(0.2100), tensor(0.2932), tensor(0.0969), tensor(0.1376)]
+V:  0.9307  object volumes:  [tensor(0.2100), tensor(0.2100)]
+V:  0.9307  object volumes:  [tensor(0.2100), tensor(0.2100), tensor(0.2100)]
+V:  0.781  object volumes:  [tensor(0.0311), tensor(0.1376), tensor(0.1376), tensor(0.0168), tensor(0.1376), tensor(0.0311), tensor(0.2100), tensor(0.0168), tensor(0.2932), tensor(0.1235)]
+V:  0.9307  object volumes:  [tensor(0.0311), tensor(0.2100), tensor(0.2932), tensor(0.0969)]
+V:  0.9307  object volumes:  [tensor(0.2100)]
+V:  0.9307  object volumes:  [tensor(0.0311), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.2100), tensor(0.2100), tensor(0.0969), tensor(0.2100), tensor(0.2932), tensor(0.0969), tensor(0.0168), tensor(0.1376)]
+Placement Time taken for environment 3: 1.9240226745605469
+Placement Time taken for environment 9: 2.1745920181274414
+Placement Time taken for environment 12: 2.279855251312256
+Placement Time taken for environment 2: 3.1078882217407227
+No valid transform found for object index tensor([13]) in environment 0. Adding to unpackable objects.
+Placement Time taken for environment 6: 3.659806489944458
+Placement Time taken for environment 17: 3.8891048431396484
+Placement Time taken for environment 19: 3.9091875553131104
+No valid transform found for object index tensor([6]) in environment 1. Adding to unpackable objects.
+Placement Time taken for environment 5: 4.528235912322998
+Placement Time taken for environment 16: 4.620904207229614
+Placement Time taken for environment 10: 4.6306681632995605
+Placement Time taken for environment 15: 4.90070366859436
+Placement Time taken for environment 4: 5.377333402633667
+Placement Time taken for environment 11: 5.401032209396362
+Placement Time taken for environment 7: 5.438302516937256
+Placement Time taken for environment 8: 5.881556034088135
+No valid transform found for object index tensor([3]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 13: 6.830090045928955
+Placement Time taken for environment 14: 6.93755316734314
+Placement Time taken for environment 0: 6.937895774841309
+No valid transform found for object index tensor([12]) in environment 1. Adding to unpackable objects.
+No packable objects left in environment 18. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([18], device='cuda:0')
+New packable objects for environment 18: [tensor(2), tensor(8), tensor(17), tensor(20), tensor(22), tensor(27), tensor(29), tensor(30), tensor(33)]
+No valid transform found for object index tensor([32]) in environment 1. Adding to unpackable objects.
+No valid transform found for object index tensor([29]) in environment 18. Adding to unpackable objects.
+No packable objects left in environment 1. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([1], device='cuda:0')
+New packable objects for environment 1: [tensor(3), tensor(6), tensor(7), tensor(11), tensor(12), tensor(22), tensor(24), tensor(31), tensor(32), tensor(44)]
+No valid transform found for object index tensor([8]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 1: 21.418635368347168
+No valid transform found for object index tensor([20]) in environment 18. Adding to unpackable objects.
+No packable objects left in environment 18. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([18], device='cuda:0')
+New packable objects for environment 18: [tensor(2), tensor(8), tensor(15), tensor(16), tensor(20), tensor(21), tensor(22), tensor(27), tensor(29), tensor(30), tensor(31), tensor(33)]
+No valid transform found for object index tensor([29]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 18: 38.78549289703369
+
+Step 14:
+Saved stats to file.
+GCU  tensor([[0.4193, 0.0252, 0.0274, 0.0311],
+        [0.1082, 0.5247, 0.1025, 0.0374],
+        [0.0138, 0.0466, 0.3262, 0.0342],
+        [0.1092, 0.0610, 0.1421, 0.4774],
+        [0.3297, 0.0466, 0.1459, 0.1681],
+        [0.1023, 0.4198, 0.0650, 0.1196],
+        [0.0037, 0.0374, 0.4809, 0.0311],
+        [0.0069, 0.0572, 0.0037, 0.5397],
+        [0.1469, 0.0579, 0.0037, 0.1116],
+        [0.1336, 0.4033, 0.1055, 0.0215],
+        [0.0489, 0.0771, 0.3142, 0.0466],
+        [0.1790, 0.0466, 0.1335, 0.4488],
+        [0.4624, 0.0650, 0.0466, 0.1766],
+        [0.1444, 0.4265, 0.0069, 0.1545],
+        [0.0616, 0.1412, 0.4015, 0.0284],
+        [0.0955, 0.0305, 0.0274, 0.4746],
+        [0.4679, 0.0037, 0.0305, 0.0884],
+        [0.0037, 0.3961, 0.1116, 0.0252],
+        [0.1421, 0.1216, 0.4508, 0.1733],
+        [0.0069, 0.0650, 0.0725, 0.3861]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 15
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  2.939532518386841
+SUBSET: Current subset indices for environment 0: [tensor(6), tensor(11), tensor(16), tensor(34)]
+V:  1.2268  object volumes:  [tensor(0.1235), tensor(0.2932), tensor(0.0969), tensor(0.0168), tensor(0.2100), tensor(0.1376), tensor(0.1376), tensor(0.1376), tensor(0.1235), tensor(0.0168)]
+V:  1.0182  object volumes:  [tensor(0.1376), tensor(0.1376), tensor(0.1376), tensor(0.0168), tensor(0.0311), tensor(0.0969), tensor(0.2100)]
+V:  0.8388  object volumes:  [tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.0168)]
+V:  1.6593  object volumes:  [tensor(0.2100), tensor(0.0168), tensor(0.2932), tensor(0.1376), tensor(0.2100), tensor(0.0311), tensor(0.1235), tensor(0.2932), tensor(0.0168), tensor(0.2932)]
+V:  0.8388  object volumes:  [tensor(0.0168), tensor(0.2932), tensor(0.0168)]
+V:  0.8109  object volumes:  [tensor(0.0311), tensor(0.2100), tensor(0.1235), tensor(0.2932), tensor(0.1235), tensor(0.2100), tensor(0.2100), tensor(0.2100), tensor(0.0969), tensor(0.0168), tensor(0.1376), tensor(0.0311), tensor(0.2932)]
+SUBSET: Current subset indices for environment 0: [tensor(11), tensor(16), tensor(34)]
+V:  0.8109  object volumes:  [tensor(0.2100), tensor(0.2932), tensor(0.2100)]
+V:  0.8388  object volumes:  [tensor(0.0168), tensor(0.2100), tensor(0.2932), tensor(0.0168)]
+V:  1.3216  object volumes:  [tensor(0.1376), tensor(0.0311), tensor(0.1235), tensor(0.2932), tensor(0.0168), tensor(0.0311), tensor(0.0969), tensor(0.1376)]
+V:  0.8109  object volumes:  [tensor(0.2100), tensor(0.0311), tensor(0.0168), tensor(0.1235), tensor(0.2932), tensor(0.1235), tensor(0.2100), tensor(0.2100), tensor(0.0969), tensor(0.0168), tensor(0.0311), tensor(0.1376), tensor(0.0311), tensor(0.2932)]
+V:  0.8109  object volumes:  [tensor(0.2100), tensor(0.2932)]
+V:  1.3705  object volumes:  [tensor(0.1235), tensor(0.1376), tensor(0.1376), tensor(0.0969), tensor(0.1376), tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.0969), tensor(0.2932)]
+V:  0.8109  object volumes:  [tensor(0.2100)]
+Placement Time taken for environment 14: 2.2537319660186768
+Placement Time taken for environment 2: 2.644235372543335
+Placement Time taken for environment 5: 2.67539381980896
+Placement Time taken for environment 9: 3.175651788711548
+Placement Time taken for environment 19: 3.3493752479553223
+No valid transform found for object index tensor([6]) in environment 0. Adding to unpackable objects.
+Placement Time taken for environment 3: 3.6416337490081787
+No valid transform found for object index tensor([12]) in environment 1. Adding to unpackable objects.
+Placement Time taken for environment 11: 4.658508777618408
+No valid transform found for object index tensor([15]) in environment 18. Adding to unpackable objects.
+No valid transform found for object index tensor([45]) in environment 7. Adding to unpackable objects.
+Placement Time taken for environment 4: 5.804317474365234
+Placement Time taken for environment 16: 6.34196138381958
+Placement Time taken for environment 13: 6.458371162414551
+Placement Time taken for environment 10: 7.472801208496094
+No valid transform found for object index tensor([33]) in environment 6. Adding to unpackable objects.
+Placement Time taken for environment 8: 8.149641513824463
+No valid transform found for object index tensor([46]) in environment 15. Adding to unpackable objects.
+Placement Time taken for environment 17: 9.03667163848877
+No packable objects left in environment 12. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([12], device='cuda:0')
+New packable objects for environment 12: [tensor(3), tensor(4), tensor(12), tensor(16), tensor(22), tensor(30), tensor(32), tensor(37), tensor(40)]
+Placement Time taken for environment 0: 10.110194206237793
+Placement Time taken for environment 7: 10.11054515838623
+Placement Time taken for environment 1: 10.110843896865845
+No valid transform found for object index tensor([28]) in environment 6. Adding to unpackable objects.
+No valid transform found for object index tensor([8]) in environment 18. Adding to unpackable objects.
+No valid transform found for object index tensor([8]) in environment 15. Adding to unpackable objects.
+No valid transform found for object index tensor([12]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 6: 13.988755226135254
+No packable objects left in environment 18. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([18], device='cuda:0')
+New packable objects for environment 18: [tensor(2), tensor(4), tensor(10), tensor(15), tensor(16), tensor(20), tensor(21), tensor(27), tensor(30), tensor(31), tensor(33), tensor(42), tensor(44)]
+Placement Time taken for environment 15: 14.80618929862976
+No valid transform found for object index tensor([4]) in environment 12. Adding to unpackable objects.
+No valid transform found for object index tensor([30]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 12: 19.989620685577393
+No valid transform found for object index tensor([20]) in environment 18. Adding to unpackable objects.
+No valid transform found for object index tensor([15]) in environment 18. Adding to unpackable objects.
+No packable objects left in environment 18. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([18], device='cuda:0')
+New packable objects for environment 18: [tensor(4), tensor(5), tensor(7), tensor(10), tensor(15), tensor(16), tensor(21), tensor(27), tensor(30), tensor(31), tensor(32), tensor(33), tensor(42), tensor(44)]
+Placement Time taken for environment 18: 35.5697295665741
+
+Step 15:
+Saved stats to file.
+GCU  tensor([[0.4408, 0.0037, 0.0274, 0.0311],
+        [0.1045, 0.5284, 0.1025, 0.0374],
+        [0.0138, 0.0466, 0.3299, 0.0305],
+        [0.1023, 0.0610, 0.1421, 0.4843],
+        [0.3763, 0.0466, 0.0993, 0.1681],
+        [0.0986, 0.4235, 0.0650, 0.1196],
+        [0.0037, 0.0374, 0.4846, 0.0274],
+        [0.0069, 0.0503, 0.0037, 0.5466],
+        [0.1935, 0.0579, 0.0037, 0.0650],
+        [0.1298, 0.4070, 0.1055, 0.0215],
+        [0.0489, 0.0771, 0.3608, 0.1681],
+        [0.1790, 0.0466, 0.1030, 0.4793],
+        [0.4661, 0.0762, 0.0466, 0.1766],
+        [0.0794, 0.4915, 0.0069, 0.1545],
+        [0.0616, 0.1375, 0.4053, 0.0284],
+        [0.0740, 0.0305, 0.0274, 0.4961],
+        [0.4984, 0.0037, 0.1635, 0.0884],
+        [0.0037, 0.4427, 0.0650, 0.0252],
+        [0.1764, 0.0787, 0.4577, 0.1733],
+        [0.0069, 0.0650, 0.0688, 0.3898]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 16
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  3.189047336578369
+V:  0.9134  object volumes:  [tensor(0.0168), tensor(0.0969), tensor(0.2100), tensor(0.2100), tensor(0.1376), tensor(0.0969)]
+V:  0.8123  object volumes:  [tensor(0.2100), tensor(0.2932), tensor(0.2932), tensor(0.0168), tensor(0.1376), tensor(0.0168), tensor(0.2100), tensor(0.1235), tensor(0.2932), tensor(0.2100), tensor(0.0168)]
+V:  1.5511  object volumes:  [tensor(0.0311), tensor(0.1376), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.0168), tensor(0.0969), tensor(0.2932), tensor(0.1235)]
+V:  0.7943  object volumes:  [tensor(0.2932), tensor(0.1235), tensor(0.1376), tensor(0.1235), tensor(0.0969), tensor(0.0311), tensor(0.2100)]
+V:  0.7943  object volumes:  [tensor(0.1235), tensor(0.1235), tensor(0.0311), tensor(0.2100)]
+V:  0.9134  object volumes:  [tensor(0.0168), tensor(0.0969), tensor(0.2100), tensor(0.1376), tensor(0.0969)]
+V:  0.9134  object volumes:  [tensor(0.0168), tensor(0.0969), tensor(0.1376), tensor(0.0969)]
+V:  0.7943  object volumes:  [tensor(0.1235), tensor(0.0311), tensor(0.2100)]
+V:  0.7249  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.1376), tensor(0.1235), tensor(0.0168), tensor(0.2100), tensor(0.1235), tensor(0.2100)]
+V:  0.9134  object volumes:  [tensor(0.0168), tensor(0.0969), tensor(0.1376)]
+V:  0.9134  object volumes:  [tensor(0.1235), tensor(0.0168), tensor(0.0969), tensor(0.2100), tensor(0.2100), tensor(0.1376), tensor(0.1376), tensor(0.1235), tensor(0.0969)]
+V:  0.7249  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.0168), tensor(0.2100)]
+V:  0.7943  object volumes:  [tensor(0.0311), tensor(0.2100)]
+SUBSET: Current subset indices for environment 0: [tensor(16), tensor(34)]
+V:  0.7943  object volumes:  [tensor(0.1235), tensor(0.1235), tensor(0.0311), tensor(0.1235), tensor(0.0969)]
+V:  0.7943  object volumes:  [tensor(0.1235), tensor(0.2100), tensor(0.2932), tensor(0.1235), tensor(0.1376), tensor(0.0311), tensor(0.1235), tensor(0.0969), tensor(0.0311), tensor(0.0311), tensor(0.2100)]
+V:  0.7943  object volumes:  [tensor(0.0311)]
+Placement Time taken for environment 0: 1.5487422943115234
+Placement Time taken for environment 18: 1.9607572555541992
+Placement Time taken for environment 7: 2.01607346534729
+Placement Time taken for environment 6: 3.041658878326416
+Placement Time taken for environment 9: 3.204435348510742
+Placement Time taken for environment 11: 3.840660810470581
+Placement Time taken for environment 14: 4.030183553695679
+Placement Time taken for environment 2: 4.117226839065552
+No valid transform found for object index tensor([16]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([16]) in environment 15. Adding to unpackable objects.
+Placement Time taken for environment 13: 4.8244757652282715
+Placement Time taken for environment 10: 5.14495849609375
+Placement Time taken for environment 4: 5.22652268409729
+No valid transform found for object index tensor([6]) in environment 1. Adding to unpackable objects.
+Placement Time taken for environment 8: 5.686595916748047
+No valid transform found for object index tensor([2]) in environment 19. Adding to unpackable objects.
+Placement Time taken for environment 5: 6.046590805053711
+No valid transform found for object index tensor([1]) in environment 17. Adding to unpackable objects.
+No valid transform found for object index tensor([22]) in environment 16. Adding to unpackable objects.
+No valid transform found for object index tensor([16]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 19: 7.80607008934021
+No packable objects left in environment 15. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([15], device='cuda:0')
+New packable objects for environment 15: [tensor(7), tensor(8), tensor(16), tensor(26), tensor(29), tensor(43), tensor(48)]
+No packable objects left in environment 12. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([12], device='cuda:0')
+New packable objects for environment 12: [tensor(4), tensor(12), tensor(16), tensor(22), tensor(28), tensor(30), tensor(32), tensor(33), tensor(37), tensor(39), tensor(40)]
+No valid transform found for object index tensor([44]) in environment 1. Adding to unpackable objects.
+No valid transform found for object index tensor([8]) in environment 17. Adding to unpackable objects.
+No valid transform found for object index tensor([48]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([21]) in environment 16. Adding to unpackable objects.
+Placement Time taken for environment 12: 12.467991352081299
+Placement Time taken for environment 17: 12.46874475479126
+No valid transform found for object index tensor([7]) in environment 15. Adding to unpackable objects.
+No valid transform found for object index tensor([10]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([24]) in environment 1. Adding to unpackable objects.
+No valid transform found for object index tensor([11]) in environment 16. Adding to unpackable objects.
+No valid transform found for object index tensor([8]) in environment 15. Adding to unpackable objects.
+No valid transform found for object index tensor([5]) in environment 3. Adding to unpackable objects.
+No packable objects left in environment 1. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([1], device='cuda:0')
+New packable objects for environment 1: [tensor(2), tensor(3), tensor(4), tensor(7), tensor(8), tensor(10), tensor(24), tensor(44), tensor(45)]
+No valid transform found for object index tensor([49]) in environment 16. Adding to unpackable objects.
+Placement Time taken for environment 3: 20.005244970321655
+No valid transform found for object index tensor([26]) in environment 15. Adding to unpackable objects.
+Placement Time taken for environment 16: 21.276212692260742
+No valid transform found for object index tensor([7]) in environment 1. Adding to unpackable objects.
+Placement Time taken for environment 1: 24.1795597076416
+No valid transform found for object index tensor([48]) in environment 15. Adding to unpackable objects.
+No packable objects left in environment 15. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([15], device='cuda:0')
+New packable objects for environment 15: [tensor(2), tensor(5), tensor(7), tensor(8), tensor(16), tensor(20), tensor(26), tensor(29), tensor(35), tensor(43), tensor(48)]
+No valid transform found for object index tensor([7]) in environment 15. Adding to unpackable objects.
+Placement Time taken for environment 15: 34.314040422439575
+
+Step 16:
+Saved stats to file.
+GCU  tensor([[0.4445, 0.0037, 0.0274, 0.0274],
+        [0.1045, 0.5353, 0.1427, 0.0374],
+        [0.0138, 0.0466, 0.3604, 0.1061],
+        [0.0808, 0.0610, 0.1421, 0.5057],
+        [0.4413, 0.0466, 0.0993, 0.1031],
+        [0.0986, 0.4540, 0.0650, 0.0890],
+        [0.0037, 0.0305, 0.4915, 0.0274],
+        [0.2471, 0.0503, 0.0037, 0.5535],
+        [0.2240, 0.0274, 0.0037, 0.0650],
+        [0.1229, 0.4139, 0.1055, 0.0215],
+        [0.0489, 0.0771, 0.3882, 0.1407],
+        [0.1790, 0.0466, 0.0993, 0.4830],
+        [0.4698, 0.0725, 0.1548, 0.1766],
+        [0.0794, 0.5220, 0.0069, 0.1239],
+        [0.0616, 0.1375, 0.4268, 0.0069],
+        [0.1459, 0.1183, 0.0274, 0.5176],
+        [0.5021, 0.1482, 0.1635, 0.0884],
+        [0.1917, 0.4464, 0.0650, 0.0252],
+        [0.1764, 0.0787, 0.4615, 0.1695],
+        [0.1277, 0.0650, 0.0688, 0.3967]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 17
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  3.1044092178344727
+SUBSET: Current subset indices for environment 0: [tensor(34)]
+V:  1.0711  object volumes:  [tensor(0.2100), tensor(0.0969), tensor(0.0969), tensor(0.0168), tensor(0.0311)]
+SUBSET: New subset indices for environment 0: [tensor(8), tensor(9), tensor(15), tensor(38), tensor(40)]
+V:  1.623  object volumes:  [tensor(0.2100), tensor(0.0969), tensor(0.0311), tensor(0.0311), tensor(0.2100), tensor(0.0311), tensor(0.1235), tensor(0.0168)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.2932), tensor(0.1376)]
+V:  0.8706  object volumes:  [tensor(0.1376), tensor(0.1376), tensor(0.2932)]
+V:  0.6625  object volumes:  [tensor(0.1235), tensor(0.2100), tensor(0.0168), tensor(0.1235), tensor(0.1376), tensor(0.1376), tensor(0.1235)]
+V:  0.3073  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0311), tensor(0.2932), tensor(0.0311), tensor(0.0168), tensor(0.2100)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.2932), tensor(0.1235), tensor(0.1376)]
+V:  0.3073  object volumes:  [tensor(0.0168), tensor(0.0311), tensor(0.0311), tensor(0.0168)]
+V:  0.6625  object volumes:  [tensor(0.0168), tensor(0.1376), tensor(0.1376), tensor(0.1235)]
+V:  0.8706  object volumes:  [tensor(0.1376), tensor(0.2932)]
+V:  0.3073  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.2932), tensor(0.1376), tensor(0.2932), tensor(0.0969)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.2932)]
+V:  1.3727  object volumes:  [tensor(0.2932), tensor(0.0311), tensor(0.0311), tensor(0.2932), tensor(0.0969), tensor(0.0168), tensor(0.1235)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969)]
+V:  1.159  object volumes:  [tensor(0.0168), tensor(0.0168), tensor(0.1235), tensor(0.2932), tensor(0.1376), tensor(0.2932)]
+V:  0.6625  object volumes:  [tensor(0.0168), tensor(0.1376), tensor(0.1235)]
+V:  1.623  object volumes:  [tensor(0.2100), tensor(0.0969), tensor(0.0311), tensor(0.0311), tensor(0.0311), tensor(0.1235), tensor(0.0168)]
+V:  0.8706  object volumes:  [tensor(0.1376)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.0969), tensor(0.2932), tensor(0.0311), tensor(0.1235), tensor(0.1376), tensor(0.1235), tensor(0.1235)]
+V:  0.8811  object volumes:  [tensor(0.1235)]
+V:  0.8706  object volumes:  [tensor(0.2932), tensor(0.1376), tensor(0.0168), tensor(0.0311), tensor(0.1376), tensor(0.1376), tensor(0.2100), tensor(0.0168), tensor(0.2932), tensor(0.2932)]
+V:  0.8706  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0311), tensor(0.1376), tensor(0.2100), tensor(0.0168), tensor(0.0168), tensor(0.2932), tensor(0.2932), tensor(0.2932), tensor(0.0168), tensor(0.2932)]
+V:  0.6625  object volumes:  [tensor(0.1235), tensor(0.0168), tensor(0.1376), tensor(0.1376), tensor(0.1235)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0311), tensor(0.2100), tensor(0.1376), tensor(0.1376), tensor(0.0311)]
+V:  0.8706  object volumes:  [tensor(0.2932), tensor(0.0168), tensor(0.0168), tensor(0.0168), tensor(0.2932), tensor(0.0168)]
+V:  0.8811  object volumes:  [tensor(0.1235), tensor(0.0969), tensor(0.2100), tensor(0.0168), tensor(0.0311), tensor(0.2100), tensor(0.1376), tensor(0.1376), tensor(0.0311), tensor(0.1235), tensor(0.0311), tensor(0.1235), tensor(0.0969)]
+No packable objects left in environment 6. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([6], device='cuda:0')
+New packable objects for environment 6: [tensor(4), tensor(5), tensor(12), tensor(28), tensor(29), tensor(33), tensor(48)]
+No packable objects left in environment 0. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([0], device='cuda:0')
+New packable objects for environment 0: [tensor(8), tensor(9), tensor(15), tensor(38), tensor(40)]
+No packable objects left in environment 3. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([3], device='cuda:0')
+New packable objects for environment 3: [tensor(0), tensor(2), tensor(3), tensor(4), tensor(5), tensor(10), tensor(19), tensor(20), tensor(25), tensor(46)]
+Placement Time taken for environment 14: 4.409047842025757
+Placement Time taken for environment 4: 4.4097371101379395
+No valid transform found for object index tensor([10]) in environment 16. Adding to unpackable objects.
+Placement Time taken for environment 19: 4.411479473114014
+No valid transform found for object index tensor([15]) in environment 18. Adding to unpackable objects.
+Placement Time taken for environment 10: 5.590895414352417
+No valid transform found for object index tensor([2]) in environment 15. Adding to unpackable objects.
+No valid transform found for object index tensor([47]) in environment 11. Adding to unpackable objects.
+No valid transform found for object index tensor([2]) in environment 1. Adding to unpackable objects.
+No valid transform found for object index tensor([25]) in environment 2. Adding to unpackable objects.
+Placement Time taken for environment 9: 7.3644304275512695
+No valid transform found for object index tensor([32]) in environment 12. Adding to unpackable objects.
+Placement Time taken for environment 8: 8.440075397491455
+No valid transform found for object index tensor([20]) in environment 13. Adding to unpackable objects.
+No packable objects left in environment 7. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([7], device='cuda:0')
+New packable objects for environment 7: [tensor(0), tensor(8), tensor(21), tensor(33), tensor(39), tensor(44), tensor(45)]
+No valid transform found for object index tensor([30]) in environment 5. Adding to unpackable objects.
+Placement Time taken for environment 17: 9.555452108383179
+Placement Time taken for environment 1: 9.555811643600464
+Placement Time taken for environment 0: 9.556121587753296
+Placement Time taken for environment 18: 9.556432723999023
+No valid transform found for object index tensor([28]) in environment 6. Adding to unpackable objects.
+Placement Time taken for environment 2: 9.557339668273926
+Placement Time taken for environment 11: 9.557636022567749
+No valid transform found for object index tensor([29]) in environment 16. Adding to unpackable objects.
+No valid transform found for object index tensor([8]) in environment 15. Adding to unpackable objects.
+No valid transform found for object index tensor([0]) in environment 3. Adding to unpackable objects.
+Placement Time taken for environment 13: 12.019519567489624
+No valid transform found for object index tensor([39]) in environment 12. Adding to unpackable objects.
+No valid transform found for object index tensor([4]) in environment 5. Adding to unpackable objects.
+No valid transform found for object index tensor([45]) in environment 7. Adding to unpackable objects.
+No valid transform found for object index tensor([4]) in environment 6. Adding to unpackable objects.
+Placement Time taken for environment 12: 15.071419715881348
+No valid transform found for object index tensor([2]) in environment 3. Adding to unpackable objects.
+No valid transform found for object index tensor([30]) in environment 16. Adding to unpackable objects.
+Placement Time taken for environment 15: 15.07280969619751
+Placement Time taken for environment 7: 16.300496578216553
+No valid transform found for object index tensor([39]) in environment 5. Adding to unpackable objects.
+No valid transform found for object index tensor([29]) in environment 6. Adding to unpackable objects.
+No valid transform found for object index tensor([15]) in environment 16. Adding to unpackable objects.
+No valid transform found for object index tensor([25]) in environment 3. Adding to unpackable objects.
+Placement Time taken for environment 5: 20.449499368667603
+Placement Time taken for environment 6: 20.45029091835022
+No valid transform found for object index tensor([5]) in environment 16. Adding to unpackable objects.
+No packable objects left in environment 3. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([3], device='cuda:0')
+New packable objects for environment 3: [tensor(0), tensor(3), tensor(4), tensor(10), tensor(19), tensor(20), tensor(21), tensor(24), tensor(25), tensor(27), tensor(38), tensor(46)]
+No packable objects left in environment 16. Ejecting source tote despite not empty.
+Overfilled totes detected in environments: tensor([16], device='cuda:0')
+New packable objects for environment 16: [tensor(4), tensor(10), tensor(11), tensor(12), tensor(18), tensor(21), tensor(22), tensor(30), tensor(34), tensor(37), tensor(39), tensor(42), tensor(49)]
+No valid transform found for object index tensor([19]) in environment 3. Adding to unpackable objects.
+Placement Time taken for environment 3: 29.937355518341064
+No valid transform found for object index tensor([11]) in environment 16. Adding to unpackable objects.
+Placement Time taken for environment 16: 32.25635576248169
+
+Step 17:
+Saved stats to file.
+GCU  tensor([[0.4514, 0.0933, 0.0274, 0.0274],
+        [0.1045, 0.5422, 0.1427, 0.0305],
+        [0.0138, 0.0466, 0.3673, 0.0992],
+        [0.1407, 0.1590, 0.1421, 0.5095],
+        [0.4482, 0.0466, 0.0993, 0.0962],
+        [0.0986, 0.4814, 0.0650, 0.0616],
+        [0.1319, 0.0305, 0.4952, 0.0274],
+        [0.1407, 0.0503, 0.0037, 0.5604],
+        [0.2514, 0.1367, 0.0037, 0.0650],
+        [0.0956, 0.4413, 0.1055, 0.0215],
+        [0.0215, 0.0771, 0.4156, 0.1407],
+        [0.1790, 0.0466, 0.0956, 0.4868],
+        [0.4735, 0.0688, 0.1548, 0.1766],
+        [0.0520, 0.5494, 0.0069, 0.1239],
+        [0.0616, 0.1338, 0.4305, 0.0069],
+        [0.1459, 0.1114, 0.0274, 0.5245],
+        [0.5090, 0.0449, 0.1635, 0.0884],
+        [0.1643, 0.4738, 0.0650, 0.0252],
+        [0.1695, 0.0787, 0.4684, 0.1695],
+        [0.1062, 0.0650, 0.0688, 0.4182]], device='cuda:0')
+
+===== Ejection Summary =====
+Total steps: 18
+{'last_gcu': 0.36780232191085815, 'last_source_ejection': 1.0, 'last_obj_transfers': 10.0}
+==========================
+
+Time taken for updating container heightmap:  4.125187397003174
