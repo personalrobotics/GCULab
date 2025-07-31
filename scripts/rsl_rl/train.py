@@ -81,6 +81,7 @@ import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
 import tote_consolidation.tasks  # noqa: F401
+from gculab_rl.rsl_rl import RslRlGCUVecEnvWrapper
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -91,10 +92,10 @@ from isaaclab.envs import (
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
-from gculab_rl.rsl_rl import RslRlGCUVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from rsl_rl.runners import OnPolicyRunner, GCUOnPolicyRunner
+
+from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

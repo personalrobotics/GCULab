@@ -9,6 +9,7 @@ from typing import Literal
 from isaaclab.utils import configclass
 from isaaclab_rl.rsl_rl import RslRlPpoActorCriticCfg
 
+
 @configclass
 class RslRlPpoActorCriticConv2dCfg(RslRlPpoActorCriticCfg):
     """Configuration for the PPO actor-critic networks with convolutional layers."""
@@ -25,5 +26,3 @@ class RslRlPpoActorCriticConv2dCfg(RslRlPpoActorCriticCfg):
 
     conv_linear_output_size: int = 16
     """Output size of the linear layer after the convolutional features are flattened."""
-
-

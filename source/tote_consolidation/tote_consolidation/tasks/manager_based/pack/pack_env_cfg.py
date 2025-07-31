@@ -19,9 +19,9 @@ from isaaclab.managers import ActionTermCfg as ActionTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewardTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.managers import RewardTermCfg as RewardTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 

@@ -36,6 +36,7 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import os
+import random
 from datetime import datetime
 
 import bpp_utils
@@ -43,7 +44,6 @@ import gymnasium as gym
 import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401
 import numpy as np
-import random
 import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg

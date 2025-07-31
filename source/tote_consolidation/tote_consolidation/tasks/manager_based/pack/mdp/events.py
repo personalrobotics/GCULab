@@ -19,9 +19,9 @@ from isaaclab.assets import RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
+from packing3d import Container
 from pxr import UsdGeom
 from scipy.ndimage import binary_fill_holes, generate_binary_structure, label
-from packing3d import Container
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLGCUEnv

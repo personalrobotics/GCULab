@@ -17,7 +17,7 @@ This will be adapted to use depth camera (#13)
 ```bash
 # For training
 python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
-# For inference 
+# For inference
 python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
 ```
 

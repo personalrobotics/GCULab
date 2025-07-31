@@ -56,6 +56,7 @@ import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
 import tote_consolidation.tasks  # noqa: F401
+from gculab_rl.rsl_rl import RslRlGCUVecEnvWrapper
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
@@ -66,9 +67,9 @@ from isaaclab_rl.rsl_rl import (
     export_policy_as_jit,
     export_policy_as_onnx,
 )
-from gculab_rl.rsl_rl import RslRlGCUVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
-from rsl_rl.runners import OnPolicyRunner, GCUOnPolicyRunner
+
+from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
 
 
 def main():

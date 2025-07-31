@@ -1,16 +1,16 @@
 import os
 import pickle
+import re
+from datetime import datetime
 from pathlib import Path
-from rich.console import Console
-from rich.prompt import Prompt
-from rich.table import Table
-import click
 
+import click
 import matplotlib.pyplot as plt
 import numpy as np
 from packing3d import Display
-from datetime import datetime
-import re
+from rich.console import Console
+from rich.prompt import Prompt
+from rich.table import Table
 
 DEFAULT_BASE_DIR = Path("/home/henri/prl_cp/tote_consolidation/stats")
 
@@ -83,7 +83,7 @@ def main(data_path, env_id, step_num):
 
     display.show2d(first_container.heightmap)
     plt.savefig("tmp.png")
-    
+
     # Get box size and heightmap shape
     box_size = first_container.box_size  # e.g., [26, 51, 34]
     heightmap = first_container.heightmap
@@ -101,7 +101,7 @@ def main(data_path, env_id, step_num):
     unused_height_augmented[unused_height < 5] = 0
     display.show2d(unused_height_augmented)
     plt.savefig("unused_height_map_aug.png")
-    
+
     volume_per_pixel = unused_height * dx_cm * dy_cm
     total_unused_volume_cm3 = np.sum(volume_per_pixel)
     total_unused_volume_L = total_unused_volume_cm3 / 1000.0
