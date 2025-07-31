@@ -76,7 +76,7 @@ class ToteManager:
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
         self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
         self.overfill_threshold = 0.3  # in meters
-        self.max_objects_per_tote = 5
+        self.max_objects_per_tote = 3
 
         self.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
@@ -300,7 +300,7 @@ class ToteManager:
             overfilled_envs = torch.ones_like(fill_heights, dtype=torch.bool)
 
         if not overfilled_envs.any():
-            return
+            return overfilled_envs
 
         if is_dest:
             print(f"Overfilled totes detected in environments: {env_ids[overfilled_envs]}")
@@ -350,6 +350,7 @@ class ToteManager:
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
+        return overfilled_envs
 
     def update_object_positions_in_sim(self, env, objects, positions, orientations, cur_env):
         """

@@ -19,6 +19,7 @@ parser.add_argument(
 parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--exp_name", type=str, default="test_placement", help="Name of the experiment.")
+parser.add_argument("--seed", type=int, default=0, help="Seed used for the environment")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -33,6 +34,7 @@ simulation_app = app_launcher.app
 import os
 from datetime import datetime
 
+import bpp_utils
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
@@ -126,6 +128,7 @@ def main():
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+    env_cfg.seed = args_cli.seed
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
@@ -146,6 +149,18 @@ def main():
     exp_log_interval = 1  # Log stats every 50 steps
 
     step_count = 0
+
+    args = {
+        "decreasing_vol": False,  # Whether to use decreasing volume for packing
+        "use_stability": False,  # Whether to use stability checks for packing
+        "use_subset_sum": True,  # Whether to use subset sum for packing
+    }
+
+    bpp = bpp_utils.BPP(
+        tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
+    )
+    env.unwrapped.bpp = bpp
+
 
     while simulation_app.is_running():
         # run everything in inference mode

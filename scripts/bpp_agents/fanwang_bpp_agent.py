@@ -131,6 +131,8 @@ def main():
     bpp = bpp_utils.BPP(
         tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
     )
+    env.unwrapped.bpp = bpp
+
 
     while simulation_app.is_running():
         # run everything in inference mode

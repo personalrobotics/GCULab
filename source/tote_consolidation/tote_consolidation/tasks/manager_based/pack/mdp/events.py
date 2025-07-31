@@ -21,6 +21,7 @@ from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
 from pxr import UsdGeom
 from scipy.ndimage import binary_fill_holes, generate_binary_structure, label
+from packing3d import Container
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLGCUEnv
@@ -396,3 +397,53 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
                 f"Object {asset_cfg.name} is not within the bounds of any tote in environments {env_ids.tolist()}. "
                 f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
             )
+
+def heightmap(env: ManagerBasedRLGCUEnv):
+    """Creates a heightmap of the scene.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+    """
+    heightmap_stacked = torch.zeros((env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device)
+    # If env does not have bpp attribute or it's None, return zeros
+    if not hasattr(env, "bpp"):
+        return torch.zeros((env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device)
+    for env_id in range(env.num_envs):
+        heightmap_stacked[env_id] = torch.from_numpy(env.bpp.problems[env_id].container.heightmap).unsqueeze(-1)
+    return heightmap_stacked
+
+def gcu_reward(env: ManagerBasedRLGCUEnv):
+    """
+    Computes the GCU-based reward for each environment.
+
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+
+    Returns:
+        torch.Tensor: Reward tensor of shape [num_envs], where each entry corresponds to the GCU reward
+                      for that environment. Only environments that are being reset receive a nonzero reward.
+    """
+    reset_envs = env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+    rewards = torch.zeros(env.num_envs, device=env.device)
+    if len(reset_envs) > 0:
+        # Use the most recent GCU values for environments being reset.
+        # pre_reset_rewards shape: [num_envs, num_totes]
+        pre_reset_rewards = env.tote_manager.stats.recent_gcu_values
+        # Assign the GCU value of the destination tote for each resetting environment.
+        rewards[reset_envs] = pre_reset_rewards[reset_envs, env.tote_manager.dest_totes[reset_envs]]
+    print(f"GCU rewards: {rewards}")
+    return rewards
+
+def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
+    """Checks if any object is overfilled the tote.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+    """
+    envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device))
+    # Clear container for overfilled environments
+    box_size = env.bpp.problems[0].box_size
+    for env_id in envs_overfilled.nonzero(as_tuple=False).squeeze(-1).tolist():
+        env.bpp.problems[env_id].container = Container(box_size)
+        env.bpp.packed_obj_idx[env_id] = []
+    return envs_overfilled

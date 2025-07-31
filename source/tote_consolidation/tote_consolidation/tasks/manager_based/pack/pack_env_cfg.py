@@ -20,6 +20,8 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.managers import RewardTermCfg as RewardTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
 
@@ -51,12 +53,12 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 include_ids = [
     "003",  # cracker_box
-    "004",  # sugar_box
-    "006",  # mustard_bottle
-    "008",  # pudding_box
-    "009",  # gelatin_box
-    "036",  # wood_block
-    "061",  # foam_brick
+    # "004",  # sugar_box
+    # "006",  # mustard_bottle
+    # "008",  # pudding_box
+    # "009",  # gelatin_box
+    # "036",  # wood_block
+    # "061",  # foam_brick
 ]
 
 # Filter USD files based on ID prefixes
@@ -67,8 +69,8 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 50
-num_objects_to_reserve = 50
+num_object_per_env = 20
+num_objects_to_reserve = 20
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -198,13 +200,17 @@ class ObservationsCfg:
         # observation terms (order preserved)
         actions = ObsTerm(func=mdp.last_action)
 
-        def __post_init__(self):
-            self.enable_corruption = True
-            self.concatenate_terms = True
+        # def __post_init__(self):
+        #     self.enable_corruption = True
+        #     self.concatenate_terms = True
+
+    class SensorCfg(ObsGroup):
+        """Observations for sensor group."""
+        heightmap = ObsTerm(func=mdp.heightmap)
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
-
+    sensor: SensorCfg = SensorCfg()
 
 @configclass
 class EventCfg:
@@ -261,19 +267,23 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
-
-    pass
+    gcu_reward = RewardTerm(
+        func=mdp.gcu_reward, weight=1.0
+    )
 
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
+    object_overfilled_tote = DoneTerm(
+        func=mdp.object_overfilled_tote,
+    )
+
 
 
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
-
     pass
 
 

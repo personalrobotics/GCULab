@@ -236,23 +236,24 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.obs_buf = self.observation_manager.compute()
             self.recorder_manager.record_post_step()
 
+        # kaikwan (07/31): Disabling resets since it is a lifelong reset free environment
         # -- reset envs that terminated/timed-out and log the episode information
-        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
-        if len(reset_env_ids) > 0:
-            # trigger recorder terms for pre-reset calls
-            self.recorder_manager.record_pre_reset(reset_env_ids)
+        # reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+        # if len(reset_env_ids) > 0:
+        #     # trigger recorder terms for pre-reset calls
+        #     self.recorder_manager.record_pre_reset(reset_env_ids)
 
-            self._reset_idx(reset_env_ids)
-            # update articulation kinematics
-            self.scene.write_data_to_sim()
-            self.sim.forward()
+        #     self._reset_idx(reset_env_ids)
+        #     # update articulation kinematics
+        #     self.scene.write_data_to_sim()
+        #     self.sim.forward()
 
-            # if sensors are added to the scene, make sure we render to reflect changes in reset
-            if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
-                self.sim.render()
+        #     # if sensors are added to the scene, make sure we render to reflect changes in reset
+        #     if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
+        #         self.sim.render()
 
-            # trigger recorder terms for post-reset calls
-            self.recorder_manager.record_post_reset(reset_env_ids)
+        #     # trigger recorder terms for post-reset calls
+        #     self.recorder_manager.record_post_reset(reset_env_ids)
 
         # -- update command
         self.command_manager.compute(dt=self.step_dt)
