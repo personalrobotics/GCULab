@@ -80,18 +80,8 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         self.mp_pool = None
         self.mp_enabled = False  # Can be toggled for debugging
 
-
     def _convert_to_pos_quat(self, actions: torch.Tensor) -> torch.Tensor:
-        """Convert actions to position and quaternion.
-
-        Args:
-            actions: The actions to convert. (x, y, orientation)
-
-        Returns:
-            The position and quaternion. (x, y, z, qx, qy, qz, qw)
-        """
-        start_time = time.time()
-        orientation_idx = actions[:, 5]
+        orientation_idx = actions[:, 2]
         theta_rad = orientation_idx * (torch.pi / 2)  # 0 or pi/2 radians (0 or 90 degrees)
         qx = torch.sin(theta_rad / 2)
         qy = torch.zeros_like(theta_rad)
@@ -99,109 +89,92 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         qw = torch.cos(theta_rad / 2)
 
         # Convert (x, y, theta) actions to (x, y, z, qx, qy, qz, qw)
-        # Assume z=0 for placement, and theta is in radians
-        x = actions[:, 2]
-        y = actions[:, 3]
+        # Assume z=0 for placement (to be updated), and theta is in radians
+        x = actions[:, 0]
+        y = actions[:, 1]
+
+
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device), actions[:, 1].long()
+            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.zeros(actions.shape[0], device=self.env.unwrapped.device).int()  # TODO (kaikwan): fix this hardcoded index to check with selected object
         ]
         quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
-        rotated_half_dim = (
+        rotated_dim = (
             calculate_rotated_bounding_box(
                 bbox_offset, quats, device=self.env.unwrapped.device
             )
-            / 2.0
         )
-        x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - 2 * rotated_half_dim[:, 0])
-        y = torch.sigmoid(y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - 2 * rotated_half_dim[:, 1])
+        x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
+        y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
+        x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
+        y = torch.sigmoid(y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
 
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)
 
-        if self.mp_enabled and actions.shape[0] > 1:  # Only use multiprocessing for multiple items
-            try:
-                # Initialize pool if not already done
-                if self.mp_pool is None:
-                    self.mp_pool = mp.Pool(processes=min(mp.cpu_count(), actions.shape[0]))
+        return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), [x_pos_range, y_pos_range], rotated_dim
 
-                # Prepare data for multiprocessing
-                mp_args = []
-                for i in range(actions.shape[0]):
-                    # Create a deep copy of the BPP problem to avoid conflicts
-                    bpp_problem_copy = self.env.unwrapped.bpp.problems[i]
-                    mp_args.append((
-                        i,
-                        actions[i].cpu().numpy(),  # Convert to numpy for multiprocessing
-                        x[i].cpu().numpy(),
-                        y[i].cpu().numpy(),
-                        qz[i].cpu().numpy(),
-                        qw[i].cpu().numpy(),
-                        rotated_half_dim[i].cpu().numpy(),
-                        bpp_problem_copy
-                    ))
+    def _get_z_position_from_depth(self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
+        """Get the z position from the depth image."""
+        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, 37, 52) # TODO (kaikwan): get shape smarter
 
-                # Process in parallel
-                results = self.mp_pool.map(_process_single_item, mp_args)
+        # Rescale x_pos and y_pos to the range of the depth image
+        total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
+        total_tote_y = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100
+        x_pos = torch.round(52 -(xy_pos[0] / total_tote_x) * 52).to(torch.int64)
+        y_pos = torch.round((xy_pos[1] / total_tote_y) * 37).to(torch.int64)
 
-                # Collect results
-                for i, z_value, packed_obj_idx in results:
-                    z[i] = torch.tensor(z_value, device=self.env.unwrapped.device)
-                    self.env.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor(packed_obj_idx, device=self.env.unwrapped.device))
+        # Compute patch extents in pixel units by scaling world dimensions to pixel coordinates
+        # The image covers the total tote dimensions, so scale object dimensions relative to total tote dimensions
+        x_extent = torch.round((rotated_dim[:, 0] / total_tote_x) * 52).clamp(min=1).long()
+        y_extent = torch.round((rotated_dim[:, 1] / total_tote_y) * 37).clamp(min=1).long()
 
-            except Exception as e:
-                print(f"Multiprocessing failed, falling back to sequential: {e}")
-                self.mp_enabled = False
-                # Fall back to sequential processing
-                for i in range(actions.shape[0]):
-                    # Analytically determine the z position of the object
-                    curr_attitude = Attitude(0, 0, 0) if qz[i] == 0 and qw[i] == 1 else Attitude(0, 0, torch.pi / 2)
-                    item_to_add = self.env.unwrapped.bpp.problems[i].items[int(actions[i, 1])]
-                    item_to_add.rotate(curr_attitude)
-                    item_to_add.calc_heightmap()
-                    # Convert grid indices to actual coordinates
-                    x_coord = int(torch.floor(x[i]).item())
-                    y_coord = int(torch.floor(y[i]).item())
-                    self.env.unwrapped.bpp.problems[i].container.add_item_topdown(item_to_add, x_coord, y_coord)
-                    transform = Transform(
-                        Position(self.env.unwrapped.bpp.problems[i].container.geometry.x_size - x_coord, self.env.unwrapped.bpp.problems[i].container.geometry.y_size - y_coord, item_to_add.position.z),
-                        curr_attitude,
-                    )
-                    item_to_add.transform(transform)
-                    self.env.unwrapped.bpp.problems[i].container.add_item(item_to_add)
-                    z[i] = rotated_half_dim[i, 2] + item_to_add.position.z / 100
-                    self.env.unwrapped.bpp.packed_obj_idx[i].append(actions[i, 1].type(torch.int64).cpu())
-        else:
-            # Sequential processing for single items or when multiprocessing is disabled
-            for i in range(actions.shape[0]):
-                # Analytically determine the z position of the object
-                curr_attitude = Attitude(0, 0, 0) if qz[i] == 0 and qw[i] == 1 else Attitude(0, 0, torch.pi / 2)
-                item_to_add = self.env.unwrapped.bpp.problems[i].items[int(actions[i, 1])]
-                item_to_add.rotate(curr_attitude)
-                item_to_add.calc_heightmap()
-                # Convert grid indices to actual coordinates
-                x_coord = int(torch.floor(x[i]).item())
-                y_coord = int(torch.floor(y[i]).item())
-                self.env.unwrapped.bpp.problems[i].container.add_item_topdown(item_to_add, x_coord, y_coord)
-                transform = Transform(
-                    Position(self.env.unwrapped.bpp.problems[i].container.geometry.x_size - x_coord, self.env.unwrapped.bpp.problems[i].container.geometry.y_size - y_coord, item_to_add.position.z),
-                    curr_attitude,
-                )
-                item_to_add.transform(transform)
-                self.env.unwrapped.bpp.problems[i].container.add_item(item_to_add)
-                z[i] = rotated_half_dim[i, 2] + item_to_add.position.z / 100
-                self.env.unwrapped.bpp.packed_obj_idx[i].append(actions[i, 1].type(torch.int64).cpu())
-                if i == 0:
-                    from packing3d import Display
-                    display = Display(self.env.unwrapped.bpp.problems[i].box_size)
-                    display.show3d(self.env.unwrapped.bpp.problems[i].container.geometry)
-                    plt.savefig(f"container_{i}.png")
+        # Compute patch start/end indices, clamp to image bounds
+        x1 = x_pos.clamp(0, 51)
+        y0 = y_pos.clamp(0, 36)
+        x0 = (x1 - x_extent).clamp(0, 51)
+        y1 = (y0 + y_extent).clamp(0, 36)
 
-        print(f"Time taken to convert to pos_quat: {time.time() - start_time:.3f}s")
-        pos_quat = torch.stack([actions[:, 0], actions[:, 1], x, y, z, qx, qy, qz, qw], dim=1)
-        return pos_quat
+        # Create batch indices for advanced indexing
+        batch_idx = torch.arange(depth_img.shape[0], device=self.device)
 
-    def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-        tote_ids = torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device) % self.env.unwrapped.tote_manager.num_totes
+        # For each sample, extract the patch and get the max value
+        # Use broadcasting to build masks for all pixels in one go
+        img_h, img_w = 37, 52
+        grid_y = torch.arange(img_h, device=self.device).view(1, img_h, 1)
+        grid_x = torch.arange(img_w, device=self.device).view(1, 1, img_w)
+        y0_ = y0.view(-1, 1, 1)
+        y1_ = y1.view(-1, 1, 1)
+        x0_ = x0.view(-1, 1, 1)
+        x1_ = x1.view(-1, 1, 1)
+        mask = (grid_y >= y0_) & (grid_y <= y1_) & (grid_x >= x0_) & (grid_x <= x1_)
+
+        # Masked min: set out-of-patch values and zeros to inf, then take min
+        depth_img_masked = depth_img.clone()
+        depth_img_masked[~mask] = float('inf')
+        depth_img_masked[depth_img_masked == 0] = float('inf')
+        z_pos = depth_img_masked.view(depth_img.shape[0], -1).min(dim=1).values
+
+        z_pos = 20.0 - z_pos
+        z_pos = z_pos.clamp(min=0.0, max=0.4)
+        import matplotlib.pyplot as plt
+        plt.imshow(depth_img[0].cpu().numpy(), cmap='viridis')
+        plt.colorbar()
+        plt.savefig("depth_image.png")
+        plt.close()
+        # Plot the depth image with the max_z_pos
+        plt.imshow(depth_img_masked[0].cpu().numpy(), cmap='viridis')
+        plt.colorbar()
+        plt.savefig("depth_image_with_max_z_pos.png")
+        plt.close()
+        return z_pos
+
+    def step(self, actions: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+
+        # Get z_pos from depth image
+        actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions)
+        z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
+
+        tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
         packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
         actions = torch.cat(
             [
@@ -210,14 +183,13 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
                 actions,
             ], dim=1
         )
-        actions = self._convert_to_pos_quat(actions)
+        actions[:, 4] = z_pos
+
         # clip actions
         if self.clip_actions is not None:
             actions = torch.clamp(actions, -self.clip_actions, self.clip_actions)
         # record step information
         obs_dict, rew, terminated, truncated, extras = self.env.unwrapped.step(actions)
-
-        self.env.unwrapped.bpp.update_container_heightmap(self.env, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)
 
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)

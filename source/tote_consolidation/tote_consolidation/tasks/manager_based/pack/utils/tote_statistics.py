@@ -6,6 +6,8 @@
 import json
 import os
 import pickle
+import queue
+import threading
 import time
 from collections import defaultdict, deque
 from typing import Any, Optional
@@ -22,7 +24,7 @@ class ToteStatistics:
     and ejection counts for source and destination totes.
     """
 
-    def __init__(self, num_envs: int, num_totes: int, device: torch.device, save_path: str | None = None):
+    def __init__(self, num_envs: int, num_totes: int, device: torch.device, save_path: str | None = None, disable_logging: bool = False):
         """
         Initialize the tote statistics tracker.
 
@@ -31,19 +33,23 @@ class ToteStatistics:
             num_totes: Number of totes per environment
             device: Device for torch tensors
             save_path: Optional path to incrementally save statistics
+            disable_logging: If True, disable all file logging for maximum performance
         """
         self.num_envs = num_envs
         self.num_totes = num_totes
         self.device = device
         self.save_path = save_path
+        self.disable_logging = disable_logging
 
-        # Initialize file if save_path is provided
-        if save_path:
+        # Initialize file if save_path is provided and logging is not disabled
+        if save_path and not disable_logging:
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
             with open(save_path, "w") as f:
                 json.dump({"environments": {str(i): {} for i in range(num_envs)}, "summary": {}}, f, indent=4)
             self.pkl_dir = os.path.join(os.path.dirname(save_path), "containers")
             os.makedirs(self.pkl_dir, exist_ok=True)
+        else:
+            self.pkl_dir = None
 
         # Initialize statistics trackers
         self.step_count = 0
@@ -74,49 +80,116 @@ class ToteStatistics:
         # Timestamp when logging started
         self.start_time = time.time()
 
+        # Batched logging infrastructure
+        self.log_queue = queue.Queue()
+        self.log_thread = None
+        self.shutdown_event = threading.Event()
+
+        if save_path and not disable_logging:
+            self._start_logging_thread()
+
+    def _start_logging_thread(self):
+        """Start the background logging thread."""
+        self.log_thread = threading.Thread(target=self._logging_worker, daemon=True)
+        self.log_thread.start()
+
+    def _logging_worker(self):
+        """Background worker thread that handles file I/O operations."""
+        # In-memory cache of file data to avoid repeated reads
+        file_cache = {"environments": {str(i): {} for i in range(self.num_envs)}, "summary": {}}
+        cache_dirty = False
+
+        while not self.shutdown_event.is_set():
+            try:
+                # Get log entry with timeout to allow checking shutdown event
+                log_entry = self.log_queue.get(timeout=1.0)
+
+                if log_entry is None:  # Shutdown signal
+                    break
+
+                # Check if this is a pickle file entry or JSON log entry
+                if isinstance(log_entry, tuple) and len(log_entry) == 3 and log_entry[0] == "pickle":
+                    # Handle pickle file write
+                    _, pkl_path, container = log_entry
+                    try:
+                        with open(pkl_path, "wb") as f:
+                            pickle.dump(container, f)
+                    except Exception as e:
+                        print(f"Error writing pickle file {pkl_path}: {e}")
+                else:
+                    # Handle JSON log entry
+                    env_id, data_type, data = log_entry
+
+                    # Update cache
+                    env_key = str(env_id)
+                    if env_key not in file_cache["environments"]:
+                        file_cache["environments"][env_key] = {}
+                    if data_type not in file_cache["environments"][env_key]:
+                        file_cache["environments"][env_key][data_type] = []
+
+                    file_cache["environments"][env_key][data_type].append(data)
+                    cache_dirty = True
+
+                # Periodically flush to disk (every 10 entries or when queue is empty)
+                if self.log_queue.qsize() == 0 or cache_dirty:
+                    try:
+                        with open(self.save_path, "w") as f:
+                            json.dump(file_cache, f, indent=4)
+                        cache_dirty = False
+                    except Exception as e:
+                        print(f"Error writing to log file: {e}")
+
+            except queue.Empty:
+                # Flush any remaining data when queue is empty
+                if cache_dirty:
+                    try:
+                        with open(self.save_path, "w") as f:
+                            json.dump(file_cache, f, indent=4)
+                        cache_dirty = False
+                    except Exception as e:
+                        print(f"Error writing to log file: {e}")
+
+        # Final flush on shutdown
+        if cache_dirty:
+            try:
+                with open(self.save_path, "w") as f:
+                    json.dump(file_cache, f, indent=4)
+            except Exception as e:
+                print(f"Error writing to log file during shutdown: {e}")
+
+    def shutdown(self):
+        """Properly shutdown the logging thread and flush all data."""
+        if self.log_thread and self.log_thread.is_alive():
+            self.shutdown_event.set()
+            self.log_queue.put(None)  # Signal shutdown
+            self.log_thread.join(timeout=5.0)
+            if self.log_thread.is_alive():
+                print("Warning: Logging thread did not shutdown cleanly")
+
+    def __del__(self):
+        """Cleanup logging thread on destruction."""
+        self.shutdown()
+
     def _append_to_file(self, env_id, data_type, data):
         """
-        Append data to the JSON file for a specific environment.
+        Queue data for background logging instead of synchronous file I/O.
 
         Args:
             env_id: Environment ID
             data_type: Type of data (e.g., 'gcu', 'transfers')
             data: Data to append
         """
-        if not self.save_path:
+        if not self.save_path or self.log_thread is None or self.disable_logging:
             return
 
-        # First check if the file exists, if not create it
-        if not os.path.exists(self.save_path):
-            with open(self.save_path, "w") as f:
-                json.dump({"environments": {str(i): {} for i in range(self.num_envs)}, "summary": {}}, f, indent=4)
-
         try:
-            # Read current file content
-            with open(self.save_path) as f:
-                try:
-                    file_data = json.load(f)
-                except json.JSONDecodeError:
-                    file_data = {"environments": {str(i): {} for i in range(self.num_envs)}, "summary": {}}
-
-            # Update data structure
-            env_key = str(env_id)
-            if "environments" not in file_data:
-                file_data["environments"] = {}
-            if env_key not in file_data["environments"]:
-                file_data["environments"][env_key] = {}
-            if data_type not in file_data["environments"][env_key]:
-                file_data["environments"][env_key][data_type] = []
-
-            # Append the new data without losing existing data
-            file_data["environments"][env_key][data_type].append(data)
-
-            # Write back to the file (using 'w' mode to overwrite the file with updated content)
-            with open(self.save_path, "w") as f:
-                json.dump(file_data, f, indent=4)
-
+            # Queue the log entry for background processing
+            self.log_queue.put((env_id, data_type, data), block=False)
+        except queue.Full:
+            # If queue is full, skip this log entry to avoid blocking
+            print(f"Warning: Log queue full, skipping log entry for env {env_id}")
         except Exception as e:
-            print(f"Error appending to file: {e}")
+            print(f"Error queuing log entry: {e}")
 
     def log_gcu(self, gcu_values: torch.Tensor, env_ids: torch.Tensor = None):
         """
@@ -134,7 +207,7 @@ class ToteStatistics:
         self.recent_gcu_env_ids = env_ids.detach().clone()
 
         # Save data to file if path is provided
-        if self.save_path:
+        if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
             for i, env_id in enumerate(env_ids.cpu().numpy()):
                 self._append_to_file(
@@ -159,7 +232,7 @@ class ToteStatistics:
         self.operation_counts["object_transfers"] += len(env_ids)
 
         # Save data to file if path is provided
-        if self.save_path:
+        if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
             for env_id in env_ids.cpu().numpy():
                 self._append_to_file(
@@ -188,7 +261,7 @@ class ToteStatistics:
             self.outbound_gcus[env][tote].append(outbound_gcus[env, tote].item())
 
             # Save to file
-            if self.save_path:
+            if self.save_path and not self.disable_logging:
                 self._append_to_file(
                     env.item(),
                     "tote_gcu_changes",
@@ -214,7 +287,7 @@ class ToteStatistics:
         self.operation_counts["source_tote_ejection"] += len(env_ids)
 
         # Save to file
-        if self.save_path:
+        if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
             for env_id in env_ids.cpu().numpy():
                 self._append_to_file(
@@ -231,7 +304,7 @@ class ToteStatistics:
     def log_container(self, env_idx: int, container: Container):
         self.containers[env_idx] = container
 
-        if self.save_path and self.pkl_dir:
+        if self.save_path and self.pkl_dir and not self.disable_logging:
             current_time = time.time() - self.start_time
 
             # Create per-env subdir
@@ -241,8 +314,12 @@ class ToteStatistics:
             # Save the container as step.pkl (e.g., 42.pkl)
             pkl_filename = f"{self.step_count}.pkl"
             pkl_path = os.path.join(env_dir, pkl_filename)
-            with open(pkl_path, "wb") as f:
-                pickle.dump(container, f)
+
+            # Queue the pickle file write for background processing
+            try:
+                self.log_queue.put(("pickle", pkl_path, container), block=False)
+            except queue.Full:
+                print(f"Warning: Log queue full, skipping container save for env {env_idx}")
 
             # Log pointer to JSON
             self._append_to_file(
@@ -287,7 +364,7 @@ class ToteStatistics:
             self.recent_ejection_data[env_id_item] = snapshot_data
 
             # Save to file
-            if self.save_path:
+            if self.save_path and not self.disable_logging:
                 self._append_to_file(env_id_item, "dest_ejections", snapshot_data)
 
             # Reset counts for this environment
@@ -372,7 +449,7 @@ class ToteStatistics:
         for env_id in range(self.num_envs):
             if self.recent_ejection_data[env_id] is not None:
                 # Read from file if available, otherwise use in-memory data
-                if self.save_path:
+                if self.save_path and not self.disable_logging:
                     try:
                         with open(self.save_path) as f:
                             file_data = json.load(f)
@@ -435,6 +512,14 @@ class ToteStatistics:
 
         return summary
 
+    def flush_logs(self):
+        """Flush all queued log entries to disk."""
+        if self.log_thread and self.log_thread.is_alive():
+            # Wait for queue to be processed
+            while not self.log_queue.empty():
+                time.sleep(0.01)  # Small delay to allow background thread to process
+            time.sleep(0.1)  # Additional time to ensure final flush
+
     def save_to_file(self, filepath: str = None):
         """
         Save statistics to a file.
@@ -442,6 +527,9 @@ class ToteStatistics:
         Args:
             filepath: Path to save the statistics (if None, uses self.save_path with a different filename)
         """
+        # Flush any pending logs first
+        self.flush_logs()
+
         # If no filepath provided, use the one set during initialization
         if filepath is None:
             if self.save_path is None:

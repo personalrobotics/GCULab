@@ -18,7 +18,6 @@ class NoArmPackEnvCfg(PackEnvCfg):
         # post init of parent
         super().__post_init__()
 
-        # switch robot to franka
         self.scene.robot = None
         self.actions.packing_action = mdp.PackingActionCfg(
             asset_name="tote1", place_obj_bottomLeft=True

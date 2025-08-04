@@ -5,19 +5,20 @@
 
 import itertools
 import os
+import time
 from datetime import datetime
 
 import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (  # Multiprocessing versions
     calculate_rotated_bounding_box,
     calculate_tote_bounds,
-    generate_orientations,
-    generate_positions,
+    generate_orientations_batched,
+    generate_positions_batched_multiprocess_cuda,
     reappear_tote_animation,
-    update_object_positions_in_sim,
+    update_object_positions_in_sim_batched,
 )
 from tote_consolidation.tasks.manager_based.pack.utils.tote_statistics import (
     ToteStatistics,
@@ -74,9 +75,10 @@ class ToteManager:
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
-        self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
+        # self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
+        self.dest_totes = torch.zeros(self.num_envs, device=env.device).int()  # Default to one tote per env
         self.overfill_threshold = 0.3  # in meters
-        self.max_objects_per_tote = 3
+        self.max_objects_per_tote = 2
 
         self.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
@@ -98,6 +100,7 @@ class ToteManager:
         self.stats = ToteStatistics(self.num_envs, self.num_totes, env.device, save_path)
         self.log_stats = True
         self.animate = cfg.animate_vis
+        self.obj_settle_wait_steps = cfg.obj_settle_wait_steps
 
         self.env = env
         self.device = env.device
@@ -157,6 +160,47 @@ class ToteManager:
         self.tote_to_obj[env_ids, :, object_ids] = 0
         # Mark objects as placed in the specified tote
         self.tote_to_obj[env_ids, tote_ids, object_ids] = 1
+
+    def put_objects_in_tote_batched(self, all_object_ids, all_tote_ids, env_ids):
+        """
+        Mark objects as placed in specified totes for multiple environments in batch.
+
+        Args:
+            all_object_ids: List of object tensors for each environment
+            all_tote_ids: List of tote tensors for each environment
+            env_ids: Target environments
+
+        Raises:
+            ValueError: If object volumes aren't set
+        """
+        if self.obj_volumes[env_ids].numel() == 0:
+            raise ValueError("Object volumes not set.")
+
+        # Vectorized processing: flatten all valid (env, object, tote) indices
+        # Build lists of valid env indices, object ids, and tote ids
+        env_indices = []
+        object_indices = []
+        tote_indices = []
+
+        for env_idx, (object_ids, tote_ids) in enumerate(zip(all_object_ids, all_tote_ids)):
+            if object_ids.numel() > 0:
+                n = object_ids.numel()
+                env_indices.append(env_ids[env_idx].expand(n))
+                object_indices.append(object_ids)
+                tote_indices.append(tote_ids)
+
+        if len(env_indices) == 0:
+            return
+
+        env_indices = torch.cat(env_indices)
+        object_indices = torch.cat(object_indices)
+        tote_indices = torch.cat(tote_indices)
+
+        # Remove objects from their original tote (set all tote rows for these objects to 0)
+        self.tote_to_obj[env_indices, :, object_indices] = 0
+
+        # Mark objects as placed in the specified tote
+        self.tote_to_obj[env_indices, tote_indices, object_indices] = 1
 
     def _create_dest_totes_mask(self, empty_totes, env_ids):
         """
@@ -387,13 +431,13 @@ class ToteManager:
             prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
 
             # Modify physics properties and apply pose and velocity
-            schemas.modify_rigid_body_properties(
-                prim_path,
-                schemas_cfg.RigidBodyPropertiesCfg(
-                    kinematic_enabled=False,
-                    disable_gravity=False,
-                ),
-            )
+            # schemas.modify_rigid_body_properties(
+            #     prim_path,
+            #     schemas_cfg.RigidBodyPropertiesCfg(
+            #         kinematic_enabled=False,
+            #         disable_gravity=False,
+            #     ),
+            # )
 
             # Apply position and orientation
             asset.write_root_link_pose_to_sim(
@@ -422,6 +466,8 @@ class ToteManager:
         Returns:
             True if objects were placed, False if no available objects
         """
+        t0 = time.perf_counter()
+
         reserve_objects = self.get_reserved_objs_idx(env_ids)
         reserve_objects_idx = torch.stack(torch.where(reserve_objects), dim=1)
         reserve_objects_grouped = [
@@ -430,6 +476,8 @@ class ToteManager:
 
         max_available = reserve_objects.sum(dim=1).max().item()
         if max_available <= 0:
+            t1 = time.perf_counter()
+            print(f"[PROFILE] sample_and_place_objects_in_totes total: {t1 - t0:.6f}s")
             return False
 
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
@@ -441,6 +489,7 @@ class ToteManager:
             else torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
         )
 
+        t_sample0 = time.perf_counter()
         sampled_objects = [
             (
                 torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[
@@ -451,25 +500,57 @@ class ToteManager:
             )
             for i, num in enumerate(num_objects_to_teleport)
         ]
+        t_sample1 = time.perf_counter()
+        print(f"[PROFILE] sampled_objects: {t_sample1 - t_sample0:.6f}s")
 
-        for cur_env, objects, tote_id in zip(env_ids, sampled_objects, tote_ids):
-            if objects.numel() > 0:
-                tote_bounds = self.tote_bounds[tote_id.item()]
-                # First generate orientations
-                orientations = generate_orientations(objects)
+        # Prepare batched data for parallel processing
+        # t_batch0 = time.perf_counter()
 
-                # Then generate positions based on orientations and rotated dimensions
-                positions = generate_positions(
-                    objects,
-                    tote_bounds,
-                    env.scene.env_origins[cur_env],
-                    self.obj_bboxes[cur_env, objects],
-                    orientations,
-                    min_separation=min_separation,
-                )
+        # # Collect tote bounds for all environments
+        # all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
 
-                update_object_positions_in_sim(env, objects, positions, orientations, cur_env)
-                self.put_objects_in_tote(objects, tote_id, torch.tensor([cur_env], device=env_ids.device))
+        # # Collect object bboxes for all environments
+        # all_obj_bboxes = [self.obj_bboxes[cur_env, objects] for cur_env, objects in zip(env_ids, sampled_objects)]
+
+        # # Collect environment origins for all environments
+        # all_env_origins = [env.scene.env_origins[cur_env] for cur_env in env_ids]
+
+        # # Generate orientations for all environments in batch
+        # all_orientations = generate_orientations_batched(sampled_objects, device=env_ids.device)
+
+        # # Generate positions for all environments in batch
+        # all_positions = generate_positions_batched_multiprocess_cuda(
+        #     sampled_objects,
+        #     all_tote_bounds,
+        #     all_env_origins,
+        #     all_obj_bboxes,
+        #     all_orientations,
+        #     min_separation=min_separation
+        # )
+
+        # t_batch1 = time.perf_counter()
+        # print(f"[PROFILE] batched_generation: {t_batch1 - t_batch0:.6f}s")
+
+        # # Update all object positions in simulation in batch
+        # t_sim0 = time.perf_counter()
+        # update_object_positions_in_sim_batched(env, sampled_objects, all_positions, all_orientations, env_ids)
+        # t_sim1 = time.perf_counter()
+        # print(f"[PROFILE] batched_sim_update: {t_sim1 - t_sim0:.6f}s")
+
+        # Update tote tracking for all environments
+        t_tracking0 = time.perf_counter()
+
+        # Prepare tote IDs for each environment
+        all_tote_ids = [torch.full_like(objects, tote_id.item()) for objects, tote_id in zip(sampled_objects, tote_ids)]
+
+        # Update tote tracking in batch
+        self.put_objects_in_tote_batched(sampled_objects, all_tote_ids, env_ids)
+
+        t_tracking1 = time.perf_counter()
+        print(f"[PROFILE] tote_tracking: {t_tracking1 - t_tracking0:.6f}s")
+
+        t1 = time.perf_counter()
+        print(f"[PROFILE] sample_and_place_objects_in_totes total: {t1 - t0:.6f}s")
 
         return True
 

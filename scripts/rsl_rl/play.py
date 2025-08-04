@@ -162,7 +162,7 @@ def main():
             # agent stepping
             actions = policy(obs)
             # env stepping
-            obs, _, _, infos = env.step(actions)
+            obs, _, _, infos = env.step(actions, image_obs=image_obs)
             if "sensor" in infos["observations"]:
                 image_obs = infos["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
                 obs = torch.cat([obs, image_obs], dim=1)

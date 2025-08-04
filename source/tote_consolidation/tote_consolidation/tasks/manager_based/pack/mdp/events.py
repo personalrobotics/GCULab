@@ -441,9 +441,8 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
     envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device))
-    # Clear container for overfilled environments
-    box_size = env.bpp.problems[0].box_size
-    for env_id in envs_overfilled.nonzero(as_tuple=False).squeeze(-1).tolist():
-        env.bpp.problems[env_id].container = Container(box_size)
-        env.bpp.packed_obj_idx[env_id] = []
+    if envs_overfilled.any():
+        print(f"Environments with overfilled totes: {envs_overfilled.nonzero(as_tuple=True)[0].tolist()}")
+        env.scene.write_data_to_sim()
+        env.sim.step(render=True)
     return envs_overfilled

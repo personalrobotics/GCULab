@@ -156,7 +156,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=90,
+                            solver_position_iteration_count=60,
                             solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
@@ -200,8 +200,8 @@ class ObservationsCfg:
         # observation terms (order preserved)
         actions = ObsTerm(func=mdp.last_action)
 
-        # def __post_init__(self):
-        #     self.enable_corruption = True
+        def __post_init__(self):
+            self.enable_corruption = True
         #     self.concatenate_terms = True
 
     class SensorCfg(ObsGroup):
@@ -268,7 +268,7 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     gcu_reward = RewardTerm(
-        func=mdp.gcu_reward, weight=1.0
+        func=mdp.gcu_reward, weight=10.0
     )
 
 
@@ -290,7 +290,8 @@ class CurriculumCfg:
 @configclass
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
-    animate_vis = True
+    animate_vis = False
+    obj_settle_wait_steps = 100
 
 
 ##
@@ -323,4 +324,4 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 90.0
+        self.sim.dt = 1.0 / 60.0

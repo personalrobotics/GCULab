@@ -203,8 +203,13 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.tote_manager.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
         )
+        import time
+        t0 = time.time()
         self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
-        wait_time = 100
+        t1 = time.time()
+        print(f"Time taken to refill source totes: {t1 - t0:.4f} seconds")
+        t0 = time.time()
+        wait_time = self.tote_manager.obj_settle_wait_steps
         for i in range(wait_time):
             self.scene.write_data_to_sim()
             self.sim.step(render=False)
@@ -214,6 +219,8 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.scene.update(dt=self.physics_dt)
         self.scene.write_data_to_sim()
         self.sim.forward()
+        t2 = time.time()
+        print(f"Time taken to wait for objects to settle: {t2 - t1:.4f} seconds")
 
         # post-step:
         # Log the operation
@@ -282,8 +289,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             env_step_count = self._sim_step_counter // self.cfg.decimation
             self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
 
-        # wait until objects settle
-        wait_time = 100
+        wait_time = self.tote_manager.obj_settle_wait_steps
         for i in range(wait_time):
             self.scene.write_data_to_sim()
             self.sim.step(render=False)
