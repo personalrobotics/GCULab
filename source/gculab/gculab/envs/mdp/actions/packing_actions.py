@@ -45,7 +45,7 @@ class PackingAction(ActionTerm):
 
         # get pose of the asset
         self.place_obj_bottomLeft = cfg.place_obj_bottomLeft # origin is bottom left of object placed at bottom left of tote
-        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100 * 0.95
+        self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100
         tote_keys = sorted(
             [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
         )

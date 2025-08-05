@@ -319,7 +319,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 2
+        self.decimation = 1
         self.sim.render_interval = self.decimation
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)

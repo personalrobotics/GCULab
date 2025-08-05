@@ -154,7 +154,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         depth_img_masked[depth_img_masked == 0] = float('inf')
         z_pos = depth_img_masked.view(depth_img.shape[0], -1).min(dim=1).values
 
-        z_pos = 20.0 - z_pos
+        z_pos = 20.01 - z_pos
         z_pos = z_pos.clamp(min=0.0, max=0.4)
         import matplotlib.pyplot as plt
         plt.imshow(depth_img[0].cpu().numpy(), cmap='viridis')
