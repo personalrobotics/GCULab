@@ -262,9 +262,6 @@ class ToteManager:
             # Check if all objects in each tote are zero
             empty_totes = torch.all(self.tote_to_obj[env_ids] == 0, dim=2)
 
-            # Check if all objects in each tote are zero
-            empty_totes = torch.all(self.tote_to_obj[env_ids] == 0, dim=2)
-
             # Create a mask of destination totes for each environment
             dest_totes_mask = self._create_dest_totes_mask(empty_totes, env_ids)
             # Mark destination totes as not empty to exclude them from refilling
@@ -477,7 +474,7 @@ class ToteManager:
         max_available = reserve_objects.sum(dim=1).max().item()
         if max_available <= 0:
             t1 = time.perf_counter()
-            print(f"[PROFILE] sample_and_place_objects_in_totes total: {t1 - t0:.6f}s")
+            print(f"[PROFILE] sample_and_place_objects_in_totes total0: {t1 - t0:.6f}s")
             return False
 
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
@@ -550,7 +547,7 @@ class ToteManager:
         print(f"[PROFILE] tote_tracking: {t_tracking1 - t_tracking0:.6f}s")
 
         t1 = time.perf_counter()
-        print(f"[PROFILE] sample_and_place_objects_in_totes total: {t1 - t0:.6f}s")
+        print(f"[PROFILE] sample_and_place_objects_in_totes total1: {t1 - t0:.6f}s")
 
         return True
 

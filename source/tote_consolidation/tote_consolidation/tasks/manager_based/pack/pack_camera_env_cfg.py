@@ -75,6 +75,7 @@ class DepthObservationsCfg:
 
         # observation terms (order preserved)
         actions = ObsTerm(func=mdp.last_action)
+        obs_dims = ObsTerm(func=mdp.obs_dims)
 
         # def __post_init__(self):
         #     self.enable_corruption = True
@@ -141,7 +142,7 @@ class PackDepthCameraEnvCfg(PackEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         # remove ground as it obstructs the camera
-        self.scene.ground = None
+        # self.scene.ground = None
 
 @configclass
 class PackResNet18DepthCameraEnvCfg(PackDepthCameraEnvCfg):

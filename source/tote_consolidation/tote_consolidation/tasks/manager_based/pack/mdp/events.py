@@ -161,6 +161,14 @@ def object_props(
     env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_voxels(obj_voxels)
 
+def refill_source_totes(
+    env: ManagerBasedRLGCUEnv,
+    env_ids: torch.Tensor
+):
+    """Refills the source totes with objects from the reserve."""
+    if env_ids is None:
+        return    
+    env.tote_manager.refill_source_totes(env_ids=torch.arange(env.num_envs, device=env.device)[env_ids])
 
 def randomize_object_pose_with_invalid_ranges(
     env: ManagerBasedRLGCUEnv,
@@ -397,6 +405,17 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
                 f"Object {asset_cfg.name} is not within the bounds of any tote in environments {env_ids.tolist()}. "
                 f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
             )
+
+def obs_dims(env: ManagerBasedRLGCUEnv):
+    """Returns the dimensions of the object to pack."""
+    if not hasattr(env, "bpp"):
+        return torch.zeros((env.unwrapped.num_envs, 3), device=env.unwrapped.device)
+    tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
+    obj_dims = env.unwrapped.tote_manager.obj_bboxes[torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs]
+    obj_dims = obj_dims / 100.0  # Convert from cm to m
+    return obj_dims
 
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.

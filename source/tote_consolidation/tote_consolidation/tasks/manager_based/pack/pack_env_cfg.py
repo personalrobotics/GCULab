@@ -53,7 +53,7 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 include_ids = [
     "003",  # cracker_box
-    # "004",  # sugar_box
+    "004",  # sugar_box
     # "006",  # mustard_bottle
     # "008",  # pudding_box
     # "009",  # gelatin_box
@@ -69,8 +69,8 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 20
-num_objects_to_reserve = 20
+num_object_per_env = 60
+num_objects_to_reserve = 60
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -199,6 +199,7 @@ class ObservationsCfg:
 
         # observation terms (order preserved)
         actions = ObsTerm(func=mdp.last_action)
+        obs_dims = ObsTerm(func=mdp.obs_dims)
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -227,36 +228,41 @@ class EventCfg:
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    randomize_objects = EventTerm(
-        func=mdp.randomize_object_pose_with_invalid_ranges,
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-            "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
-            "min_separation": 0.13,
-            "invalid_ranges": [
-                {"x": (0.3, 0.5), "y": (-0.07, 0.07)},  # center brim
-                {"x": (0.3, 0.5), "y": (-tote_spacing - 0.07, -tote_spacing + 0.07)},  # left brim
-                {"x": (0.3, 0.5), "y": (tote_spacing - 0.07, tote_spacing + 0.07)},  # right brim
-            ],
-        },
+    refill_source_totes = EventTerm(
+        func=mdp.refill_source_totes,
         mode="reset",
     )
 
-    check_obj_out_of_bounds = EventTerm(
-        func=mdp.check_obj_out_of_bounds,
-        mode="post_reset",
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-        },
-    )
+    # randomize_objects = EventTerm(
+    #     func=mdp.randomize_object_pose_with_invalid_ranges,
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #         "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
+    #         "min_separation": 0.13,
+    #         "invalid_ranges": [
+    #             {"x": (0.3, 0.5), "y": (-0.07, 0.07)},  # center brim
+    #             {"x": (0.3, 0.5), "y": (-tote_spacing - 0.07, -tote_spacing + 0.07)},  # left brim
+    #             {"x": (0.3, 0.5), "y": (tote_spacing - 0.07, tote_spacing + 0.07)},  # right brim
+    #         ],
+    #     },
+    #     mode="reset",
+    # )
 
-    detect_objects_in_tote = EventTerm(
-        func=mdp.detect_objects_in_tote,
-        mode="post_reset",
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-        },
-    )
+    # check_obj_out_of_bounds = EventTerm(
+    #     func=mdp.check_obj_out_of_bounds,
+    #     mode="post_reset",
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #     },
+    # )
+
+    # detect_objects_in_tote = EventTerm(
+    #     func=mdp.detect_objects_in_tote,
+    #     mode="post_reset",
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #     },
+    # )
 
     set_objects_to_invisible = EventTerm(
         func=mdp.set_objects_to_invisible,
@@ -291,7 +297,7 @@ class CurriculumCfg:
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 100
+    obj_settle_wait_steps = 75
 
 
 ##

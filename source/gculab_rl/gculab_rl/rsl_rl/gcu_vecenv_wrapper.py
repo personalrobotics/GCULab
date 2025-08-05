@@ -80,7 +80,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         self.mp_pool = None
         self.mp_enabled = False  # Can be toggled for debugging
 
-    def _convert_to_pos_quat(self, actions: torch.Tensor) -> torch.Tensor:
+    def _convert_to_pos_quat(self, actions: torch.Tensor, object_to_pack: list) -> torch.Tensor:
         orientation_idx = actions[:, 2]
         theta_rad = orientation_idx * (torch.pi / 2)  # 0 or pi/2 radians (0 or 90 degrees)
         qx = torch.sin(theta_rad / 2)
@@ -95,7 +95,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
 
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.zeros(actions.shape[0], device=self.env.unwrapped.device).int()  # TODO (kaikwan): fix this hardcoded index to check with selected object
+            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)  # TODO (kaikwan): fix this hardcoded index to check with selected object
         ]
         quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
         rotated_dim = (
@@ -156,26 +156,25 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
         z_pos = 20.01 - z_pos
         z_pos = z_pos.clamp(min=0.0, max=0.4)
-        import matplotlib.pyplot as plt
-        plt.imshow(depth_img[0].cpu().numpy(), cmap='viridis')
-        plt.colorbar()
-        plt.savefig("depth_image.png")
-        plt.close()
-        # Plot the depth image with the max_z_pos
-        plt.imshow(depth_img_masked[0].cpu().numpy(), cmap='viridis')
-        plt.colorbar()
-        plt.savefig("depth_image_with_max_z_pos.png")
-        plt.close()
+        # import matplotlib.pyplot as plt
+        # plt.imshow(depth_img[0].cpu().numpy(), cmap='viridis')
+        # plt.colorbar()
+        # plt.savefig("depth_image.png")
+        # plt.close()
+        # # Plot the depth image with the max_z_pos
+        # plt.imshow(depth_img_masked[0].cpu().numpy(), cmap='viridis')
+        # plt.colorbar()
+        # plt.savefig("depth_image_with_max_z_pos.png")
+        # plt.close()
         return z_pos
 
     def step(self, actions: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-
-        # Get z_pos from depth image
-        actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions)
-        z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
-
         tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
         packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
+        object_to_pack = [row[0] for row in packable_objects]
+        actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
+        # Get z_pos from depth image
+        z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs

@@ -18,7 +18,7 @@ from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
 from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
-
+from tote_consolidation.tasks.manager_based.pack.utils import bpp_utils
 
 class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
     """Base class for GCU environments.
@@ -129,6 +129,20 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
                 self.scene.update(dt=self.physics_dt)
             # add timeline event to load managers
             self.load_managers()
+
+        self.num_obj_per_env = self.tote_manager.num_objects
+
+        args = {
+            "decreasing_vol": False,  # Whether to use decreasing volume for packing
+            "use_stability": False,  # Whether to use stability checks for packing
+            "use_subset_sum": False,  # Whether to use subset sum for packing
+            "use_multiprocessing": False,  # Disable multiprocessing to avoid CUDA issues
+            "max_workers": 20,  # Use single worker when multiprocessing is enabled
+        }
+
+        self.bpp = bpp_utils.BPP(
+            self.tote_manager, self.num_envs, torch.arange(self.num_obj_per_env, device=self.device), **args
+        )
 
         # extend UI elements
         # we need to do this here after all the managers are initialized

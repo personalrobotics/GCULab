@@ -43,38 +43,6 @@ from isaaclab_tasks.utils import parse_env_cfg
 
 
 # PLACEHOLDER: Extension template (do not remove this comment)
-def get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids):
-    """Get indices of objects that can be packed per environment.
-
-    Args:
-        num_obj_per_env: Number of objects per environment
-        tote_manager: The tote manager object
-        env_indices: Indices of environments to get packable objects for
-        tote_ids: Destination tote IDs for each environment
-
-    Returns:
-        List of tensors containing packable object indices for each environment
-    """
-    num_envs = env_indices.shape[0]
-
-    # Get objects that are reserved (already being picked up)
-    reserved_objs = tote_manager.get_reserved_objs_idx(env_indices)
-
-    # Get objects that are already in destination totes
-    objs_in_dest = tote_manager.get_tote_objs_idx(tote_ids, env_indices)
-
-    # Create a 2D tensor of object indices: shape (num_envs, num_obj_per_env)
-    obj_indices = torch.arange(0, num_obj_per_env, device=env_indices.device).expand(num_envs, -1)
-
-    # Compute mask of packable objects
-    mask = (~reserved_objs & ~objs_in_dest).bool()
-
-    # Use list comprehension to get valid indices per environment
-    valid_indices = [obj_indices[i][mask[i]] for i in range(num_envs)]
-
-    return valid_indices, mask
-
-
 def select_random_packable_objects(packable_objects, packable_mask, device, num_obj_per_env):
     """Select random packable objects for each environment.
 
@@ -182,7 +150,7 @@ def main():
             # [1] currently is the object idx (0-indexed. -1 for no packable objects)
             # [2-9] is the desired object position and orientation
             # [10] is the action to indicate if an object is being placed
-            actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
+            actions[:, 0] = torch.zeros(args_cli.num_envs, device=env.unwrapped.device)  # Destination tote IDs
 
             tote_manager.eject_totes(actions[:, 0].to(torch.int32), env_indices)  # Eject destination totes
 
@@ -190,14 +158,19 @@ def main():
             tote_ids = actions[:, 0].to(torch.int32)
 
             # Get the objects that can be packed
-            packable_objects, packable_mask = get_packable_object_indices(
+            packable_objects, packable_mask = env.unwrapped.bpp.get_packable_object_indices(
                 num_obj_per_env, tote_manager, env_indices, tote_ids
             )
-
             # Select random packable objects
-            obj_idx = select_random_packable_objects(
-                packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env
+            # obj_idx = select_random_packable_objects(
+            #     packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env
+            # )
+            obj_idx = torch.tensor(
+                [row[0] if len(row) > 0 else -1 for row in packable_objects],
+                device=env.unwrapped.device,
+                dtype=torch.int32,
             )
+            print("obj_idx", obj_idx)
 
             actions[:, 1:9] = torch.cat(
                 [
