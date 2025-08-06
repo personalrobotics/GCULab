@@ -257,24 +257,23 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.obs_buf = self.observation_manager.compute()
             self.recorder_manager.record_post_step()
 
-        # kaikwan (07/31): Disabling resets since it is a lifelong reset free environment
         # -- reset envs that terminated/timed-out and log the episode information
-        # reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
-        # if len(reset_env_ids) > 0:
-        #     # trigger recorder terms for pre-reset calls
-        #     self.recorder_manager.record_pre_reset(reset_env_ids)
+        reset_env_ids = self.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+        if len(reset_env_ids) > 0:
+            # trigger recorder terms for pre-reset calls
+            self.recorder_manager.record_pre_reset(reset_env_ids)
 
-        #     self._reset_idx(reset_env_ids)
-        #     # update articulation kinematics
-        #     self.scene.write_data_to_sim()
-        #     self.sim.forward()
+            self._reset_idx(reset_env_ids)
+            # update articulation kinematics
+            self.scene.write_data_to_sim()
+            self.sim.forward()
 
-        #     # if sensors are added to the scene, make sure we render to reflect changes in reset
-        #     if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
-        #         self.sim.render()
+            # if sensors are added to the scene, make sure we render to reflect changes in reset
+            if self.sim.has_rtx_sensors() and self.cfg.rerender_on_reset:
+                self.sim.render()
 
-        #     # trigger recorder terms for post-reset calls
-        #     self.recorder_manager.record_post_reset(reset_env_ids)
+            # trigger recorder terms for post-reset calls
+            self.recorder_manager.record_post_reset(reset_env_ids)
 
         # -- update command
         self.command_manager.compute(dt=self.step_dt)
@@ -302,17 +301,18 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         if "reset" in self.event_manager.available_modes:
             env_step_count = self._sim_step_counter // self.cfg.decimation
             self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
-
-        wait_time = self.tote_manager.obj_settle_wait_steps
-        for i in range(wait_time):
-            self.scene.write_data_to_sim()
-            self.sim.step(render=False)
-            if self._sim_step_counter % self.cfg.sim.render_interval == 0:
-                self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
-        self.scene.write_data_to_sim()
-        self.sim.forward()
+        
+        # kaikwan (07/31): Disabling resets since it is a lifelong reset free environment
+        # wait_time = self.tote_manager.obj_settle_wait_steps
+        # for i in range(wait_time):
+        #     self.scene.write_data_to_sim()
+        #     self.sim.step(render=False)
+        #     if self._sim_step_counter % self.cfg.sim.render_interval == 0:
+        #         self.sim.render()
+        #     # update buffers at sim dt
+        #     self.scene.update(dt=self.physics_dt)
+        # self.scene.write_data_to_sim()
+        # self.sim.forward()
 
         if "post_reset" in self.event_manager.available_modes:
             env_step_count = self._sim_step_counter // self.cfg.decimation
