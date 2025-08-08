@@ -26,7 +26,7 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
             {"out_channels": 8, "kernel_size": 3, "stride": 2},
             {"out_channels": 16, "kernel_size": 3, "stride": 2},
         ],
-        conv_linear_output_size=16,
+        conv_linear_output_size=64,  # Project 128×13×10 into 64-dim
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,

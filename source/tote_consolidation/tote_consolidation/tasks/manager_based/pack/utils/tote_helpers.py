@@ -39,6 +39,37 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
 
     return rotated_dims
 
+def matrix_from_quat(quaternions):
+    """Convert rotations given as quaternions to rotation matrices.
+
+    Args:
+        quaternions: The quaternion orientation in (w, x, y, z). Shape is (..., 4).
+
+    Returns:
+        Rotation matrices. The shape is (..., 3, 3).
+
+    Reference:
+        https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    # Calculate two_s = 2.0 / (quaternions * quaternions).sum(-1)
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
 
 def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     """
@@ -57,7 +88,7 @@ def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
         0
     ) * object_half_dims.unsqueeze(1)
-    rot_matrices = math_utils.matrix_from_quat(orientations)
+    rot_matrices = matrix_from_quat(orientations)
     rotated_corners = torch.bmm(corners, rot_matrices.transpose(1, 2)).detach().cpu()
     rotated_corners_np = rotated_corners.numpy()
     min_vals = np.min(rotated_corners_np, axis=1)

@@ -453,6 +453,33 @@ def gcu_reward(env: ManagerBasedRLGCUEnv):
     print(f"GCU rewards: {rewards}")
     return rewards
 
+def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
+    """
+    Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
+    1 - (% top down volume - GCU of objects).
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+    """
+    total_volume = env.tote_manager.tote_volume
+    env.scene.write_data_to_sim()
+    env.sim.step(render=True)
+    heightmaps = 20 - env.observation_manager.compute()['sensor'] # subtract distance from camera to tote
+    # import matplotlib.pyplot as plt
+    # plt.imshow(heightmaps[0].cpu().numpy(), cmap='viridis')
+    # plt.colorbar()
+    # plt.savefig("heightmap.png")
+    # plt.close()
+    top_down_volumes = (0.26 - heightmaps) * 100 * 0.92 # 0.92
+    top_down_volumes = torch.sum(top_down_volumes, dim=(1, 2))  # Sum over heightmap dimensions
+    top_down_volumes = top_down_volumes / total_volume
+    top_down_volumes = torch.clamp(top_down_volumes, min=0.0, max=1.0).squeeze(1)  # Ensure values are between 0 and 1
+    objects_volume = env.tote_manager.stats.recent_gcu_values[torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes] * 0.8
+    wasted_volume = torch.clamp(1.0 - top_down_volumes - objects_volume, min=0.0, max=1.0)
+    inverse_wasted_volume = 1 / (1 + wasted_volume)  # Inverse to make it a reward
+    print(f"Wasted volume: {wasted_volume}")
+    print(f"Inverse wasted volume: {inverse_wasted_volume}")
+    return inverse_wasted_volume
+
 def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     """Checks if any object is overfilled the tote.
     Args:
