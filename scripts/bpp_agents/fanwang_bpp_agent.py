@@ -125,7 +125,7 @@ def main():
     args = {
         "decreasing_vol": False,  # Whether to use decreasing volume for packing
         "use_stability": False,  # Whether to use stability checks for packing
-        "use_subset_sum": True,  # Whether to use subset sum for packing
+        "use_subset_sum": False,  # Whether to use subset sum for packing
     }
 
     bpp = bpp_utils.BPP(
@@ -154,9 +154,7 @@ def main():
             # [1] currently is the object idx (0-indexed. -1 for no packable objects)
             # [2-9] is the desired object position and orientation
             # [10] is the action to indicate if an object is being placed
-            actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
-
-            tote_manager.eject_totes(actions[:, 0].to(torch.int32), env_indices)  # Eject destination totes
+            actions[:, 0] = torch.zeros(args_cli.num_envs, device=env.unwrapped.device)
 
             # Destination tote IDs for each environment
             tote_ids = actions[:, 0].to(torch.int32)
