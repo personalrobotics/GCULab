@@ -57,7 +57,7 @@ include_ids = [
     # "006",  # mustard_bottle
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    # "036",  # wood_block
+    "036",  # wood_block
     # "061",  # foam_brick
 ]
 
@@ -69,8 +69,8 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 60
-num_objects_to_reserve = 60
+num_object_per_env = 5
+num_objects_to_reserve = 5
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
