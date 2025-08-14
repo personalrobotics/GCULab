@@ -57,7 +57,7 @@ include_ids = [
     # "006",  # mustard_bottle
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    # "036",  # wood_block
+    "036",  # wood_block
     # "061",  # foam_brick
 ]
 
