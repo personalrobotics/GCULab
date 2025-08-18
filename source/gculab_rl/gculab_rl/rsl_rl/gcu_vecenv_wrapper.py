@@ -73,7 +73,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
 
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)  # TODO (kaikwan): fix this hardcoded index to check with selected object
+            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)
         ]
         quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
         rotated_dim = (
@@ -93,7 +93,9 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
     def _get_z_position_from_depth(self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
         """Get the z position from the depth image."""
-        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, 37, 52) # TODO (kaikwan): get shape smarter
+        img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
+        img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
+        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) # TODO (kaikwan): get shape smarter
 
         # Rescale x_pos and y_pos to the range of the depth image
         total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
@@ -112,12 +114,8 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         x0 = (x1 - x_extent).clamp(0, 51)
         y1 = (y0 + y_extent).clamp(0, 36)
 
-        # Create batch indices for advanced indexing
-        batch_idx = torch.arange(depth_img.shape[0], device=self.device)
-
         # For each sample, extract the patch and get the max value
         # Use broadcasting to build masks for all pixels in one go
-        img_h, img_w = 37, 52
         grid_y = torch.arange(img_h, device=self.device).view(1, img_h, 1)
         grid_x = torch.arange(img_w, device=self.device).view(1, 1, img_w)
         y0_ = y0.view(-1, 1, 1)
