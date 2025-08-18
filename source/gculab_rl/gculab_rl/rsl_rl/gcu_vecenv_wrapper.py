@@ -17,43 +17,6 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
 
-
-def _process_single_item(args):
-    """Process a single item for multiprocessing.
-
-    Args:
-        args: Tuple containing (i, actions_i, x_i, y_i, qz_i, qw_i, rotated_half_dim_i, bpp_problem_i)
-
-    Returns:
-        Tuple of (i, z_value, packed_obj_idx)
-    """
-    i, actions_i, x_i, y_i, qz_i, qw_i, rotated_half_dim_i, bpp_problem_i = args
-
-    # Analytically determine the z position of the object
-    curr_attitude = Attitude(0, 0, 0) if qz_i == 0 and qw_i == 1 else Attitude(0, 0, torch.pi / 2)
-    item_to_add = bpp_problem_i.items[int(actions_i[1])]
-    item_to_add.rotate(curr_attitude)
-    item_to_add.calc_heightmap()
-
-    # Convert grid indices to actual coordinates
-    x_coord = int(np.floor(x_i).item())
-    y_coord = int(np.floor(y_i).item())
-    bpp_problem_i.container.add_item_topdown(item_to_add, x_coord, y_coord)
-
-    transform = Transform(
-        Position(bpp_problem_i.container.geometry.x_size - x_coord,
-                bpp_problem_i.container.geometry.y_size - y_coord,
-                item_to_add.position.z),
-        curr_attitude,
-    )
-    item_to_add.transform(transform)
-    bpp_problem_i.container.add_item(item_to_add)
-
-    z_value = rotated_half_dim_i[2] + item_to_add.position.z / 100
-    packed_obj_idx = actions_i[1]
-
-    return i, z_value, packed_obj_idx
-
 class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
     """
     Inherit the RSL-RL wrapper library for GCU Lab environments.
@@ -76,17 +39,32 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         """
         super().__init__(env, clip_actions)
 
-        # Initialize multiprocessing pool
-        self.mp_pool = None
-        self.mp_enabled = False  # Can be toggled for debugging
-
     def _convert_to_pos_quat(self, actions: torch.Tensor, object_to_pack: list) -> torch.Tensor:
-        orientation_idx = actions[:, 2]
-        theta_rad = orientation_idx * (torch.pi / 2)  # 0 or pi/2 radians (0 or 90 degrees)
-        qx = torch.sin(theta_rad / 2)
-        qy = torch.zeros_like(theta_rad)
-        qz = torch.zeros_like(theta_rad)
-        qw = torch.cos(theta_rad / 2)
+        orientation_one_hot = actions[:, 2:]  # shape [batch, 2]
+        orientation_idx = torch.argmax(orientation_one_hot, dim=1)  # shape [
+        # Convert orientation index to quaternion
+        # 0: identity, 1: 90° around z, 2: 90° around x, 3: 90° around y
+        qx = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qy = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qz = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qw = torch.ones_like(orientation_idx, dtype=torch.float32)
+        
+        # Set values for each orientation
+        z_rot_mask = orientation_idx == 1
+        x_rot_mask = orientation_idx == 2
+        y_rot_mask = orientation_idx == 3
+        
+        # For 90° rotation around z (orientation 1)
+        qz[z_rot_mask] = 0.7071068  # sin(π/4)
+        qw[z_rot_mask] = 0.7071068  # cos(π/4)
+        
+        # For 90° rotation around x (orientation 2)
+        qx[x_rot_mask] = 0.7071068  # sin(π/4)
+        qw[x_rot_mask] = 0.7071068  # cos(π/4)
+        
+        # For 90° rotation around y (orientation 3)
+        qy[y_rot_mask] = 0.7071068  # sin(π/4)
+        qw[y_rot_mask] = 0.7071068  # cos(π/4)
 
         # Convert (x, y, theta) actions to (x, y, z, qx, qy, qz, qw)
         # Assume z=0 for placement (to be updated), and theta is in radians
@@ -172,6 +150,8 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
         packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
         object_to_pack = [row[0] for row in packable_objects]
+        for i in range(self.env.unwrapped.num_envs):
+            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
         # Get z_pos from depth image
         z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)

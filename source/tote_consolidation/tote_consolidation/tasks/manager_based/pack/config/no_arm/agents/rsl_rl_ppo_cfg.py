@@ -14,7 +14,6 @@ class NoArmPackPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 1500
     save_interval = 50
     experiment_name = "no_arm_pack"
-    # logger = "wandb"
     empirical_normalization = False
     policy = RslRlPpoActorCriticConv2dCfg(
         init_noise_std=0.5,

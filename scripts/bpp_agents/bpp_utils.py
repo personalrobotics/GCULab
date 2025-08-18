@@ -33,7 +33,7 @@ class BPP:
     """
 
     # Class constants
-    MAX_SOURCE_EJECT_TRIES = 6
+    MAX_SOURCE_EJECT_TRIES = 1
     MAX_WORKERS = 20
     UNUSED_VOLUME_BUFFER = 5000  # 5L buffer for unpackable volume
     GRID_SEARCH_NUM = 25
@@ -338,7 +338,9 @@ class BPP:
             obj_vols = [(idx, obj_volumes[idx].item()) for idx in curr_obj_indices]
             curr_obj_indices = [idx for idx, _ in sorted(obj_vols, key=lambda x: x[1], reverse=True)]
         else:
-            # Randomly shuffle objects
+            # Get first object
+            # curr_obj_indices = [curr_obj_indices[0]] if len(curr_obj_indices) != 0 else []
+            # # Randomly shuffle objects
             shuffled = torch.randperm(len(curr_obj_indices), device="cpu")
             curr_obj_indices = [curr_obj_indices[i] for i in shuffled]
 

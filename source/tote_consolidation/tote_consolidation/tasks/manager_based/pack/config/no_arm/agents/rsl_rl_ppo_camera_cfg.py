@@ -14,7 +14,6 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 1500
     save_interval = 10
     experiment_name = "no_arm_pack"
-    logger = "wandb"
     empirical_normalization = False
     policy = RslRlPpoActorCriticConv2dCfg(
         init_noise_std=2.5,
@@ -39,6 +38,6 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
         schedule="adaptive",
         gamma=0.98,
         lam=0.95,
-        desired_kl=0.05, # should try changing to 0.1 next
+        desired_kl=0.05,
         max_grad_norm=1.0,
     )

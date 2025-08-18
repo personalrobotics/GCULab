@@ -488,7 +488,6 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     """
     envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device))
     if envs_overfilled.any():
-        print(f"Environments with overfilled totes: {envs_overfilled.nonzero(as_tuple=True)[0].tolist()}")
         env.scene.write_data_to_sim()
         env.sim.step(render=True)
     return envs_overfilled
