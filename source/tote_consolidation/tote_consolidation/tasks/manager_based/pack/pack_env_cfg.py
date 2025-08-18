@@ -265,6 +265,7 @@ class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
     obj_settle_wait_steps = 50
+    disable_logging: bool = False
 
 
 ##

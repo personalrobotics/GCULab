@@ -64,7 +64,7 @@ class ToteManager:
         self.true_tote_dim = torch.tensor([51, 34, 26], device=env.device)  # in cm
         self.tote_volume = torch.prod(self.true_tote_dim).item()
         self.num_envs = env.num_envs
-        self.num_objects = cfg.num_object_per_env
+        self.num_objects = cfg.num_object_per_env  # in cm
         self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
         self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
         self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
@@ -81,22 +81,24 @@ class ToteManager:
         self.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
         )
+        self.log_stats = not cfg.disable_logging
 
-        stats_dir = "stats"
-        run_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        # create stats and run name directory if it does not exist
-        if os.path.exists(stats_dir) is False:
-            os.makedirs(stats_dir)
-        run_name = f"Isaac-Pack-NoArm-v0_{run_dir}"
-        # create run name directory
-        run_path = os.path.join(stats_dir, run_name)
-        if os.path.exists(run_path) is False:
-            os.makedirs(run_path)
-        save_path = os.path.join(run_path, "tote_stats.json")
+        if self.log_stats:
+            stats_dir = "stats"
+            run_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            # create stats and run name directory if it does not exist
+            if os.path.exists(stats_dir) is False:
+                os.makedirs(stats_dir)
+            run_name = f"Isaac-Pack-NoArm-v0_{run_dir}"
+            # create run name directory
+            run_path = os.path.join(stats_dir, run_name)
+            if os.path.exists(run_path) is False:
+                os.makedirs(run_path)
+            save_path = os.path.join(run_path, "tote_stats.json")
 
-        # Initialize statistics tracker
-        self.stats = ToteStatistics(self.num_envs, self.num_totes, env.device, save_path)
-        self.log_stats = True
+            # Initialize statistics tracker
+            self.stats = ToteStatistics(self.num_envs, self.num_totes, env.device, save_path, disable_logging=False)
+
         self.animate = cfg.animate_vis
         self.obj_settle_wait_steps = cfg.obj_settle_wait_steps
 
