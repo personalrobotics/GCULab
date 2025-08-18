@@ -122,7 +122,10 @@ def main():
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     # wrap around environment for rsl-rl
-    env = RslRlGCUVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+    if agent_cfg.policy.class_name == "ActorCriticConv2d":
+        env = RslRlGCUVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+    else:
+        env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
     # load previously trained model
