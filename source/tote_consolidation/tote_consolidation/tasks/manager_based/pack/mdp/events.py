@@ -77,6 +77,14 @@ def object_props(
     def compute_voxelized_geometry(mesh, bbox_size, voxel_size=1.0, padding_factor=1.15):
         """
         Voxelize the mesh solidly into a 3D grid that fits the specified bbox size (X, Y, Z).
+
+        Args:
+            mesh: The mesh to voxelize.
+            bbox_size: The target bounding box size (X, Y, Z).
+            voxel_size: The size of each voxel (default: 1.0).
+            padding_factor: A multiplicative factor applied to the bounding box size to ensure the mesh fits comfortably
+                within the voxel grid. The default value of 1.15 provides a 15% margin to account for numerical errors,
+                mesh irregularities, and to avoid clipping during voxelization. Adjust as needed for tighter or looser fits.
         """
         tri_mesh = usdmesh_to_trimesh(mesh)
         if not tri_mesh.is_watertight:
