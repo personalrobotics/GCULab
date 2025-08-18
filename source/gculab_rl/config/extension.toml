@@ -1,0 +1,22 @@
+[package]
+
+# Note: Semantic Versioning is used: https://semver.org/
+version = "0.1.8"
+
+# Description
+title = "GCU Lab RL"
+description="Extension containing reinforcement learning related utilities."
+readme  = "docs/README.md"
+repository = "https://github.com/personalrobotics/GCULab"
+category = "robotics"
+keywords = ["robotics", "rl", "wrappers", "learning"]
+
+[dependencies]
+"gculab" = {}
+"gcu_assets" = {}
+
+[core]
+reloadable = false
+
+[[python.module]]
+name = "gculab_rl"

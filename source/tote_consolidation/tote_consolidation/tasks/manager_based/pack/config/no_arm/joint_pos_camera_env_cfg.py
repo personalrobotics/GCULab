@@ -3,9 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+import tote_consolidation.tasks.manager_based.pack.mdp as mdp
 from isaaclab.utils import configclass
 from tote_consolidation.tasks.manager_based.pack.pack_camera_env_cfg import (
-    PackResNet18DepthCameraEnvCfg,
+    PackDepthCameraEnvCfg,
 )
 
 ##
@@ -14,13 +15,15 @@ from tote_consolidation.tasks.manager_based.pack.pack_camera_env_cfg import (
 
 
 @configclass
-class NoArmPackCameraEnvCfg(PackResNet18DepthCameraEnvCfg):
+class NoArmPackCameraEnvCfg(PackDepthCameraEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
 
-        # switch robot to franka
         self.scene.robot = None
+        self.actions.packing_action = mdp.PackingActionCfg(
+            asset_name="tote1", place_obj_bottomLeft=True
+        )  # asset name is not used in this env
 
 
 @configclass

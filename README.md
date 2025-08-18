@@ -9,6 +9,18 @@
 ---
 
 ### Key Features
+#### PPO packing agent
+Notes: Currently uses multiprocessing for placement calculation, recommended `--num_envs 100`,
+This will be adapted to use depth camera (#13)
+
+**Command:**
+```bash
+# For training
+python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
+# For inference
+python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
+```
+
 
 #### Heuristic-scoring based search packing agent
 Packing agent based on *"Stable bin packing of non-convex 3D objects with a robot manipulator"* by Fan Wang and Kris Hauser.
@@ -19,7 +31,7 @@ Defaults to DBLF heuristic
 
 **Command:**
 ```bash
-python scripts/fanwang_bpp/fanwang_bpp_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 100
+python scripts/bpp_agents/fanwang_bpp_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 100
 ```
 
 #### Pack Task
@@ -27,7 +39,7 @@ Demo for Amazon Packing Task
 
 **Command:**
 ```bash
-python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
+python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 ---
@@ -58,9 +70,11 @@ Using a Python interpreter with Isaac Lab installed, run:
 python -m pip install -e source/tote_consolidation
 python -m pip install -e source/gculab
 python -m pip install -e source/gculab_assets
+python -m pip install -e source/gculab_rl
 ```
 
 ---
+## Running Tasks with RL Agents
 
 ## Running Tasks with Dummy Agents
 
@@ -80,15 +94,6 @@ python scripts/zero_agent.py --task=<TASK_NAME>
 ```bash
 # Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
 python scripts/random_agent.py --task=<TASK_NAME>
-```
-
----
-
-### Test Placement Agent
-**Command:**
-```bash
-# Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 ---
