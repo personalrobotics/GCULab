@@ -32,7 +32,8 @@ def main():
     parser = argparse.ArgumentParser(description="Generate 3D container packing visualizations and GIFs.")
     parser.add_argument("--data_path", type=str, required=True, help="Base path where the container data is saved.")
     parser.add_argument("--env_id", type=int, required=True, help="Environment index to process.")
-    parser.add_argument("--max_steps", type=int, default=None, help="Maximum number of steps to process (optional).")
+    parser.add_argument("--trunc_steps", type=int, default=None, help="Maximum number of steps to process (optional).")
+    parser.add_argument("--max_steps", type=int, default=None, help="Pad with still frames at the end until reaching this many total frames.")
 
     args = parser.parse_args()
 
@@ -47,8 +48,8 @@ def main():
         [f for f in os.listdir(container_dir) if f.endswith(".pkl")], key=lambda x: int(os.path.splitext(x)[0])
     )
 
-    if args.max_steps is not None:
-        step_files = step_files[: args.max_steps]
+    if args.trunc_steps is not None:
+        step_files = step_files[: args.trunc_steps]
 
     with open(os.path.join(container_dir, step_files[0]), "rb") as f:
         first_container = pickle.load(f)
@@ -70,8 +71,8 @@ def main():
         key=lambda x: int(x.split("_")[1].split(".")[0]),
     )
 
-    if args.max_steps is not None:
-        img_files = img_files[: args.max_steps]
+    if args.trunc_steps is not None:
+        img_files = img_files[: args.trunc_steps]
 
     images = []
     for img_file in img_files:
@@ -80,6 +81,18 @@ def main():
         images.append(img)
 
     if images:
+        # Add padding frames until max_steps if specified
+        if args.max_steps is not None and len(images) < args.max_steps:
+            # Calculate how many padding frames we need
+            padding_needed = args.max_steps - len(images)
+            if padding_needed > 0:
+                # Duplicate the last frame multiple times
+                last_frame = images[-1]
+                for _ in range(padding_needed):
+                    # Create a copy of the last frame to avoid reference issues
+                    images.append(last_frame.copy())
+                print(f"Added {padding_needed} still frames to reach {args.max_steps} total frames")
+
         gif_path = os.path.join(temp_env_img_dir, f"animation_env_{args.env_id}.gif")
         images[0].save(gif_path, save_all=True, append_images=images[1:], duration=500, loop=0)
         print(f"Saved animated GIF: {gif_path}")

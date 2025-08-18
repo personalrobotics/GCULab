@@ -34,6 +34,9 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
+parser.add_argument("--random", type=bool, default=False, help="Use random actions instead of the policy.")
+
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -80,6 +83,8 @@ def main():
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
     agent_cfg: RslRlOnPolicyRunnerCfg = cli_args.parse_rsl_rl_cfg(task_name, args_cli)
+
+    env_cfg.seed = agent_cfg.seed
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)
@@ -154,13 +159,41 @@ def main():
         image_obs = extras["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
         obs = torch.cat([obs, image_obs], dim=1)
     timestep = 0
+
+    env.unwrapped.bpp.packed_obj_idx = [[] for _ in range(args_cli.num_envs)]
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
         # run everything in inference mode
         with torch.inference_mode():
             # agent stepping
-            actions = policy(obs)
+            if args_cli.random:
+                # Get action shape from environment
+                action_shape = env.action_space.shape
+                # Generate random actions but ensure last 3 indices are one-hot encoded
+                rand_actions = torch.rand(args_cli.num_envs, action_shape[0], device=env.unwrapped.device) * 10 - 5  # random actions in [-1, 1]
+                # Get one-hot encoding for the last 3 indices
+                action_dim = action_shape[0]
+                one_hot_indices = torch.randint(0, 3, (args_cli.num_envs,), device=env.unwrapped.device)
+                one_hot = torch.zeros(args_cli.num_envs, 3, device=env.unwrapped.device)
+                one_hot.scatter_(1, one_hot_indices.unsqueeze(1), 1.0)
+                # Replace the last 3 indices with one-hot values
+                rand_actions[:, action_dim-3:action_dim] = one_hot
+                actions = rand_actions
+            else:
+                actions = policy(obs)
+
+            stats = env.unwrapped.tote_manager.get_stats_summary()
+            ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
+            print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+            print("\n===== Ejection Summary =====")
+            print(f"Total steps: {stats['total_steps']}")
+            if ejection_summary != {}:
+                for i in range(len(ejection_summary.keys())):
+                    env_id = list(ejection_summary.keys())[i]
+                    print(ejection_summary[env_id])
+                print("==========================\n")
+            env.unwrapped.bpp.update_container_heightmap(env, torch.arange(args_cli.num_envs).to(env.unwrapped.device), torch.zeros(args_cli.num_envs, device=env.unwrapped.device).int())
             # env stepping
             obs, _, _, infos = env.step(actions, image_obs=image_obs)
             if "sensor" in infos["observations"]:
@@ -176,6 +209,11 @@ def main():
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
+
+    
+        print(f"\nStep {timestep}:")
+        env.unwrapped.tote_manager.stats.save_to_file()
+        print("Saved stats to file.")
 
     # close the simulator
     env.close()
