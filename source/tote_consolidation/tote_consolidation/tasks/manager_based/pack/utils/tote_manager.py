@@ -5,7 +5,6 @@
 
 import itertools
 import os
-import time
 from datetime import datetime
 
 import isaaclab.utils.math as math_utils
@@ -54,7 +53,6 @@ class ToteManager:
         Args:
             cfg: Configuration with simulation parameters
             env: Simulation environment
-            animate_vis: Enable/disable animation effects
         """
         self.tote_keys = sorted(
             [key for key in env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
@@ -463,8 +461,6 @@ class ToteManager:
         Returns:
             True if objects were placed, False if no available objects
         """
-        t0 = time.perf_counter()
-
         reserve_objects = self.get_reserved_objs_idx(env_ids)
         reserve_objects_idx = torch.stack(torch.where(reserve_objects), dim=1)
         reserve_objects_grouped = [
@@ -473,8 +469,6 @@ class ToteManager:
 
         max_available = reserve_objects.sum(dim=1).max().item()
         if max_available <= 0:
-            t1 = time.perf_counter()
-            print(f"[PROFILE] sample_and_place_objects_in_totes total0: {t1 - t0:.6f}s")
             return False
 
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
@@ -486,7 +480,6 @@ class ToteManager:
             else torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
         )
 
-        t_sample0 = time.perf_counter()
         sampled_objects = [
             (
                 torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[
@@ -497,57 +490,43 @@ class ToteManager:
             )
             for i, num in enumerate(num_objects_to_teleport)
         ]
-        t_sample1 = time.perf_counter()
-        print(f"[PROFILE] sampled_objects: {t_sample1 - t_sample0:.6f}s")
 
-        # Prepare batched data for parallel processing
-        # t_batch0 = time.perf_counter()
+        if self.animate:
+            # Only generate orientations and positions in totes if visualization is enabled
+            # Prepare batched data for parallel processing
 
-        # # Collect tote bounds for all environments
-        # all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
+            # Collect tote bounds for all environments
+            all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
 
-        # # Collect object bboxes for all environments
-        # all_obj_bboxes = [self.obj_bboxes[cur_env, objects] for cur_env, objects in zip(env_ids, sampled_objects)]
+            # Collect object bboxes for all environments
+            all_obj_bboxes = [self.obj_bboxes[cur_env, objects] for cur_env, objects in zip(env_ids, sampled_objects)]
 
-        # # Collect environment origins for all environments
-        # all_env_origins = [env.scene.env_origins[cur_env] for cur_env in env_ids]
+            # Collect environment origins for all environments
+            all_env_origins = [env.scene.env_origins[cur_env] for cur_env in env_ids]
 
-        # # Generate orientations for all environments in batch
-        # all_orientations = generate_orientations_batched(sampled_objects, device=env_ids.device)
+            # Generate orientations for all environments in batch
+            all_orientations = generate_orientations_batched(sampled_objects, device=env_ids.device)
 
-        # # Generate positions for all environments in batch
-        # all_positions = generate_positions_batched_multiprocess_cuda(
-        #     sampled_objects,
-        #     all_tote_bounds,
-        #     all_env_origins,
-        #     all_obj_bboxes,
-        #     all_orientations,
-        #     min_separation=min_separation
-        # )
+            # Generate positions for all environments in batch
+            all_positions = generate_positions_batched_multiprocess_cuda(
+                sampled_objects,
+                all_tote_bounds,
+                all_env_origins,
+                all_obj_bboxes,
+                all_orientations,
+                min_separation=min_separation
+            )
 
-        # t_batch1 = time.perf_counter()
-        # print(f"[PROFILE] batched_generation: {t_batch1 - t_batch0:.6f}s")
-
-        # # Update all object positions in simulation in batch
-        # t_sim0 = time.perf_counter()
-        # update_object_positions_in_sim_batched(env, sampled_objects, all_positions, all_orientations, env_ids)
-        # t_sim1 = time.perf_counter()
-        # print(f"[PROFILE] batched_sim_update: {t_sim1 - t_sim0:.6f}s")
+            # Update all object positions in simulation in batch
+            update_object_positions_in_sim_batched(env, sampled_objects, all_positions, all_orientations, env_ids)
 
         # Update tote tracking for all environments
-        t_tracking0 = time.perf_counter()
 
         # Prepare tote IDs for each environment
         all_tote_ids = [torch.full_like(objects, tote_id.item()) for objects, tote_id in zip(sampled_objects, tote_ids)]
 
         # Update tote tracking in batch
         self.put_objects_in_tote_batched(sampled_objects, all_tote_ids, env_ids)
-
-        t_tracking1 = time.perf_counter()
-        print(f"[PROFILE] tote_tracking: {t_tracking1 - t_tracking0:.6f}s")
-
-        t1 = time.perf_counter()
-        print(f"[PROFILE] sample_and_place_objects_in_totes total1: {t1 - t0:.6f}s")
 
         return True
 

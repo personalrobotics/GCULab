@@ -35,7 +35,7 @@ parser.add_argument(
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
-parser.add_argument("--random", type=bool, default=False, help="Use random actions instead of the policy.")
+parser.add_argument("--random", action="store_true", default=False, help="Use random actions instead of the policy.")
 
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
@@ -210,7 +210,7 @@ def main():
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
-    
+
         print(f"\nStep {timestep}:")
         env.unwrapped.tote_manager.stats.save_to_file()
         print("Saved stats to file.")

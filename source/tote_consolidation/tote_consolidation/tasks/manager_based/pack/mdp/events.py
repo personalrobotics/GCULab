@@ -167,7 +167,7 @@ def refill_source_totes(
 ):
     """Refills the source totes with objects from the reserve."""
     if env_ids is None:
-        return    
+        return
     env.tote_manager.refill_source_totes(env_ids=torch.arange(env.num_envs, device=env.device)[env_ids])
 
 def randomize_object_pose_with_invalid_ranges(

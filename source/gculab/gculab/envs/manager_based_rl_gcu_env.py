@@ -17,8 +17,9 @@ from isaaclab.managers import EventManager
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
-from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
 from tote_consolidation.tasks.manager_based.pack.utils import bpp_utils
+from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
+
 
 class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
     """Base class for GCU environments.
@@ -136,7 +137,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             "decreasing_vol": False,  # Whether to use decreasing volume for packing
             "use_stability": False,  # Whether to use stability checks for packing
             "use_subset_sum": False,  # Whether to use subset sum for packing
-            "use_multiprocessing": False,  # Disable multiprocessing to avoid CUDA issues
+            "use_multiprocessing": True,  # Disable multiprocessing to avoid CUDA issues
             "max_workers": 20,  # Use single worker when multiprocessing is enabled
         }
 
@@ -217,12 +218,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.tote_manager.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
         )
-        import time
-        t0 = time.time()
         self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
-        t1 = time.time()
-        print(f"Time taken to refill source totes: {t1 - t0:.4f} seconds")
-        t0 = time.time()
         wait_time = self.tote_manager.obj_settle_wait_steps
         for i in range(wait_time):
             self.scene.write_data_to_sim()
@@ -233,8 +229,6 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.scene.update(dt=self.physics_dt)
         self.scene.write_data_to_sim()
         self.sim.forward()
-        t2 = time.time()
-        print(f"Time taken to wait for objects to settle: {t2 - t1:.4f} seconds")
 
         # post-step:
         # Log the operation
@@ -301,7 +295,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         if "reset" in self.event_manager.available_modes:
             env_step_count = self._sim_step_counter // self.cfg.decimation
             self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
-        
+
         # kaikwan (07/31): Disabling resets since it is a lifelong reset free environment
         # wait_time = self.tote_manager.obj_settle_wait_steps
         # for i in range(wait_time):

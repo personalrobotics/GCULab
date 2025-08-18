@@ -4,7 +4,6 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import multiprocessing as mp
-import time
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
@@ -16,6 +15,7 @@ from packing3d import Attitude, Position, Transform
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
+
 
 class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
     """
@@ -48,20 +48,20 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         qy = torch.zeros_like(orientation_idx, dtype=torch.float32)
         qz = torch.zeros_like(orientation_idx, dtype=torch.float32)
         qw = torch.ones_like(orientation_idx, dtype=torch.float32)
-        
+
         # Set values for each orientation
         z_rot_mask = orientation_idx == 1
         x_rot_mask = orientation_idx == 2
         y_rot_mask = orientation_idx == 3
-        
+
         # For 90° rotation around z (orientation 1)
         qz[z_rot_mask] = 0.7071068  # sin(π/4)
         qw[z_rot_mask] = 0.7071068  # cos(π/4)
-        
+
         # For 90° rotation around x (orientation 2)
         qx[x_rot_mask] = 0.7071068  # sin(π/4)
         qw[x_rot_mask] = 0.7071068  # cos(π/4)
-        
+
         # For 90° rotation around y (orientation 3)
         qy[y_rot_mask] = 0.7071068  # sin(π/4)
         qw[y_rot_mask] = 0.7071068  # cos(π/4)
@@ -134,16 +134,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
         z_pos = 20.01 - z_pos
         z_pos = z_pos.clamp(min=0.0, max=0.4)
-        # import matplotlib.pyplot as plt
-        # plt.imshow(depth_img[0].cpu().numpy(), cmap='viridis')
-        # plt.colorbar()
-        # plt.savefig("depth_image.png")
-        # plt.close()
-        # # Plot the depth image with the max_z_pos
-        # plt.imshow(depth_img_masked[0].cpu().numpy(), cmap='viridis')
-        # plt.colorbar()
-        # plt.savefig("depth_image_with_max_z_pos.png")
-        # plt.close()
+
         return z_pos
 
     def step(self, actions: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:

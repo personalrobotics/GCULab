@@ -124,10 +124,7 @@ def main():
         "use_subset_sum": True,  # Whether to use subset sum for packing
     }
 
-    bpp = bpp_utils.BPP(
-        tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
-    )
-    env.unwrapped.bpp = bpp
+    bpp = env.unwrapped.bpp
 
 
     while simulation_app.is_running():
@@ -158,9 +155,9 @@ def main():
             tote_ids = actions[:, 0].to(torch.int32)
 
             # Get the objects that can be packed
-            packable_objects, packable_mask = env.unwrapped.bpp.get_packable_object_indices(
+            packable_objects = bpp.get_packable_object_indices(
                 num_obj_per_env, tote_manager, env_indices, tote_ids
-            )
+            )[0]
             # Select random packable objects
             # obj_idx = select_random_packable_objects(
             #     packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env

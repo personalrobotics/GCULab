@@ -113,6 +113,7 @@ def main():
         args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32
     )  # Track object indices per environment
     tote_manager = env.unwrapped.tote_manager
+    bpp = env.unwrapped.bpp
     num_obj_per_env = tote_manager.num_objects
     num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
 
@@ -127,12 +128,6 @@ def main():
         "use_stability": False,  # Whether to use stability checks for packing
         "use_subset_sum": False,  # Whether to use subset sum for packing
     }
-
-    bpp = bpp_utils.BPP(
-        tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
-    )
-    env.unwrapped.bpp = bpp
-
 
     while simulation_app.is_running():
         # run everything in inference mode
