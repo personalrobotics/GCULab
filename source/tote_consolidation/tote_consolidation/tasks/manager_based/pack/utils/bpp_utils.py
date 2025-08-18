@@ -266,7 +266,6 @@ class BPP:
         with ProcessPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
             results = list(executor.map(self._update_container_worker, batch_args))
 
-        # results = [self._update_container_worker(args) for args in batch_args]
 
         # Update problems with results
         for env_idx, res, container_items, container in results:
