@@ -161,7 +161,10 @@ class ToteStatistics:
         """Properly shutdown the logging thread and flush all data."""
         if self.log_thread and self.log_thread.is_alive():
             self.shutdown_event.set()
-            self.log_queue.put(None)  # Signal shutdown
+            try:
+                self.log_queue.put(None, timeout=1.0)  # Signal shutdown with timeout
+            except queue.Full:
+                print("Warning: Log queue full, could not signal shutdown to logging thread")
             self.log_thread.join(timeout=5.0)
             if self.log_thread.is_alive():
                 print("Warning: Logging thread did not shutdown cleanly")
