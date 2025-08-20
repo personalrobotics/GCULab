@@ -69,8 +69,8 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 60
-num_objects_to_reserve = 60
+num_object_per_env = 6
+num_objects_to_reserve = 6
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes

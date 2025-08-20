@@ -33,20 +33,38 @@ class PackRGBCameraSceneCfg(PackSceneCfg):
         height=37,
     )
 
+# for totes
+# @configclass
+# class PackDepthCameraSceneCfg(PackSceneCfg):
+#     """Configuration for the scene with a robotic arm."""
+#     tiled_camera: TiledCameraCfg = TiledCameraCfg(
+#         prim_path="{ENV_REGEX_NS}/Camera",
+#         offset=TiledCameraCfg.OffsetCfg(pos=(0., -0.43, 0.97), rot=(0.69035, 0.15305, -0.15305, -0.69035), convention="opengl"),
+#         data_types=["distance_to_camera", "rgb"],
+#         spawn=sim_utils.PinholeCameraCfg(
+#             focal_length=5.05, focus_distance=2.5, horizontal_aperture=10.24, clipping_range=(0.1, 21.0)
+#         ),
+#         width=1024,
+#         height=1024,
+#         debug_vis=True,
+#     )
+
 
 @configclass
 class PackDepthCameraSceneCfg(PackSceneCfg):
     """Configuration for the scene with a robotic arm."""
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
-        offset=TiledCameraCfg.OffsetCfg(pos=(0.45, -0.645, 20.0), rot=(0.0, 0.0, 0.0, -1.0), convention="opengl"),
-        data_types=["distance_to_camera"],
+        offset=TiledCameraCfg.OffsetCfg(pos=(0., 0., 0.38), rot=(0.56472, 0.42555, -0.42555, -0.56472), convention="opengl"),
+        data_types=["distance_to_camera", "rgb"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=810.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 21.0)
+            focal_length=5.05, focus_distance=2.5, horizontal_aperture=10.24, clipping_range=(0.1, 21.0)
         ),
-        width=52,
-        height=37,
+        width=1024,
+        height=1024,
+        debug_vis=True,
     )
+
 
 
 @configclass
@@ -86,7 +104,9 @@ class DepthObservationsCfg:
         image = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "data_type": "distance_to_camera"}
         )
-
+        rgb = ObsTerm(
+            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "data_type": "rgb"}
+        )
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     sensor: SensorCfg = SensorCfg()
