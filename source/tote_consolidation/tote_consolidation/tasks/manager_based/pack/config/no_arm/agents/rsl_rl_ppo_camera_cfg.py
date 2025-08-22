@@ -16,7 +16,7 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "no_arm_pack"
     empirical_normalization = False
     policy = RslRlPpoActorCriticConv2dCfg(
-        init_noise_std=2.5,
+        init_noise_std=1.5,
         actor_hidden_dims=[128, 128],
         critic_hidden_dims=[128, 128],
         activation="elu",
@@ -36,8 +36,8 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
         num_mini_batches=4,
         learning_rate=1.0e-4,
         schedule="adaptive",
-        gamma=0.98,
+        gamma=0.99,
         lam=0.95,
-        desired_kl=0.05,
+        desired_kl=0.05, # larger -> higher lr
         max_grad_norm=1.0,
     )

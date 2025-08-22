@@ -343,9 +343,6 @@ class ToteManager:
         if not overfilled_envs.any():
             return overfilled_envs
 
-        if is_dest:
-            print(f"Overfilled totes detected in environments: {env_ids[overfilled_envs]}")
-
         # Animate tote ejection if enabled
         if self.animate:
             reappear_tote_animation(
@@ -363,31 +360,64 @@ class ToteManager:
         outbound_gcus = self.get_gcu(env_ids)
         if self.log_stats:
             if is_dest:
+                # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
+                #     print("logging dest tote for env_idx:", env_idx)
+                #     self.env.unwrapped.bpp.update_container_heightmap(
+                #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
+                #     )
+                #     self.stats.log_container(env_idx, problem.container)
                 self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
             self.stats.log_tote_eject_gcus(
                 torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
             )
-        assets_to_eject = []
-        for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
-            # Get all objects in the overfilled tote
-            objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
-            if objects_in_tote.numel() > 0:
-                # Add to the list of assets to eject
-                assets_to_eject.append([f"object{obj_id.item()}" for obj_id in objects_in_tote])
 
-        for env_id, asset_names in zip(env_ids[overfilled_envs], assets_to_eject):
-            # Reset the asset to reserve
-            for asset_name in asset_names:
-                asset = self.env.scene[asset_name]
-                default_root_state = asset.data.default_root_state[env_id]
-                default_root_state[:3] += self.env.scene.env_origins[env_id, :3]
-                asset.write_root_link_pose_to_sim(
-                    default_root_state[:7], env_ids=torch.tensor([env_id], device=self.env.device)
-                )
-                asset.write_root_com_velocity_to_sim(
-                    default_root_state[7:], env_ids=torch.tensor([env_id], device=self.env.device)
-                )
-                asset.set_visibility(False, env_ids=torch.tensor([env_id], device=self.env.device))
+        # Reset all objects in overfilled envs
+        if overfilled_envs.any():
+            if not self.animate:
+                for rigid_object in self.env.scene.rigid_objects.values():
+                    # obtain default and deal with the offset for env origins
+                    default_root_state = rigid_object.data.default_root_state[env_ids[overfilled_envs]].clone()
+                    default_root_state[:, 0:3] += self.env.scene.env_origins[env_ids[overfilled_envs]]
+                    # set into the physics simulation
+                    rigid_object.write_root_pose_to_sim(default_root_state[:, :7], env_ids=env_ids[overfilled_envs])
+                    rigid_object.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids=env_ids[overfilled_envs])
+                    rigid_object.set_visibility(False, env_ids=env_ids[overfilled_envs])
+            else:
+                # Find all objects in overfilled totes
+                if overfilled_envs.any():
+                    # First, collect all environment/object pairs that need to be reset
+                    env_indices = []
+                    obj_indices = []
+                    
+                    for i, (env_id, tote_id) in enumerate(zip(env_ids[overfilled_envs], tote_ids[overfilled_envs])):
+                        objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
+                        if objects_in_tote.numel() > 0:
+                            env_indices.extend([env_id.item()] * objects_in_tote.numel())
+                            obj_indices.extend(objects_in_tote.tolist())
+                    
+                    if len(env_indices) > 0:
+                        env_indices = torch.tensor(env_indices, device=self.env.device)
+                        obj_indices = torch.tensor(obj_indices, device=self.env.device)
+                        
+                    # Process assets in batches by object ID for better vectorization
+                        unique_obj_ids = torch.unique(obj_indices)
+                        for obj_id in unique_obj_ids:
+                            asset_name = f"object{obj_id.item()}"
+                            asset = self.env.scene[asset_name]
+                            
+                            # Find which environments need this object reset
+                            mask = obj_indices == obj_id
+                            reset_env_ids = env_indices[mask]
+                            
+                            # Get default states for these environments
+                            default_root_states = asset.data.default_root_state[reset_env_ids].clone()
+                            # Add environment origins
+                            default_root_states[:, :3] += self.env.scene.env_origins[reset_env_ids, :3]
+                            
+                            # Apply poses and velocities in one operation per object
+                            asset.write_root_link_pose_to_sim(default_root_states[:, :7], env_ids=reset_env_ids)
+                            asset.write_root_com_velocity_to_sim(default_root_states[:, 7:], env_ids=reset_env_ids)
+                            asset.set_visibility(False, env_ids=reset_env_ids)
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0

@@ -15,6 +15,7 @@ from packing3d import Attitude, Position, Transform
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
+import isaaclab.utils.math as math_utils
 
 
 class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
@@ -39,32 +40,65 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         """
         super().__init__(env, clip_actions)
 
+    # batch*n
+    def normalize_vector(self, v):
+        batch=v.shape[0]
+        v_mag = torch.sqrt(v.pow(2).sum(1))# batch
+        v_mag = torch.max(v_mag, torch.autograd.Variable(torch.FloatTensor([1e-8]).cuda()))
+        v_mag = v_mag.view(batch,1).expand(batch,v.shape[1])
+        v = v/v_mag
+        return v
+        
+    # u, v batch*n
+    def cross_product(self, u, v):
+        batch = u.shape[0]
+        #print (u.shape)
+        #print (v.shape)
+        i = u[:,1]*v[:,2] - u[:,2]*v[:,1]
+        j = u[:,2]*v[:,0] - u[:,0]*v[:,2]
+        k = u[:,0]*v[:,1] - u[:,1]*v[:,0]
+            
+        out = torch.cat((i.view(batch,1), j.view(batch,1), k.view(batch,1)),1)#batch*3
+            
+        return out
+    
+    # batch*6
+    def compute_rotation_matrix_from_ortho6d(self, poses):
+        x_raw = poses[:,0:3]#batch*3
+        y_raw = poses[:,3:6]#batch*3
+            
+        x = self.normalize_vector(x_raw) #batch*3
+        z = self.cross_product(x,y_raw) #batch*3
+        z = self.normalize_vector(z)#batch*3
+        y = self.cross_product(z,x)#batch*3
+            
+        x = x.view(-1,3,1)
+        y = y.view(-1,3,1)
+        z = z.view(-1,3,1)
+        matrix = torch.cat((x,y,z), 2) #batch*3*3
+        return matrix
+
+
+    def _convert_6d_rotation_to_quaternion(self, rotation_6d: torch.Tensor) -> torch.Tensor:
+        """Convert 6D rotation representation to quaternion.
+        
+        Args:
+            rotation_6d: 6D rotation tensor [batch, 6]
+        Returns:
+            Quaternion tensor [batch, 4]
+        """
+        r_matrix = self.compute_rotation_matrix_from_ortho6d(rotation_6d)
+        # Convert rotation matrix to quaternion
+        quats = math_utils.quat_from_matrix(r_matrix)  # batch*4
+        
+        return quats
+
     def _convert_to_pos_quat(self, actions: torch.Tensor, object_to_pack: list) -> torch.Tensor:
-        orientation_one_hot = actions[:, 2:]  # shape [batch, 2]
-        orientation_idx = torch.argmax(orientation_one_hot, dim=1)  # shape [
-        # Convert orientation index to quaternion
-        # 0: identity, 1: 90° around z, 2: 90° around x, 3: 90° around y
-        qx = torch.zeros_like(orientation_idx, dtype=torch.float32)
-        qy = torch.zeros_like(orientation_idx, dtype=torch.float32)
-        qz = torch.zeros_like(orientation_idx, dtype=torch.float32)
-        qw = torch.ones_like(orientation_idx, dtype=torch.float32)
+        quat_pred = actions[:, 2:]  # shape [batch, 6]
+        assert quat_pred.shape[1] == 6, "Expected quaternion to have 6 components for 6D rotation representation, but got {}".format(quat_pred.shape[1])
 
-        # Set values for each orientation
-        z_rot_mask = orientation_idx == 1
-        x_rot_mask = orientation_idx == 2
-        y_rot_mask = orientation_idx == 3
-
-        # For 90° rotation around z (orientation 1)
-        qz[z_rot_mask] = 0.7071068  # sin(π/4)
-        qw[z_rot_mask] = 0.7071068  # cos(π/4)
-
-        # For 90° rotation around x (orientation 2)
-        qx[x_rot_mask] = 0.7071068  # sin(π/4)
-        qw[x_rot_mask] = 0.7071068  # cos(π/4)
-
-        # For 90° rotation around y (orientation 3)
-        qy[y_rot_mask] = 0.7071068  # sin(π/4)
-        qw[y_rot_mask] = 0.7071068  # cos(π/4)
+        # Convert 6D rotation representation to 4D quaternion using helper function
+        quats = self._convert_6d_rotation_to_quaternion(quat_pred)
 
         # Convert (x, y, theta) actions to (x, y, z, qx, qy, qz, qw)
         # Assume z=0 for placement (to be updated), and theta is in radians
@@ -75,7 +109,6 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
             torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)
         ]
-        quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
         rotated_dim = (
             calculate_rotated_bounding_box(
                 bbox_offset, quats, device=self.env.unwrapped.device
@@ -141,13 +174,15 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         object_to_pack = [row[0] for row in packable_objects]
         for i in range(self.env.unwrapped.num_envs):
             self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
+        
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
+        
         # Get z_pos from depth image
         z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs
-                torch.tensor([row[0] for row in packable_objects], device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
+                torch.tensor(object_to_pack, device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
                 actions,
             ], dim=1
         )

@@ -458,7 +458,6 @@ def gcu_reward(env: ManagerBasedRLGCUEnv):
         pre_reset_rewards = env.tote_manager.stats.recent_gcu_values
         # Assign the GCU value of the destination tote for each resetting environment.
         rewards[reset_envs] = pre_reset_rewards[reset_envs, env.tote_manager.dest_totes[reset_envs]]
-    print(f"GCU rewards: {rewards}")
     return rewards
 
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
