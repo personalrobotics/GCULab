@@ -4,6 +4,9 @@ from collections import deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
+import os
+import pickle
+import hashlib
 
 import isaaclab.utils.math as math_utils
 import matplotlib
@@ -25,6 +28,23 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box_np,
 )
 
+# Define worker functions at module level for picklability
+def create_items_worker(args):
+    env_idx, obj_voxels, obj_asset_paths, objects = args
+    items = [
+        Item(
+            np.array(obj_voxels[j], dtype=np.float32),
+            obj_asset_paths[j]
+        )
+        for j in objects
+    ]
+    return env_idx, items
+
+def create_problem_worker(args):
+    env_idx, tote_dims, items = args
+    problem = PackingProblem(tote_dims, items)
+    return env_idx, problem
+
 
 class BPP:
     """
@@ -34,10 +54,13 @@ class BPP:
 
     # Class constants
     MAX_SOURCE_EJECT_TRIES = 6
-    MAX_WORKERS = 20
+    MAX_WORKERS = 25
     UNUSED_VOLUME_BUFFER = 5000  # 5L buffer for unpackable volume
     GRID_SEARCH_NUM = 25
     STEP_WIDTH = 90
+    
+    # Cache directory for storing precomputed packing components
+    CACHE_DIR = os.path.join(os.path.expanduser("~"), ".prl_cp_cache", "packing_cache")
 
     def __init__(self, tote_manager, num_envs: int, objects: list, scale: float = 1.0, **kwargs):
         """
@@ -55,6 +78,9 @@ class BPP:
         self.tote_manager = tote_manager
         self.num_envs = num_envs
         self.kwargs = kwargs
+        
+        # Create cache directory if it doesn't exist
+        os.makedirs(self.CACHE_DIR, exist_ok=True)
 
         # Initialize environment-specific tracking
         self.packed_obj_idx = [[] for _ in range(num_envs)]
@@ -67,27 +93,120 @@ class BPP:
         # Setup packing problem components
         self._initialize_packing_components()
 
+    def _get_cache_key(self):
+        """Generate a unique cache key based on environment configuration"""
+        # Get seed from environment if available
+        seed = self.tote_manager.env.unwrapped.cfg.seed
+        # Create a hash of the key components
+        key_components = [
+            f"seed={seed}",
+            f"num_envs={self.num_envs}",
+            f"num_objects={len(self.objects)}",
+            f"scale={self.scale}"
+        ]
+
+        # Create a hash of all components
+        key_str = '_'.join(key_components)
+        print("Generating cache key:", key_str)
+        return hashlib.md5(key_str.encode()).hexdigest()
+
     def _initialize_packing_components(self):
         """Initialize tote dimensions, object data, and packing problems."""
+        start_time = time.time()
+        print("Initializing packing components...")
+        
+        # Check if we have a cached version
+        cache_key = self._get_cache_key()
+        cache_file = os.path.join(self.CACHE_DIR, f"{cache_key}.pkl")
+        
+        if os.path.exists(cache_file):
+            print(f"Loading cached packing components from {cache_file}")
+            try:
+                with open(cache_file, 'rb') as f:
+                    cached_data = pickle.load(f)
+                    self.tote_dims = cached_data['tote_dims']
+                    self.obj_dims = cached_data['obj_dims']
+                    self.obj_voxels = cached_data['obj_voxels']
+                    self.problems = cached_data['problems']
+                    self.display = cached_data['display']
+                print(f"Successfully loaded cached data in {time.time() - start_time:.3f}s")
+                return
+            except Exception as e:
+                print(f"Error loading cache: {e}. Rebuilding components...")
+        
+        # If we reach here, we need to build the components from scratch
         self.tote_dims, self.obj_dims, self.obj_voxels = self._get_packing_variables()
+        
+        # Convert all data to CPU and NumPy before multiprocessing to avoid CUDA errors
+        cpu_obj_voxels = []
+        cpu_asset_paths = []
+        
+        for i in range(self.num_envs):
+            # Convert voxels to CPU/NumPy if they're tensors
+            env_voxels = []
+            for j in self.objects:
+                voxel = self.obj_voxels[i][j]
+                if isinstance(voxel, torch.Tensor):
+                    voxel = voxel.cpu().numpy()
+                env_voxels.append(voxel)
+            cpu_obj_voxels.append(env_voxels)
+            
+            # Convert asset paths to CPU if needed
+            env_paths = []
+            for j in self.objects:
+                path = self.tote_manager.obj_asset_paths[i][j]
+                if isinstance(path, torch.Tensor):
+                    path = path.cpu().numpy()
+                env_paths.append(path)
+            cpu_asset_paths.append(env_paths)
+        
+        # Prepare arguments for item creation with CPU data
+        item_args = []
+        for i in range(self.num_envs):
+            # Ensure objects list is CPU-based
+            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item() 
+                          for obj in self.objects]
+            item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
+        print("Time to prepare item arguments: {:.3f}s".format(time.time() - start_time))
 
-        # Create items for each environment
-        items = [
-            [
-                Item(
-                    np.array(self.obj_voxels[i][j], dtype=np.float32),
-                    self.tote_manager.obj_asset_paths[i][j]
-                )
-                for j in self.objects
-            ]
+        # Create items using multiprocessing with limited workers to avoid memory issues
+        all_items = [None] * self.num_envs
+        with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
+            for env_idx, items in executor.map(create_items_worker, item_args):
+                all_items[env_idx] = items
+        print(f"Time to create items: {time.time() - start_time:.3f}s")
+        
+        # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
+        problem_args = [
+            (i, self.tote_dims, all_items[i])
             for i in range(self.num_envs)
         ]
+        
+        # Create problems using multiprocessing with limited workers
+        self.problems = [None] * self.num_envs
+        with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
+            for env_idx, problem in executor.map(create_problem_worker, problem_args):
+                self.problems[env_idx] = problem
+        print("Time to create problems: {:.3f}s".format(time.time() - start_time))
 
         self.display = Display(self.tote_dims)
-        self.problems = [
-            PackingProblem(self.tote_dims, items[i])
-            for i in range(self.num_envs)
-        ]
+        
+        # Save the components to cache for future use
+        try:
+            cache_data = {
+                'tote_dims': self.tote_dims,
+                'obj_dims': self.obj_dims,
+                'obj_voxels': self.obj_voxels,
+                'problems': self.problems,
+                'display': self.display
+            }
+            with open(cache_file, 'wb') as f:
+                pickle.dump(cache_data, f)
+            print(f"Saved packing components to cache: {cache_file}")
+        except Exception as e:
+            print(f"Error saving to cache: {e}")
+        
+        print(f"Packing components initialization time: {time.time() - start_time:.3f}s")
 
     def _get_packing_variables(self) -> tuple[list[int], list, list]:
         """
@@ -339,9 +458,11 @@ class BPP:
             obj_vols = [(idx, obj_volumes[idx].item()) for idx in curr_obj_indices]
             curr_obj_indices = [idx for idx, _ in sorted(obj_vols, key=lambda x: x[1], reverse=True)]
         else:
-            # Randomly shuffle objects
-            shuffled = torch.randperm(len(curr_obj_indices), device="cpu")
-            curr_obj_indices = [curr_obj_indices[i] for i in shuffled]
+            # Use original order if not sorting by volume
+            pass
+            # # Randomly shuffle objects
+            # shuffled = torch.randperm(len(curr_obj_indices), device="cpu")
+            # curr_obj_indices = [curr_obj_indices[i] for i in shuffled]
 
         if not curr_obj_indices:
             return (i, (None, None, None, curr_obj_indices))

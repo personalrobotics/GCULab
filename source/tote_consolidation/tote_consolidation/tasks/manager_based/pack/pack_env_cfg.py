@@ -53,11 +53,11 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 include_ids = [
     "003",  # cracker_box
-    "004",  # sugar_box
+    # "004",  # sugar_box
     # "006",  # mustard_bottle
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    "036",  # wood_block
+    # "036",  # wood_block
     # "061",  # foam_brick
 ]
 
@@ -278,7 +278,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=4096, env_spacing=2.5, replicate_physics=False)
+    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False , clone_in_fabric=True)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

@@ -38,6 +38,6 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
         schedule="adaptive",
         gamma=0.98,
         lam=0.95,
-        desired_kl=0.05,
+        desired_kl=0.05, # larger -> higher lr
         max_grad_norm=1.0,
     )

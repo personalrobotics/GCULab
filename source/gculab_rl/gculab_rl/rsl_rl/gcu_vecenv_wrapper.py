@@ -141,13 +141,15 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         object_to_pack = [row[0] for row in packable_objects]
         for i in range(self.env.unwrapped.num_envs):
             self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
+        
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
+        
         # Get z_pos from depth image
         z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs
-                torch.tensor([row[0] for row in packable_objects], device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
+                torch.tensor(object_to_pack, device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
                 actions,
             ], dim=1
         )
