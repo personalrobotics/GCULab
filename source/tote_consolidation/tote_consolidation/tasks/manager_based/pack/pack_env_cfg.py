@@ -102,32 +102,32 @@ class PackSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -1.5 * tote_spacing, 0.0)),
     )
 
-    tote2 = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Tote2",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=tote_usd_path,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * tote_spacing, 0.0)),
-    )
+    # tote2 = AssetBaseCfg(
+    #     prim_path="{ENV_REGEX_NS}/Tote2",
+    #     spawn=sim_utils.UsdFileCfg(
+    #         usd_path=tote_usd_path,
+    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+    #     ),
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * tote_spacing, 0.0)),
+    # )
 
-    tote3 = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Tote3",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=tote_usd_path,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * tote_spacing, 0.0)),
-    )
+    # tote3 = AssetBaseCfg(
+    #     prim_path="{ENV_REGEX_NS}/Tote3",
+    #     spawn=sim_utils.UsdFileCfg(
+    #         usd_path=tote_usd_path,
+    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+    #     ),
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * tote_spacing, 0.0)),
+    # )
 
-    tote4 = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Tote4",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=tote_usd_path,
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
-    )
+    # tote4 = AssetBaseCfg(
+    #     prim_path="{ENV_REGEX_NS}/Tote4",
+    #     spawn=sim_utils.UsdFileCfg(
+    #         usd_path=tote_usd_path,
+    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+    #     ),
+    #     init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
+    # )
 
     # robots
     right_robot: ArticulationCfg | None = None
@@ -210,52 +210,52 @@ class ObservationsCfg:
 class EventCfg:
     """Configuration for events."""
 
-    obj_volume = EventTerm(
-        func=mdp.object_props,
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env)],
-            "num_objects": num_object_per_env,
-        },
-        mode="startup",
-    )
+    # obj_volume = EventTerm(
+    #     func=mdp.object_props,
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env)],
+    #         "num_objects": num_object_per_env,
+    #     },
+    #     mode="startup",
+    # )
 
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
-    randomize_objects = EventTerm(
-        func=mdp.randomize_object_pose_with_invalid_ranges,
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-            "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
-            "min_separation": 0.13,
-            "invalid_ranges": [
-                {"x": (0.3, 0.5), "y": (-0.07, 0.07)},  # center brim
-                {"x": (0.3, 0.5), "y": (-tote_spacing - 0.07, -tote_spacing + 0.07)},  # left brim
-                {"x": (0.3, 0.5), "y": (tote_spacing - 0.07, tote_spacing + 0.07)},  # right brim
-            ],
-        },
-        mode="reset",
-    )
+    # randomize_objects = EventTerm(
+    #     func=mdp.randomize_object_pose_with_invalid_ranges,
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #         "pose_range": {"x": (0.3, 0.5), "y": (-0.65, 0.65), "z": (0.6, 0.9)},
+    #         "min_separation": 0.13,
+    #         "invalid_ranges": [
+    #             {"x": (0.3, 0.5), "y": (-0.07, 0.07)},  # center brim
+    #             {"x": (0.3, 0.5), "y": (-tote_spacing - 0.07, -tote_spacing + 0.07)},  # left brim
+    #             {"x": (0.3, 0.5), "y": (tote_spacing - 0.07, tote_spacing + 0.07)},  # right brim
+    #         ],
+    #     },
+    #     mode="reset",
+    # )
 
-    check_obj_out_of_bounds = EventTerm(
-        func=mdp.check_obj_out_of_bounds,
-        mode="post_reset",
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-        },
-    )
+    # check_obj_out_of_bounds = EventTerm(
+    #     func=mdp.check_obj_out_of_bounds,
+    #     mode="post_reset",
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #     },
+    # )
 
-    detect_objects_in_tote = EventTerm(
-        func=mdp.detect_objects_in_tote,
-        mode="post_reset",
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
-        },
-    )
+    # detect_objects_in_tote = EventTerm(
+    #     func=mdp.detect_objects_in_tote,
+    #     mode="post_reset",
+    #     params={
+    #         "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env - num_objects_to_reserve)],
+    #     },
+    # )
 
-    set_objects_to_invisible = EventTerm(
-        func=mdp.set_objects_to_invisible,
-        mode="post_reset",
-    )
+    # set_objects_to_invisible = EventTerm(
+    #     func=mdp.set_objects_to_invisible,
+    #     mode="post_reset",
+    # )
 
 
 @configclass
