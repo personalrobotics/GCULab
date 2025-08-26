@@ -99,8 +99,7 @@ python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 python scripts/teleop_se3_agent.py --task Isaac-Pack-UR5-Teleop-v0 --num_envs 1 --teleop_device mello
 ```
 ### Teleop Device
-**Mello**
-Mello is a teleoperation device designed for intuitive robot control, similar in concept to Gello. It mimics the robot's joint structure, allowing users to control the robot by physically moving the device. Joint positions are sent directly to the robot, eliminating the need for inverse kinematics or physics-based computation. Mello is especially useful for imitation learning, where human demonstrations collected via teleoperation are used to train models. Because Mello closely matches the robot’s kinematics, it enables efficient and accurate data collection for learning from demonstration.
+**Mello** is a teleoperation device designed for intuitive robot control, similar in concept to Gello. It mimics the robot's joint structure, allowing users to control the robot by physically moving the device. Joint positions are sent directly to the robot, eliminating the need for inverse kinematics or physics-based computation. Mello is especially useful for imitation learning, where human demonstrations collected via teleoperation are used to train models. Because Mello closely matches the robot’s kinematics, it enables efficient and accurate data collection for learning from demonstration.
 
 ---
 
