@@ -125,7 +125,7 @@ def pre_process_actions(
         min_gripper = -4045
 
         gripper_joints = torch.tensor([
-            smoothed_command * (max_value / min_gripper),                           # finger joint
+            smoothed_command * (max_value / min_gripper),                           # finger_joint
             smoothed_command * (max_value / min_gripper),                           # right_outer_knuckle_joint
             smoothed_command * (max_value / -1*min_gripper) + max_value,            # right_outer_finger_joint
             smoothed_command * (max_value / -1*min_gripper) + max_value,            # left_outer_finger_joint
