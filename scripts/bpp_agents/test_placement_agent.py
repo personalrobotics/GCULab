@@ -34,7 +34,6 @@ simulation_app = app_launcher.app
 import os
 from datetime import datetime
 
-import bpp_utils
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch

@@ -24,6 +24,12 @@ parser.add_argument("--num_envs", type=int, default=None, help="Number of enviro
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 parser.add_argument("--exp_name", type=str, default="test_placement", help="Name of the experiment.")
 parser.add_argument("--seed", type=int, default=0, help="Seed used for the environment")
+parser.add_argument(
+    "--output_file",
+    type=str,
+    default="./datasets/output_dataset.hdf5",
+    help="File path to export recorded and generated episodes.",
+)
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
 # parse the arguments
@@ -39,13 +45,15 @@ import os
 import random
 from datetime import datetime
 
-import bpp_utils
 import gymnasium as gym
 import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401
 import numpy as np
 import torch
 import tote_consolidation.tasks  # noqa: F401
+from isaaclab.envs.mdp.recorders.recorders_cfg import ActionStateRecorderManagerCfg
+from isaaclab.managers import DatasetExportMode
+from isaaclab_mimic.datagen.utils import setup_output_paths
 from isaaclab_tasks.utils import parse_env_cfg
 
 # PLACEHOLDER: Extension template (do not remove this comment)
@@ -90,10 +98,31 @@ def convert_transform_to_action_tensor(transforms, obj_indicies, device):
 
 def main():
     """Zero actions agent with Isaac Lab environment."""
+
+    output_dir, output_file_name = setup_output_paths(args_cli.output_file)
+
+
     # parse configuration
     env_cfg = parse_env_cfg(
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
+
+    env_cfg.env_name = args_cli.task
+    # Extract success checking function - always success
+    success_term = None
+    if hasattr(env_cfg.terminations, "success"):
+        success_term = env_cfg.terminations.success
+        env_cfg.terminations.success = None
+    # Always assume success - no error if success term not found
+
+    env_cfg.terminations = None
+    env_cfg.observations.policy.concatenate_terms = False
+
+    env_cfg.recorders = ActionStateRecorderManagerCfg()
+    env_cfg.recorders.dataset_export_dir_path = output_dir
+    env_cfg.recorders.dataset_filename = output_file_name
+    env_cfg.recorders.dataset_export_mode = DatasetExportMode.EXPORT_SUCCEEDED_ONLY
+
     env_cfg.seed = args_cli.seed
     random.seed(args_cli.seed)
     np.random.seed(args_cli.seed)

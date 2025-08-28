@@ -36,7 +36,7 @@ class BPP:
     MAX_SOURCE_EJECT_TRIES = 6
     MAX_WORKERS = 20
     UNUSED_VOLUME_BUFFER = 5000  # 5L buffer for unpackable volume
-    GRID_SEARCH_NUM = 25
+    GRID_SEARCH_NUM = 3
     STEP_WIDTH = 90
 
     def __init__(self, tote_manager, num_envs: int, objects: list, scale: float = 1.0, **kwargs):
