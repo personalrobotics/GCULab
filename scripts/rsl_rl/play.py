@@ -73,6 +73,7 @@ from isaaclab_rl.rsl_rl import (
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
+import matplotlib.pyplot as plt
 
 
 def main():
@@ -186,20 +187,22 @@ def main():
             else:
                 actions = policy(obs)
 
-            stats = env.unwrapped.tote_manager.get_stats_summary()
-            ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
-            print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
-            print("\n===== Ejection Summary =====")
-            print(f"Total steps: {stats['total_steps']}")
-            if ejection_summary != {}:
-                for i in range(len(ejection_summary.keys())):
-                    env_id = list(ejection_summary.keys())[i]
-                    print(ejection_summary[env_id])
-                print("==========================\n")
-            env.unwrapped.bpp.update_container_heightmap(env, torch.arange(args_cli.num_envs).to(env.unwrapped.device), torch.zeros(args_cli.num_envs, device=env.unwrapped.device).int())
+            # stats = env.unwrapped.tote_manager.get_stats_summary()
+            # ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
+            # print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+            # print("\n===== Ejection Summary =====")
+            # print(f"Total steps: {stats['total_steps']}")
+            # if ejection_summary != {}:
+            #     for i in range(len(ejection_summary.keys())):
+            #         env_id = list(ejection_summary.keys())[i]
+            #         print(ejection_summary[env_id])
+            #     print("==========================\n")
+            # env.unwrapped.bpp.update_container_heightmap(env, torch.arange(args_cli.num_envs).to(env.unwrapped.device), torch.zeros(args_cli.num_envs, device=env.unwrapped.device).int())
             # env stepping
             obs, _, _, infos = env.step(actions, image_obs=image_obs)
             if "sensor" in infos["observations"]:
+                plt.imshow(infos["observations"]["sensor"][0].cpu().numpy())
+                plt.savefig("image_obs.png")
                 image_obs = infos["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
                 obs = torch.cat([obs, image_obs], dim=1)
         if args_cli.video:
@@ -214,9 +217,9 @@ def main():
             time.sleep(sleep_time)
 
 
-        print(f"\nStep {timestep}:")
-        env.unwrapped.tote_manager.stats.save_to_file()
-        print("Saved stats to file.")
+        # print(f"\nStep {timestep}:")
+        # env.unwrapped.tote_manager.stats.save_to_file()
+        # print("Saved stats to file.")
 
     # close the simulator
     env.close()
