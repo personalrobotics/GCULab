@@ -82,7 +82,7 @@ def set_seed(seed: int, cuda: bool = False, cuda_deterministic: bool = False):
 
 def depth_to_heightmap(depth: np.ndarray) -> np.ndarray:
     """Convert depth map to height map."""
-    heightmap = 20. - depth
+    heightmap = 19.998 - depth
     heightmap = np.floor(heightmap * 100)
     return heightmap
 

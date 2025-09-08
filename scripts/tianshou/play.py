@@ -58,22 +58,21 @@ import isaaclab_tasks  # noqa: F401
 import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab.envs import (
+    DirectMARLEnv,
     DirectMARLEnvCfg,
     DirectRLEnvCfg,
     ManagerBasedRLEnvCfg,
+    multi_agent_to_single_agent,
 )
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.io import dump_pickle
+from isaaclab.utils.io import dump_pickle, dump_yaml
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
-from tianshou.trainer import onpolicy_trainer
-from tianshou.data import VectorReplayBuffer
 from tianshou.utils.net.common import ActorCritic
 from tianshou.utils import TensorboardLogger, LazyLogger
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim.lr_scheduler import LambdaLR, ExponentialLR
 from torch.utils.tensorboard import SummaryWriter
 
-import model
 from tools import *
 from masked_ppo import MaskedPPOPolicy
 from masked_a2c import MaskedA2CPolicy
@@ -90,17 +89,7 @@ torch.backends.cudnn.benchmark = False
 from omegaconf import OmegaConf
 
 def make_envs(args, obs):
-    print("Args ", 
-          "args.env.id:", args.env.id,
-          "args.env.container_size:", args.env.container_size,
-          "args.env.rot:", args.env.rot,
-          "args.env.box_type:", args.env.box_type,
-          "args.env.box_size_set:", args.env.box_size_set,
-          "args.train.reward_type:", args.train.reward_type,
-          "args.env.scheme:", args.env.scheme,
-          "args.env.k_placement:", args.env.k_placement
-          )
-    train_envs = ts.env.IsaacSubprocVectorEnv(
+    test_envs = ts.env.IsaacSubprocVectorEnv(
         [lambda: gym.make(args.env.id, 
                           container_size=args.env.container_size,
                           enable_rotation=args.env.rot,
@@ -112,9 +101,9 @@ def make_envs(args, obs):
                           for _ in range(args.train.num_processes)]
     )
 
-    train_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
+    test_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
 
-    return train_envs, None
+    return test_envs, None
 
 @hydra_task_config(args_cli.task, "tianshou_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
@@ -196,7 +185,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     args.env.box_size_set = box_size_set
 
     # environments
-    train_envs, test_envs = make_envs(args, extras['observations'])  # make envs and set random seed
+    test_envs = make_envs(args, extras['observations'])  # make envs and set random seed
 
     # network
     actor, critic = build_net(args, device)
@@ -265,6 +254,15 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     else:
         raise NotImplementedError
 
+    
+    policy.eval()
+    try:
+        policy.load_state_dict(torch.load(args.ckp, map_location=device))
+        # print(policy)
+    except FileNotFoundError:
+        print("No model found")
+        exit()
+
     log_path = './logs/' + time_str
     
     is_debug = True if sys.gettrace() else False
@@ -278,62 +276,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     else:
         logger = LazyLogger()
 
+    test_collector = IsaacPackCollector(policy, test_envs, env)
 
-    # ======== callback functions used during training =========
-    def train_fn(epoch, env_step):
-        # monitor leraning rate in wandb
-        # writer.add_scalar('train/lr', optim.param_groups[0]["lr"], env_step)
-        pass
-
-    def save_best_fn(policy):
-        if not is_debug:
-            torch.save(policy.state_dict(), os.path.join(log_path, 'policy_step_best.pth'))
-        else:
-            pass
-
-    def final_save_fn(policy):
-        torch.save(policy.state_dict(), os.path.join(log_path, 'policy_step_final.pth'))
-
-    def save_checkpoint_fn(epoch, env_step, gradient_step):
-        if not is_debug:
-            # see also: https://pytorch.org/tutorials/beginner/saving_loading_models.html
-            ckpt_path = os.path.join(log_path, "checkpoint.pth")
-            # Example: saving by epoch num
-            # ckpt_path = os.path.join(log_path, f"checkpoint_{epoch}.pth")
-            torch.save({"model": policy.state_dict(), "optim": optim.state_dict()}, ckpt_path)
-            return ckpt_path
-        else:
-            return None
-
-    buffer = VectorReplayBuffer(total_size=10000, buffer_num=args_cli.num_envs)
-    train_collector = IsaacPackCollector(policy, train_envs, env, buffer)
-
-    # trainer
-    result = onpolicy_trainer(
-        policy,
-        train_collector,
-        None, # test_collector
-        max_epoch=args.train.epoch,
-        step_per_epoch=args.train.step_per_epoch,
-        repeat_per_collect=args.train.repeat_per_collect,
-        episode_per_test=10, # args.test_num,
-        batch_size=args.train.batch_size,
-        step_per_collect=args.train.step_per_collect,
-        # episode_per_collect=args.episode_per_collect,
-        train_fn=train_fn,
-        save_best_fn=save_best_fn,
-        save_checkpoint_fn=save_checkpoint_fn,
-        logger=logger,
-        test_in_train=False
-    )
-
-    final_save_fn(policy)
-    print(f'Finished training! \n{result}')
-
-
-    # close the simulator
-    env.close()
-
+    result = test_collector.collect(n_episode=args.test_episode, render=args.render)
+    for i in range(args.test_episode):
+        print(f"episode {i+1}\t => \tratio: {result['ratios'][i]:.4f} \t| total: {result['nums'][i]}")
+    print('All cases have been done!')
+    print('----------------------------------------------')
+    print('average space utilization: %.4f'%(result['ratio']))
+    print('average put item number: %.4f'%(result['num']))
+    print("standard variance: %.4f"%(result['ratio_std']))
 
 if __name__ == "__main__":
     # run the main function

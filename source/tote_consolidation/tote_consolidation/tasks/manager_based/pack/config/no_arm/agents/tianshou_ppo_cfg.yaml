@@ -24,7 +24,7 @@ train:
   epoch: 1000
   last_epoch: 200  
   batch_size: 128  
-  step_per_epoch: 1280        # 2**15
+  step_per_epoch: 2000        # 2**15
   repeat_per_collect: 1
   gae_lambda: 0.96
   reward_type:            # optional: "terminal", None

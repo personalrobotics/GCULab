@@ -111,7 +111,6 @@ class IsaacPackingEnv(PackingEnv):
             reward = box_ratio
         done = False
         info = {'counter': len(self.container.boxes), 'ratio': self.container.get_volume_ratio()}
-
         return self.cur_observation, reward, done, False, info
 
     def reset(self, seed: Optional[int] = None, options: Optional[dict] = None):

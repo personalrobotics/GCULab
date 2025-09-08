@@ -228,7 +228,7 @@ class TianShouVecEnvWrapper(VecEnv):
         """Get the z position from the depth image."""
         img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
         img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
-        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) # TODO (kaikwan): get shape smarter
+        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) / 100.0
 
         # Rescale x_pos and y_pos to the range of the depth image
         total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
