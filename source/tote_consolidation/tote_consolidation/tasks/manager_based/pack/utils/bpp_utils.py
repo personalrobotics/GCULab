@@ -460,7 +460,7 @@ class BPP:
         else:
             # Use original order if not sorting by volume
             pass
-            # # Randomly shuffle objects
+            # Randomly shuffle objects
             # shuffled = torch.randperm(len(curr_obj_indices), device="cpu")
             # curr_obj_indices = [curr_obj_indices[i] for i in shuffled]
 

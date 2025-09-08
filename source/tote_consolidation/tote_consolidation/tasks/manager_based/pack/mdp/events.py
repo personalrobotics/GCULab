@@ -493,8 +493,34 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device))
+    envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device), heightmaps=env.observation_manager._obs_buffer['sensor'])
     if envs_overfilled.any():
         env.scene.write_data_to_sim()
         env.sim.step(render=True)
     return envs_overfilled
+
+def object_shift(env: ManagerBasedRLGCUEnv):
+    """Checks if any object has shifted from place pose.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+    """
+    prev_action = env.tote_manager.last_action_pos_quat
+    obj_ids = prev_action[:, 0].long()  # [num_envs]
+    place_action_pos_quat = prev_action[:, -7:]  # [num_envs, 7]
+
+    # Get the settled pos quat of the objects for all envs in batch
+    scene_state = env.scene.get_state(is_relative=False)
+    # scene_state["rigid_object"] is a dict: { "object0": {...}, "object1": {...}, ... }
+    # For each env, get the correct object key and extract its root_pose
+    settled_pos_quat = torch.zeros(env.num_envs, 7, device=env.device)
+    for i in range(env.num_envs):
+        obj_key = f"object{int(obj_ids[i].item())}"
+        settled_pos_quat[i] = scene_state["rigid_object"][obj_key]["root_pose"][i]
+    
+    pos_distance = torch.norm(place_action_pos_quat[:, :3] - settled_pos_quat[:, :3], dim=1)
+    rot_distance = math_utils.quat_error_magnitude(place_action_pos_quat[:, 3:], settled_pos_quat[:, 3:])
+
+    pos_distance_tanh = 1 - torch.tanh(pos_distance / 0.01)
+    rot_distance_tanh = 1 - torch.tanh(rot_distance / 0.01)
+    total_distance_tanh = pos_distance_tanh + rot_distance_tanh
+    return total_distance_tanh

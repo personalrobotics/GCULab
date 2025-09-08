@@ -74,6 +74,7 @@ from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
 import matplotlib.pyplot as plt
+from rsl_rl.utils import normalize_and_flatten_image_obs
 
 
 def main():
@@ -161,7 +162,7 @@ def main():
     obs, extras = env.get_observations()
     if "sensor" in extras["observations"]:
         image_obs = extras["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
-        obs = torch.cat([obs, image_obs], dim=1)
+        obs = torch.cat([obs, _normalize_and_flatten_image_obs(extras["observations"]["sensor"])], dim=1)
     timestep = 0
 
     env.unwrapped.bpp.packed_obj_idx = [[] for _ in range(args_cli.num_envs)]
@@ -176,10 +177,7 @@ def main():
                 action_shape = env.action_space.shape
                 # Generate random actions but ensure last 3 indices are one-hot encoded
                 rand_actions = torch.rand(args_cli.num_envs, action_shape[0], device=env.unwrapped.device) * 10 - 5  # random actions in [-1, 1]
-                # Get one-hot encoding for the last 3 indices
-                action_dim = action_shape[0]
-                one_hot_indices = torch.randint(0, 3, (args_cli.num_envs,), device=env.unwrapped.device)
-                one_hot = torch.zeros(args_cli.num_envs, 3, device=env.unwrapped.device)
+                # Get one-hot encoding for the last 3 indices                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                li.num_envs, 3, device=env.unwrapped.device)
                 one_hot.scatter_(1, one_hot_indices.unsqueeze(1), 1.0)
                 # Replace the last 3 indices with one-hot values
                 rand_actions[:, action_dim-3:action_dim] = one_hot
@@ -201,10 +199,8 @@ def main():
             # env stepping
             obs, _, _, infos = env.step(actions, image_obs=image_obs)
             if "sensor" in infos["observations"]:
-                plt.imshow(infos["observations"]["sensor"][0].cpu().numpy())
-                plt.savefig("image_obs.png")
                 image_obs = infos["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
-                obs = torch.cat([obs, image_obs], dim=1)
+                obs = torch.cat([obs, normalize_and_flatten_image_obs(infos["observations"]["sensor"])], dim=1)
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video

@@ -74,7 +74,7 @@ class DepthObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        actions = ObsTerm(func=mdp.last_action)
+        # actions = ObsTerm(func=mdp.last_action)
         obs_dims = ObsTerm(func=mdp.obs_dims)
 
         # def __post_init__(self):

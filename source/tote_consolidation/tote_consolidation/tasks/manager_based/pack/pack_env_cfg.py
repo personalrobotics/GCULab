@@ -53,11 +53,18 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 include_ids = [
     "003",  # cracker_box
-    # "004",  # sugar_box
-    # "006",  # mustard_bottle
+    "004",  # sugar_box
+    "006",  # mustard_bottle
+    "007", # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    # "036",  # wood_block
+    # "010", # potted_meat_can
+    "011", # banana
+    "024", # bowl
+    # "025", # mug
+    "036",  # wood_block
+    # "051", # large_clamp
+    # "052", # extra_large_clamp
     # "061",  # foam_brick
 ]
 
@@ -69,7 +76,7 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 35
+num_object_per_env = 50
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -156,7 +163,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
                             solver_position_iteration_count=60,
-                            solver_velocity_iteration_count=0,
+                            # solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
                             max_depenetration_velocity=1000.0,
@@ -197,7 +204,7 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        actions = ObsTerm(func=mdp.last_action)
+        # actions = ObsTerm(func=mdp.last_action)
         obs_dims = ObsTerm(func=mdp.obs_dims)
 
         def __post_init__(self):
@@ -241,9 +248,12 @@ class EventCfg:
 class RewardsCfg:
     """Reward terms for the MDP."""
     gcu_reward = RewardTerm(
-        func=mdp.gcu_reward, weight=100.0
+        func=mdp.gcu_reward, weight=1000.0
     )
 
+    # object_shift = RewardTerm(
+    #     func=mdp.object_shift, weight=20.0
+    # )
 
 @configclass
 class TerminationsCfg:
@@ -258,13 +268,16 @@ class TerminationsCfg:
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
     pass
+    # object_shift = CurriculumTerm(
+    #     func=mdp.modify_reward_weight, params={"term_name": "object_shift", "weight": 50.0, "num_steps": 10000}
+    # )
 
 
 @configclass
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 50
+    obj_settle_wait_steps = 20
     disable_logging: bool = False
 
 
@@ -278,7 +291,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False , clone_in_fabric=True)
+    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False, clone_in_fabric=True)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -299,3 +312,5 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
         self.sim.dt = 1.0 / 60.0
+        self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
+        self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20

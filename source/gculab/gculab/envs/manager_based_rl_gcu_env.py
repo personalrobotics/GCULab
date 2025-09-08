@@ -136,7 +136,6 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             "decreasing_vol": False,  # Whether to use decreasing volume for packing
             "use_stability": False,  # Whether to use stability checks for packing
             "use_subset_sum": False,  # Whether to use subset sum for packing
-            "use_multiprocessing": True,  # Enable multiprocessing for packing
         }
 
         self.bpp = bpp_utils.BPP(
@@ -221,10 +220,11 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         for i in range(wait_time):
             self.scene.write_data_to_sim()
             self.sim.step(render=False)
-            if self._sim_step_counter % self.cfg.sim.render_interval == 0:
-                self.sim.render()
+            # if self._sim_step_counter % self.cfg.sim.render_interval == 0:
+            #     self.sim.render()
             # update buffers at sim dt
             self.scene.update(dt=self.physics_dt)
+        self.sim.render() # TODO (kaikwan): condition on animate_vis or headless
         self.scene.write_data_to_sim()
         self.sim.forward()
 
