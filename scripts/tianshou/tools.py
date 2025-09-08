@@ -38,7 +38,10 @@ def registration_envs():
         id='OnlinePack-v1',
         entry_point='envs.Packing:PackingEnv',
     )
-    
+    register(
+        id='IsaacOnlinePack-v1',
+        entry_point='envs.Packing:IsaacPackingEnv',
+    )
 
 def load_policy(load_path, model, device="cpu"):
     print(f"load model from: {load_path}")
@@ -76,6 +79,11 @@ def set_seed(seed: int, cuda: bool = False, cuda_deterministic: bool = False):
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
         # torch.use_deterministic_algorithms(True)
+
+def depth_to_heightmap(depth: np.ndarray) -> np.ndarray:
+    """Convert depth map to height map."""
+    heightmap = 20. - depth
+    return heightmap
 
 
 class CategoricalMasked(torch.distributions.Categorical):

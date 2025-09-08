@@ -1,8 +1,6 @@
-# Placeholder
-# For Tianshou PPO configuration, please refer to cfg/config.yaml under tianshou rl
+# configuration file for training
 
 seed: 5
-experiment_name: "no_arm_pack"
 cuda_deterministic: True
 log_interval: 10               # How often to print training logs
 
@@ -19,12 +17,12 @@ env:
 train:
   algo: PPO
   clip_param: 0.3
-  num_processes: 128    # not used
+  num_processes: 128    # the number of subprogresses, if debug, set to 1
   num_steps: 5
   epoch: 1000
   last_epoch: 200  
   batch_size: 128  
-  step_per_epoch: 1280        # 2**15
+  step_per_epoch: 40000        # 2**15
   repeat_per_collect: 1
   gae_lambda: 0.96
   reward_type:            # optional: "terminal", None

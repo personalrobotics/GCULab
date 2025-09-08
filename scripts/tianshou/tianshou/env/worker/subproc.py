@@ -87,13 +87,13 @@ def _worker(
                 p.close()
                 break
             if cmd == "step":
-                env_return = env.step(data)
+                env_return = env.unwrapped.step(action=data['action'], done=data['dones'], next_box=data['next_box'], heightmap=data['heightmap'])
                 if obs_bufs is not None:
                     _encode_obs(env_return[0], obs_bufs)
                     env_return = (None, *env_return[1:])
                 p.send(env_return)
             elif cmd == "reset":
-                obs, info = env.reset(**data)
+                obs, info = env.unwrapped.reset(options={'next_box': data['next_box'], 'heightmap': data['heightmap']})
                 if obs_bufs is not None:
                     _encode_obs(obs, obs_bufs)
                     obs = None
@@ -108,12 +108,14 @@ def _worker(
                 if hasattr(env, "seed"):
                     p.send(env.seed(data))
                 else:
-                    env.reset(seed=data)
+                    env.unwrapped.reset(seed=data['seed'], options={'next_box': data['next_box'], 'heightmap': data['heightmap']})
                     p.send(None)
             elif cmd == "getattr":
                 p.send(getattr(env, data) if hasattr(env, data) else None)
             elif cmd == "setattr":
                 setattr(env.unwrapped, data["key"], data["value"])
+            elif cmd == "map_action":
+                p.send(env.unwrapped.map_action(data))
             else:
                 p.close()
                 raise NotImplementedError
@@ -190,13 +192,13 @@ class SubprocEnvWorker(EnvWorker):
             remain_conns = [conn for conn in remain_conns if conn not in ready_conns]
         return [workers[conns.index(con)] for con in ready_conns]
 
-    def send(self, action: Optional[np.ndarray], **kwargs: Any) -> None:
+    def send(self, action: Optional[np.ndarray], dones: Optional[np.ndarray] = None, **kwargs: Any) -> None:
         if action is None:
             if "seed" in kwargs:
                 super().seed(kwargs["seed"])
             self.parent_remote.send(["reset", kwargs])
         else:
-            self.parent_remote.send(["step", action])
+            self.parent_remote.send(["step", {"action": action, "dones": dones, **kwargs}])
 
     def recv(
         self
@@ -235,13 +237,17 @@ class SubprocEnvWorker(EnvWorker):
                 obs = self._decode_obs()
             return obs
 
-    def seed(self, seed: Optional[int] = None) -> Optional[List[int]]:
+    def seed(self, seed: Optional[int] = None, next_box: Optional[np.ndarray] = None, heightmap: Optional[np.ndarray] = None) -> Optional[List[int]]:
         super().seed(seed)
-        self.parent_remote.send(["seed", seed])
+        self.parent_remote.send(["seed", {"seed": seed, "next_box": next_box, "heightmap": heightmap}])
         return self.parent_remote.recv()
 
     def render(self, **kwargs: Any) -> Any:
         self.parent_remote.send(["render", kwargs])
+        return self.parent_remote.recv()
+
+    def map_action(self, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        self.parent_remote.send(["map_action", action])
         return self.parent_remote.recv()
 
     def close_env(self) -> None:

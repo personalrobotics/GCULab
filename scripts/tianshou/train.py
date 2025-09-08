@@ -16,6 +16,7 @@ import argparse
 import sys
 
 from isaaclab.app import AppLauncher
+import arguments
 
 
 
@@ -80,6 +81,7 @@ from masked_ppo import MaskedPPOPolicy
 from masked_a2c import MaskedA2CPolicy
 from isaacpackcollector import IsaacPackCollector
 from vecenv_wrapper import TianShouVecEnvWrapper
+import tianshou as ts
 
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -89,6 +91,32 @@ torch.backends.cudnn.benchmark = False
 
 from omegaconf import OmegaConf
 
+def make_envs(args, obs):
+    print("Args ", 
+          "args.env.id:", args.env.id,
+          "args.env.container_size:", args.env.container_size,
+          "args.env.rot:", args.env.rot,
+          "args.env.box_type:", args.env.box_type,
+          "args.env.box_size_set:", args.env.box_size_set,
+          "args.train.reward_type:", args.train.reward_type,
+          "args.env.scheme:", args.env.scheme,
+          "args.env.k_placement:", args.env.k_placement
+          )
+    train_envs = ts.env.IsaacSubprocVectorEnv(
+        [lambda: gym.make(args.env.id, 
+                          container_size=args.env.container_size,
+                          enable_rotation=args.env.rot,
+                          data_type=args.env.box_type,
+                          item_set=args.env.box_size_set, 
+                          reward_type=args.train.reward_type,
+                          action_scheme=args.env.scheme,
+                          k_placement=args.env.k_placement) 
+                          for _ in range(args.train.num_processes)]
+    )
+
+    train_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy(), heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
+
+    return train_envs, None
 
 def build_net(args, device):
     feature_net = model.ShareNet(
@@ -124,22 +152,62 @@ def build_net(args, device):
 @hydra_task_config(args_cli.task, "tianshou_cfg_entry_point")
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
     """Train with RSL-RL agent."""
-    # override configurations with non-hydra CLI arguments
-    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
 
     args = OmegaConf.create(agent_cfg)
-    
-    # Ensure numeric parameters are properly typed
-    args.opt.lr = float(args.opt.lr)
-    args.opt.eps = float(args.opt.eps)
-    if hasattr(args.opt, 'alpha'):
-        args.opt.alpha = float(args.opt.alpha)
-    args.loss.entropy = float(args.loss.entropy)
-    args.loss.value = float(args.loss.value)
-    args.train.gae_lambda = float(args.train.gae_lambda)
-    args.train.gamma = float(args.train.gamma)
-    args.train.clip_param = float(args.train.clip_param)
-    
+
+    # set the environment seed
+    env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
+
+    args.train.num_processes = env_cfg.scene.num_envs
+    args.train.step_per_collect = args.train.num_processes * args.train.num_steps  
+
+
+    # note: certain randomizations occur in the environment initialization so we set the seed here
+    env_cfg.seed = args.seed
+    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
+
+    # specify directory for logging experiments
+    log_root_path = os.path.join("logs", "tianshou", args.experiment_name)
+    log_root_path = os.path.abspath(log_root_path)
+    print(f"[INFO] Logging experiment in directory: {log_root_path}")
+    # specify directory for logging runs: {time-stamp}_{run_name}
+    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not change it (see PR #2346, comment-2819298849)
+    print(f"Exact experiment name requested from command line: {log_dir}")
+    if args.experiment_name:
+        log_dir += f"_{args.experiment_name}"
+    log_dir = os.path.join(log_root_path, log_dir)
+
+    # create isaac environment
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+
+    env = TianShouVecEnvWrapper(env, make_envs_args=args)
+    # wrap for video recording
+    if args_cli.video:
+        video_kwargs = {
+            "video_folder": os.path.join(log_dir, "videos", "train"),
+            "step_trigger": lambda step: step % args_cli.video_interval == 0,
+            "video_length": args_cli.video_length,
+            "disable_logger": True,
+        }
+        print("[INFO] Recording videos during training.")
+        print_dict(video_kwargs, nesting=4)
+        env = gym.wrappers.RecordVideo(env, **video_kwargs)
+
+    date = time.strftime(r'%Y.%m.%d-%H-%M-%S', time.localtime(time.time()))
+    time_str = args.env.id + "_" + \
+        str(args.env.container_size[0]) + "-" + str(args.env.container_size[1]) + "-" + str(args.env.container_size[2]) + "_" + \
+        args.env.scheme + "_" + str(args.env.k_placement) + "_" +\
+        args.env.box_type + "_" + \
+        args.train.algo  + '_' \
+        'seed' + str(args.seed) + "_" + \
+        args.opt.optimizer + "_" \
+        + date
+
+    device = torch.device("cuda", 0)
+
+    obs, extras = env.get_observations()
+
     # Calculate box size parameters
     box_small = int(max(args.env.container_size) / 10)
     box_big = int(max(args.env.container_size) / 2)
@@ -160,21 +228,23 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     args.env.box_big = box_big
     args.env.box_size_set = box_size_set
 
-    date = time.strftime(r'%Y.%m.%d-%H-%M-%S', time.localtime(time.time()))
-    time_str = args.env.id + "_" + \
-        str(args.env.container_size[0]) + "-" + str(args.env.container_size[1]) + "-" + str(args.env.container_size[2]) + "_" + \
-        args.env.scheme + "_" + str(args.env.k_placement) + "_" +\
-        args.env.box_type + "_" + \
-        args.train.algo  + '_' \
-        'seed' + str(args.seed) + "_" + \
-        args.opt.optimizer + "_" \
-        + date
-
-    device = torch.device("cuda", 0)
+    # environments
+    train_envs, test_envs = make_envs(args, extras['observations'])  # make envs and set random seed
 
     # network
     actor, critic = build_net(args, device)
     actor_critic = ActorCritic(actor, critic)
+
+    # Ensure numeric parameters are properly typed
+    args.opt.lr = float(args.opt.lr)
+    args.opt.eps = float(args.opt.eps)
+    if hasattr(args.opt, 'alpha'):
+        args.opt.alpha = float(args.opt.alpha)
+    args.loss.entropy = float(args.loss.entropy)
+    args.loss.value = float(args.loss.value)
+    args.train.gae_lambda = float(args.train.gae_lambda)
+    args.train.gamma = float(args.train.gamma)
+    args.train.clip_param = float(args.train.clip_param)
 
     if args.opt.optimizer == 'Adam':
         optim = torch.optim.Adam(actor_critic.parameters(), lr=args.opt.lr, eps=args.opt.eps)
@@ -241,109 +311,38 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     else:
         logger = LazyLogger()
 
-
-    # set the environment seed
-    # note: certain randomizations occur in the environment initialization so we set the seed here
-    env_cfg.seed = args.seed
-    env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
-
-    # specify directory for logging experiments
-    log_root_path = os.path.join("logs", "tianshou", args.experiment_name)
-    log_root_path = os.path.abspath(log_root_path)
-    print(f"[INFO] Logging experiment in directory: {log_root_path}")
-    # specify directory for logging runs: {time-stamp}_{run_name}
-    log_dir = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    # The Ray Tune workflow extracts experiment name using the logging line below, hence, do not change it (see PR #2346, comment-2819298849)
-    print(f"Exact experiment name requested from command line: {log_dir}")
-    if args.experiment_name:
-        log_dir += f"_{args.experiment_name}"
-    log_dir = os.path.join(log_root_path, log_dir)
-
-    # create isaac environment
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
-
-    env = TianShouVecEnvWrapper(env, make_envs_args=args)
-    # wrap for video recording
-    if args_cli.video:
-        video_kwargs = {
-            "video_folder": os.path.join(log_dir, "videos", "train"),
-            "step_trigger": lambda step: step % args_cli.video_interval == 0,
-            "video_length": args_cli.video_length,
-            "disable_logger": True,
-        }
-        print("[INFO] Recording videos during training.")
-        print_dict(video_kwargs, nesting=4)
-        env = gym.wrappers.RecordVideo(env, **video_kwargs)
-
-
-
-    # network
-    actor, critic = build_net(args, device)
-    actor_critic = ActorCritic(actor, critic)
-
-    if args.opt.optimizer == 'Adam':
-        optim = torch.optim.Adam(actor_critic.parameters(), lr=args.opt.lr, eps=args.opt.eps)
-    elif args.opt.optimizer == 'RMSprop':
-        optim = torch.optim.RMSprop(
-            actor_critic.parameters(),
-            lr=args.opt.lr,
-            eps=args.opt.eps,
-            alpha=args.opt.alpha,
-        )
-    else:
-        raise NotImplementedError
-
-    lr_scheduler = None
-    if args.opt.lr_decay:
-        # decay learning rate to 0 linearly
-        max_update_num = np.ceil(args.train.step_per_epoch / args.train.step_per_collect) * args.train.epoch
-        lr_scheduler = LambdaLR(optim, lr_lambda=lambda epoch: 1 - epoch / max_update_num)
-
-
-    # RL agent 
-    dist = CategoricalMasked
-    if args.train.algo == 'PPO':
-        policy = MaskedPPOPolicy(
-            actor=actor,
-            critic=critic,
-            optim=optim,
-            dist_fn=dist,
-            discount_factor=args.train.gamma,
-            eps_clip=args.train.clip_param,
-            advantage_normalization=False,
-            vf_coef=args.loss.value,
-            ent_coef=args.loss.entropy,
-            gae_lambda=args.train.gae_lambda,
-            lr_scheduler=lr_scheduler
-        )
-    elif args.algo == 'A2C':    
-        policy = MaskedA2CPolicy(
-            actor,
-            critic,
-            optim,
-            dist,
-            discount_factor=args.train.gamma,
-            vf_coef=args.loss.value,
-            ent_coef=args.loss.entropy,
-            gae_lambda=args.train.gae_lambda,
-            lr_scheduler=lr_scheduler
-        )
-    else:
-        raise NotImplementedError
+    # # override configurations with non-hydra CLI arguments
+    # env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
 
     
-    log_path = './logs/' + time_str
+    # # Ensure numeric parameters are properly typed
+    # args.opt.lr = float(args.opt.lr)
+    # args.opt.eps = float(args.opt.eps)
+    # if hasattr(args.opt, 'alpha'):
+    #     args.opt.alpha = float(args.opt.alpha)
+    # args.loss.entropy = float(args.loss.entropy)
+    # args.loss.value = float(args.loss.value)
+    # args.train.gae_lambda = float(args.train.gae_lambda)
+    # args.train.gamma = float(args.train.gamma)
+    # args.train.clip_param = float(args.train.clip_param)
     
-    is_debug = True if sys.gettrace() else False
-    if not is_debug:
-        writer = SummaryWriter(log_path)
-        logger = TensorboardLogger(
-            writer=writer,
-            train_interval=args.log_interval,
-            update_interval=args.log_interval
-        )
-    else:
-        logger = LazyLogger()
+    # # Calculate box size parameters
+    # box_small = int(max(args.env.container_size) / 10)
+    # box_big = int(max(args.env.container_size) / 2)
+    # box_range = (box_small, box_small, box_small, box_big, box_big, box_big)
+
+    # date = time.strftime(r'%Y.%m.%d-%H-%M-%S', time.localtime(time.time()))
+    # time_str = args.env.id + "_" + \
+    #     str(args.env.container_size[0]) + "-" + str(args.env.container_size[1]) + "-" + str(args.env.container_size[2]) + "_" + \
+    #     args.env.scheme + "_" + str(args.env.k_placement) + "_" +\
+    #     args.env.box_type + "_" + \
+    #     args.train.algo  + '_' \
+    #     'seed' + str(args.seed) + "_" + \
+    #     args.opt.optimizer + "_" \
+    #     + date
+
+    # device = torch.device("cuda", 0)
+
 
     # ======== callback functions used during training =========
     def train_fn(epoch, env_step):
@@ -372,7 +371,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             return None
 
     buffer = VectorReplayBuffer(total_size=10000, buffer_num=args_cli.num_envs)
-    train_collector = IsaacPackCollector(policy, env, buffer, num_envs=args_cli.num_envs)
+    train_collector = IsaacPackCollector(policy, train_envs, env, buffer)
 
     # trainer
     result = onpolicy_trainer(
@@ -403,6 +402,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
 if __name__ == "__main__":
     # run the main function
+    registration_envs()
+    args = arguments.get_args()
+    args.train.algo = args.train.algo.upper()
     main()
     # close sim app
     simulation_app.close()

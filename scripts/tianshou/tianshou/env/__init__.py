@@ -13,6 +13,7 @@ from tianshou.env.venvs import (
     ShmemVectorEnv,
     SubprocVectorEnv,
 )
+from tianshou.env.isaac_venv import IsaacSubprocVectorEnv
 
 try:
     from tianshou.env.pettingzoo_env import PettingZooEnv
@@ -23,6 +24,7 @@ __all__ = [
     "BaseVectorEnv",
     "DummyVectorEnv",
     "SubprocVectorEnv",
+    "IsaacSubprocVectorEnv",
     "ShmemVectorEnv",
     "RayVectorEnv",
     "VectorEnvWrapper",

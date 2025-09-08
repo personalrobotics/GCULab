@@ -38,6 +38,17 @@ from mycollector import PackCollector
  
 
 def make_envs(args):
+    print("Args ", 
+          "args.env.id:", args.env.id,
+          "args.env.container_size:", args.env.container_size,
+          "args.env.rot:", args.env.rot,
+          "args.env.box_type:", args.env.box_type,
+          "args.env.box_size_set:", args.env.box_size_set,
+          "args.train.reward_type:", args.train.reward_type,
+          "args.env.scheme:", args.env.scheme,
+          "args.env.k_placement:", args.env.k_placement
+          )
+          
 
     train_envs = ts.env.SubprocVectorEnv(
         [lambda: gym.make(args.env.id, 
@@ -63,7 +74,7 @@ def make_envs(args):
     )
     train_envs.seed(args.seed)
     test_envs.seed(args.seed)
-
+    print("done")
     return train_envs, test_envs
 
 

@@ -108,17 +108,14 @@ class PackingEnv(gym.Env):
         size.extend([size[1], size[0], size[2]])
         obs = np.concatenate((hmap.reshape(-1), np.array(size).reshape(-1), self.candidates.reshape(-1)))
         mask = mask.reshape(-1)
-        print("obs shape: ", obs.shape)
-        print("mask shape: ", mask.shape)
-
         return {
             "obs": obs, 
             "mask": mask
         }
 
-    @property
-    def next_box(self) -> list:
-        return self.next_box
+    # @property
+    # def next_box(self) -> list:
+    #     return self.next_box
 
     def get_possible_position(self, next_box):
         """
@@ -158,23 +155,11 @@ class PackingEnv(gym.Env):
         self.render_box = [dim, pos]
 
         return pos, rot, dim
+    
+    def map_action(self, action):
+        pos, rot, _ = self.idx2pos(action)
+        return pos, rot
 
-    def idx2pos(self, idx):
-        if idx >= self.k_placement - 1:
-            idx = idx - self.k_placement
-            rot = 1
-        else:
-            rot = 0
-
-        pos = self.candidates[idx][:3]
-
-        if rot == 1:
-            dim = [self.next_box[1], self.next_box[0], self.next_box[2]]
-        else:
-            dim = list(self.next_box)
-        self.render_box = [dim, pos]
-
-        return pos, rot, dim
 
     def step(self, action):
         """
@@ -203,8 +188,8 @@ class PackingEnv(gym.Env):
 
         box_ratio = self.get_box_ratio()
 
-        self.box_creator.drop_box()  # remove current box from the list
-        self.box_creator.generate_box_size()  # add a new box to the list
+        # self.box_creator.drop_box()  # remove current box from the list
+        # self.box_creator.generate_box_size()  # add a new box to the list
 
         if self.reward_type == "terminal":
             reward = 0.01
@@ -231,3 +216,11 @@ class PackingEnv(gym.Env):
     def render(self):
         self.renderer.add_item(self.render_box[0], self.render_box[1])
         # self.renderer.save_img()
+
+    @property
+    def next_box(self) -> list:
+        return self._next_box
+
+    @next_box.setter
+    def next_box(self, value):
+        self._next_box = value

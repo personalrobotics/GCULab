@@ -18,7 +18,8 @@ from tianshou.data import (
 from tianshou.data.batch import _alloc_by_keys_diff
 from tianshou.env import BaseVectorEnv, DummyVectorEnv
 from tianshou.policy import BasePolicy
-
+from gculab.envs import ManagerBasedRLGCUEnv
+from tools import *
 
 class IsaacPackCollector(Collector):
     """Collector enables the policy to interact with different types of envs with \
@@ -60,16 +61,39 @@ class IsaacPackCollector(Collector):
         self,
         policy: BasePolicy,
         env: Union[gym.Env, BaseVectorEnv],
+        isaac_env: ManagerBasedRLGCUEnv,
         buffer: Optional[ReplayBuffer] = None,
-        num_envs: int = 1,
+        num_envs: int | None = None,
         preprocess_fn: Optional[Callable[..., Batch]] = None,
         exploration_noise: bool = False,
     ) -> None:
-        super().__init__(policy, env, buffer, num_envs, preprocess_fn, exploration_noise)
+        if isinstance(env, gym.Env) and not hasattr(env, "__len__"):
+            warnings.warn("Single environment detected, wrap to DummyVectorEnv.")
+            self.env = DummyVectorEnv([lambda: env])  # type: ignore
+        else:
+            self.env = env  # type: ignore
+        self.env_num = num_envs if num_envs is not None else len(self.env)
+        self.exploration_noise = exploration_noise
+        self._assign_buffer(buffer)
+        self.policy = policy
+        self.preprocess_fn = preprocess_fn
+        self._action_space = self.env.action_space
+        # avoid creating attribute outside __init__
+        self.isaac_env = isaac_env
+        obs, extras = self.isaac_env.get_observations()
+        obs = extras['observations']
+        gym_reset_kwargs = {
+            "next_box": obs['policy'][:, -3:].detach().cpu().numpy(),
+            "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
+        }
+        self.reset(gym_reset_kwargs=gym_reset_kwargs)
+        self.container_size = self.isaac_env.observation_space['sensor'].shape[1:3] # 37, 52
+
+
 
     def collect(
         self,
-        n_step: Optional[int] = None,
+        n_step: Optional[int] = None, # Note: this is being used
         n_episode: Optional[int] = None,
         random: bool = False,
         render: Optional[float] = None,
@@ -110,6 +134,7 @@ class IsaacPackCollector(Collector):
             * ``rew_std`` standard error of episodic rewards.
             * ``len_std`` standard error of episodic lengths.
         """
+        assert not self.env.is_async, "Please use AsyncCollector if using async venv."
         if n_step is not None:
             assert n_episode is None, (
                 f"Only one of n_step or n_episode is allowed in Collector."
@@ -178,10 +203,29 @@ class IsaacPackCollector(Collector):
             # get bounded and remapped actions first (not saved into buffer)
             action_remap = self.policy.map_action(self.data.act)
             # step in env
+            pos_rot = self.env.map_action(action_remap)
+            # Convert pos_rot to a (2, 4) torch tensor
+            # Each tuple is (array([x, y, z], dtype=int32), w), so concatenate to [x, y, z, w]
+            pos_rot_array = np.array([np.concatenate([p[0], np.array([p[1]])]) for p in pos_rot])
+            pos_rot_tensor = torch.tensor(pos_rot_array, dtype=torch.float32, device=self.isaac_env.device)
+
+            image_obs = self.data.obs.obs[:, :self.container_size[0]*self.container_size[1]].reshape((len(pos_rot), 1, self.container_size[0], self.container_size[1]))
+            # print("pos_rot_tensor:", pos_rot_tensor)
+            obs, rew, dones, extras = self.isaac_env.step(pos_rot_tensor, image_obs=torch.tensor(image_obs, dtype=torch.float32, device=self.isaac_env.device))
+            obs = extras['observations']
+            isaac_obs = {
+                "next_box": obs['policy'][:, -3:].detach().cpu().numpy(),
+                "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
+            }
+            dones = dones.detach().cpu().numpy()
             obs_next, rew, terminated, truncated, info = self.env.step(
                 action_remap,  # type: ignore
-                # ready_env_ids
+                ready_env_ids,
+                dones,
+                **isaac_obs
             )
+
+            
             done = np.logical_or(terminated, truncated)
 
             self.data.update(
@@ -230,9 +274,10 @@ class IsaacPackCollector(Collector):
                 episode_nums.append(self.data.info['counter'][env_ind_local])
                 # now we copy obs_next to obs, but since there might be
                 # finished episodes, we have to reset finished envs first.
-                self._reset_env_with_ids(
-                    env_ind_local, env_ind_global, gym_reset_kwargs
-                )
+                # This is already handled by .step in isaac so observations are reset
+                # self._reset_env_with_ids(
+                #     env_ind_local, env_ind_global, gym_reset_kwargs
+                # )
                 for i in env_ind_local:
                     self._reset_state(i)
 

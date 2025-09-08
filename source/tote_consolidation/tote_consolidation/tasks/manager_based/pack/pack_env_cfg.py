@@ -58,7 +58,7 @@ include_ids = [
     "007", # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    "036",  # wood_block
+    # "036",  # wood_block
     # "061",  # foam_brick
 ]
 
@@ -70,7 +70,7 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 50
+num_object_per_env = 20
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -154,7 +154,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                         distribution=None,  # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
-                            disable_gravity=False,
+                            disable_gravity=True,
                             # enable_gyroscopic_forces=True,
                             solver_position_iteration_count=60,
                             # solver_velocity_iteration_count=0,
@@ -271,7 +271,7 @@ class CurriculumCfg:
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 20
+    obj_settle_wait_steps = 0
     disable_logging: bool = False
 
 

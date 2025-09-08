@@ -103,7 +103,6 @@ class PackingAction(ActionTerm):
         # offset to center of the tote
         self._processed_actions[:, 2:5] += tote_state[:, :3].squeeze(1)
 
-
         if self.place_obj_bottomLeft:
             # offset to bottom left of the object
             self._processed_actions[:, 2:5] -= torch.tensor(

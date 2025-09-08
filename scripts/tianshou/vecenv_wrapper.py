@@ -12,8 +12,13 @@ from rsl_rl.env import VecEnv
 from isaaclab.envs import DirectRLEnv, ManagerBasedRLEnv
 
 import tianshou as ts
-from envs.Packing.env import PackingEnv
+from tools import *
 
+from envs.Packing.isaac_env import IsaacPackingEnv
+from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+    calculate_rotated_bounding_box,
+)
+import matplotlib.pyplot as plt
 
 class TianShouVecEnvWrapper(VecEnv):
     """Wraps around Isaac Lab environment for TianShou library
@@ -59,17 +64,7 @@ class TianShouVecEnvWrapper(VecEnv):
 
         # store information required by wrapper
         self.num_envs = self.unwrapped.num_envs
-        self.train_envs = ts.env.SubprocVectorEnv(
-            [lambda: PackingEnv(
-                container_size=make_envs_args.env.container_size,
-                enable_rotation=make_envs_args.env.rot,
-                data_type=make_envs_args.env.box_type,
-                item_set=make_envs_args.env.box_size_set,
-                reward_type=make_envs_args.train.reward_type,
-                action_scheme=make_envs_args.env.scheme,
-                k_placement=make_envs_args.env.k_placement) 
-                for _ in range(self.unwrapped.num_envs)]
-        )
+
         self.device = self.unwrapped.device
         self.max_episode_length = self.unwrapped.max_episode_length
 
@@ -182,11 +177,114 @@ class TianShouVecEnvWrapper(VecEnv):
         obs_dict, _ = self.env.reset()
 
         # return observations
-        # return obs_dict["policy"], {"observations": obs_dict}
-        return self.train_envs.reset(next_box=obs_dict["policy"][:, -3:].cpu())
+        return obs_dict["policy"], {"observations": obs_dict}
 
-    def step(self, actions: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
-        self.train_envs.step(actions)
+    def _convert_to_pos_quat(self, pos_rot: torch.Tensor, object_to_pack: list) -> torch.Tensor:
+        orientation_one_hot = pos_rot[:, 2:]  # shape [batch, 2]
+        orientation_idx = torch.argmax(orientation_one_hot, dim=1)  # shape [
+        # Convert orientation index to quaternion
+        # 0: identity, 1: 90° around z, 2: 90° around x, 3: 90° around y
+        qx = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qy = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qz = torch.zeros_like(orientation_idx, dtype=torch.float32)
+        qw = torch.ones_like(orientation_idx, dtype=torch.float32)
+
+        # Set values for each orientation
+        z_rot_mask = orientation_idx == 1
+
+        # For 90° rotation around z (orientation 1)
+        qx[z_rot_mask] = 0.7071068  # sin(π/4)
+        qw[z_rot_mask] = 0.7071068  # cos(π/4)
+
+        # Convert (x, y, theta) actions to (x, y, z, qx, qy, qz, qw)
+        # Assume z=0 for placement (to be updated), and theta is in radians
+        x = pos_rot[:, 0]
+        y = pos_rot[:, 1]
+
+        bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
+            torch.arange(pos_rot.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)
+        ]
+        quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
+        rotated_dim = (
+            calculate_rotated_bounding_box(
+                bbox_offset, quats, device=self.env.unwrapped.device
+            )
+        )
+        x = x / 37
+        y = y / 52
+        assert (x < 1.0).all() and (y < 1.0).all()
+        x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
+        y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
+        x = x * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
+        y = y * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
+
+        # Compute z analytically for each sample in the batch using multiprocessing
+        z = torch.zeros_like(x)
+
+        return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), [x_pos_range, y_pos_range], rotated_dim
+
+
+    def _get_z_position_from_depth(self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
+        """Get the z position from the depth image."""
+        img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
+        img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
+        depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) # TODO (kaikwan): get shape smarter
+
+        # Rescale x_pos and y_pos to the range of the depth image
+        total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
+        total_tote_y = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100
+        x_pos = torch.round(52 -(xy_pos[0] / total_tote_x) * 52).to(torch.int64)
+        y_pos = torch.round((xy_pos[1] / total_tote_y) * 37).to(torch.int64)
+
+        # Compute patch extents in pixel units by scaling world dimensions to pixel coordinates
+        # The image covers the total tote dimensions, so scale object dimensions relative to total tote dimensions
+        x_extent = torch.round((rotated_dim[:, 0] / total_tote_x) * 52).clamp(min=1).long()
+        y_extent = torch.round((rotated_dim[:, 1] / total_tote_y) * 37).clamp(min=1).long()
+
+        # Compute patch start/end indices, clamp to image bounds
+        x1 = x_pos.clamp(0, 51)
+        y0 = y_pos.clamp(0, 36)
+        x0 = (x1 - x_extent).clamp(0, 51)
+        y1 = (y0 + y_extent).clamp(0, 36)
+
+        # For each sample, extract the patch and get the max value
+        # Use broadcasting to build masks for all pixels in one go
+        grid_y = torch.arange(img_h, device=self.device).view(1, img_h, 1)
+        grid_x = torch.arange(img_w, device=self.device).view(1, 1, img_w)
+        y0_ = y0.view(-1, 1, 1)
+        y1_ = y1.view(-1, 1, 1)
+        x0_ = x0.view(-1, 1, 1)
+        x1_ = x1.view(-1, 1, 1)
+        mask = (grid_y >= y0_) & (grid_y <= y1_) & (grid_x >= x0_) & (grid_x <= x1_)
+
+        # Masked min: set out-of-patch values and zeros to inf, then take min
+        depth_img_masked = depth_img
+        depth_img_masked[~mask] = 0.0
+        depth_img_masked[depth_img_masked == 0] = 0.0
+        
+        z_pos = depth_img_masked.view(depth_img.shape[0], -1).max(dim=1).values
+        z_pos = z_pos.clamp(min=0.0, max=0.4)
+        return z_pos
+
+
+    def step(self, pos_rot: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+        tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
+        packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
+        object_to_pack = [row[0] for row in packable_objects]
+        for i in range(self.env.unwrapped.num_envs):
+            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
+        
+        actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(pos_rot, object_to_pack)
+        # Get z_pos from depth image
+        z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
+        actions = torch.cat(
+            [
+                tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs
+                torch.tensor(object_to_pack, device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
+                actions,
+            ], dim=1
+        )
+        actions[:, 4] = z_pos
 
         # Convert actions to PackingActions
         # clip actions

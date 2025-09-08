@@ -3,6 +3,7 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 import gymnasium as gym
 import numpy as np
+import torch
 import packaging
 
 from tianshou.env.utils import ENV_TYPE, gym_new_venv_step_type
@@ -305,6 +306,8 @@ class BaseVectorEnv(object):
         self,
         action: np.ndarray,
         id: Optional[Union[int, List[int], np.ndarray]] = None,
+        dones: Optional[np.ndarray] = None,
+        **isaac_obs: Any,
     ) -> gym_new_venv_step_type:
         """Run one timestep of some environments' dynamics.
 
@@ -341,8 +344,10 @@ class BaseVectorEnv(object):
         id = self._wrap_id(id)
         if not self.is_async:
             assert len(action) == len(id)
+            next_box = isaac_obs.get('next_box', None)
+            heightmap = isaac_obs.get('heightmap', None)
             for i, j in enumerate(id):
-                self.workers[j].send(action[i])
+                self.workers[j].send(action[i], dones=dones[i], next_box=next_box[i], heightmap=heightmap[i])
             result = []
             for j in id:
                 env_return = self.workers[j].recv()
