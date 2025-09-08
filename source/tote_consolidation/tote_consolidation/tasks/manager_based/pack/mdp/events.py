@@ -157,6 +157,7 @@ def object_props(
                     bbox = compute_mesh_bbox(mesh)
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
+                    print("Asset path ", asset_path, " bbox: ", bbox)
 
                     mesh_properties_cache[asset_path] = (volume, bbox, vox)
                 obj_volumes[env_idx, obj_idx] = volume

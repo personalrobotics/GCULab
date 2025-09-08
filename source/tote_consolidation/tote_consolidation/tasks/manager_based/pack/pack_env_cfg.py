@@ -58,13 +58,7 @@ include_ids = [
     "007", # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    # "010", # potted_meat_can
-    "011", # banana
-    "024", # bowl
-    # "025", # mug
     "036",  # wood_block
-    # "051", # large_clamp
-    # "052", # extra_large_clamp
     # "061",  # foam_brick
 ]
 

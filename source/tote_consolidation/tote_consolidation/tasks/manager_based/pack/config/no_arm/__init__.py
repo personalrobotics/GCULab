@@ -28,5 +28,6 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.joint_pos_camera_env_cfg:NoArmPackCameraEnvCfg",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_camera_cfg:NoArmPackPPOCameraRunnerCfg",
+        "tianshou_cfg_entry_point": f"{agents.__name__}:tianshou_ppo_cfg.yaml",
     },
 )

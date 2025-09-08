@@ -79,7 +79,7 @@ class ToteManager:
         self.dest_totes = torch.zeros(self.num_envs, device=env.device).int()  # Default to one tote per env
         self.last_action_pos_quat = torch.zeros(self.num_envs, 7, device=env.device)
         self.overfill_threshold = 0.3  # in meters
-        self.max_objects_per_tote = 2
+        self.max_objects_per_tote = 1
 
         self.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
