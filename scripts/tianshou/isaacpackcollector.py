@@ -83,7 +83,7 @@ class IsaacPackCollector(Collector):
         obs, extras = self.isaac_env.get_observations()
         obs = extras['observations']
         gym_reset_kwargs = {
-            "next_box": obs['policy'][:, -3:].detach().cpu().numpy(),
+            "next_box": obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]],
             "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
         }
         self.reset(gym_reset_kwargs=gym_reset_kwargs)
@@ -210,14 +210,16 @@ class IsaacPackCollector(Collector):
             pos_rot_tensor = torch.tensor(pos_rot_array, dtype=torch.float32, device=self.isaac_env.device)
 
             image_obs = self.data.obs.obs[:, :self.container_size[0]*self.container_size[1]].reshape((len(pos_rot), 1, self.container_size[0], self.container_size[1]))
+
             # print("pos_rot_tensor:", pos_rot_tensor)
             obs, rew, dones, extras = self.isaac_env.step(pos_rot_tensor, image_obs=torch.tensor(image_obs, dtype=torch.float32, device=self.isaac_env.device))
             obs = extras['observations']
             isaac_obs = {
-                "next_box": obs['policy'][:, -3:].detach().cpu().numpy(),
+                "next_box": obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]],
                 "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
             }
             dones = dones.detach().cpu().numpy()
+
             obs_next, rew, terminated, truncated, info = self.env.step(
                 action_remap,  # type: ignore
                 ready_env_ids,

@@ -114,7 +114,7 @@ def make_envs(args, obs):
                           for _ in range(args.train.num_processes)]
     )
 
-    train_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy(), heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
+    train_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
 
     return train_envs, None
 
