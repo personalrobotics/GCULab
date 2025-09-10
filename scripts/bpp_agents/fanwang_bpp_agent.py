@@ -39,7 +39,6 @@ import os
 import random
 from datetime import datetime
 
-import bpp_utils
 import gymnasium as gym
 import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401

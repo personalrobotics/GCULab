@@ -162,7 +162,7 @@ def main():
     obs, extras = env.get_observations()
     if "sensor" in extras["observations"]:
         image_obs = extras["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
-        obs = torch.cat([obs, _normalize_and_flatten_image_obs(extras["observations"]["sensor"])], dim=1)
+        obs = torch.cat([obs, normalize_and_flatten_image_obs(extras["observations"]["sensor"])], dim=1)
     timestep = 0
 
     env.unwrapped.bpp.packed_obj_idx = [[] for _ in range(args_cli.num_envs)]
@@ -185,9 +185,9 @@ def main():
             else:
                 actions = policy(obs)
 
-            # stats = env.unwrapped.tote_manager.get_stats_summary()
-            # ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
-            # print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+            stats = env.unwrapped.tote_manager.get_stats_summary()
+            ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
+            print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
             # print("\n===== Ejection Summary =====")
             # print(f"Total steps: {stats['total_steps']}")
             # if ejection_summary != {}:
@@ -213,9 +213,9 @@ def main():
             time.sleep(sleep_time)
 
 
-        # print(f"\nStep {timestep}:")
-        # env.unwrapped.tote_manager.stats.save_to_file()
-        # print("Saved stats to file.")
+        print(f"\nStep {timestep}:")
+        env.unwrapped.tote_manager.stats.save_to_file()
+        print("Saved stats to file.")
 
     # close the simulator
     env.close()

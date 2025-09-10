@@ -162,11 +162,11 @@ class PackSceneCfg(InteractiveSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=60,
+                            solver_position_iteration_count=90,
                             # solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
-                            max_depenetration_velocity=1000.0,
+                            # max_depenetration_velocity=1000.0,
                         ),
                     ),
                     init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
@@ -251,9 +251,9 @@ class RewardsCfg:
         func=mdp.gcu_reward, weight=1000.0
     )
 
-    # object_shift = RewardTerm(
-    #     func=mdp.object_shift, weight=20.0
-    # )
+    object_shift = RewardTerm(
+        func=mdp.object_shift, weight=10.0
+    )
 
 @configclass
 class TerminationsCfg:
@@ -277,7 +277,7 @@ class CurriculumCfg:
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 20
+    obj_settle_wait_steps = 50
     disable_logging: bool = False
 
 
@@ -311,6 +311,6 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 60.0
+        self.sim.dt = 1.0 / 90.0
         self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
         self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20

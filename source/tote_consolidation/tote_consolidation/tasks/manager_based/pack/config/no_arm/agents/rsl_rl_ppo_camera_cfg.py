@@ -17,8 +17,8 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
     empirical_normalization = True
     policy = RslRlPpoActorCriticConv2dCfg(
         init_noise_std=40.0,        
-        actor_hidden_dims=[256, 128],
-        critic_hidden_dims=[256, 128],
+        actor_hidden_dims=[128, 128],
+        critic_hidden_dims=[128, 128],
         activation="elu",
         conv_layers_params=[
             {"out_channels": 4, "kernel_size": 3, "stride": 2, "padding": 1},
