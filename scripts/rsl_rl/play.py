@@ -175,13 +175,16 @@ def main():
             if args_cli.random:
                 # Get action shape from environment
                 action_shape = env.action_space.shape
-                # Generate random actions but ensure last 3 indices are one-hot encoded
-                rand_actions = torch.rand(args_cli.num_envs, action_shape[0], device=env.unwrapped.device) * 10 - 5  # random actions in [-1, 1]
-                # Get one-hot encoding for the last 3 indices                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                li.num_envs, 3, device=env.unwrapped.device)
+                action_dim = 74
+                # Generate random actions in [-1, 1] 2 dimensions for placement and 3 dimensions for orientation
+                actions = torch.rand(args_cli.num_envs, action_dim, device=env.unwrapped.device) * 2 - 1
+                actions[:, :2] = torch.rand(args_cli.num_envs, 2, device=env.unwrapped.device) * 2 - 1
+                # Generate random one-hot indices for the remaining action dimensions
+                one_hot_indices = torch.randint(0, action_dim-2, (args_cli.num_envs,), device=env.unwrapped.device)
+                one_hot = torch.zeros(args_cli.num_envs, action_dim-2, device=env.unwrapped.device)
                 one_hot.scatter_(1, one_hot_indices.unsqueeze(1), 1.0)
-                # Replace the last 3 indices with one-hot values
-                rand_actions[:, action_dim-3:action_dim] = one_hot
-                actions = rand_actions
+                # Replace the remaining action dimensions with one-hot values
+                actions[:, 2:action_dim] = one_hot
             else:
                 actions = policy(obs)
 

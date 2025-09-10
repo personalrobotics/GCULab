@@ -5,10 +5,8 @@
 
 import itertools
 import os
-import time
 from datetime import datetime
 
-import numpy as np
 import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
@@ -77,7 +75,6 @@ class ToteManager:
         self.tote_bounds = calculate_tote_bounds(self.tote_assets, self.true_tote_dim, env)
         # self.dest_totes = torch.arange(self.num_envs, device=env.device) % self.num_totes  # Default to one tote per env
         self.dest_totes = torch.zeros(self.num_envs, device=env.device).int()  # Default to one tote per env
-        self.last_action_pos_quat = torch.zeros(self.num_envs, 7, device=env.device)
         self.overfill_threshold = 0.3  # in meters
         self.max_objects_per_tote = 2
 
@@ -388,53 +385,28 @@ class ToteManager:
         #         torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
         #     )
 
-        # Reset all objects in overfilled envs
-        if overfilled_envs.any():
-            if not self.animate:
-                overfilled_envs_ids = env_ids[overfilled_envs]
-                for rigid_object in self.env.scene.rigid_objects.values():
-                    # obtain default and deal with the offset for env origins
-                    default_root_state = rigid_object.data.default_root_state[overfilled_envs_ids].clone()
-                    default_root_state[:, 0:3] += self.env.scene.env_origins[overfilled_envs_ids]
-                    # set into the physics simulation
-                    rigid_object.write_root_pose_to_sim(default_root_state[:, :7], env_ids=overfilled_envs_ids)
-                    rigid_object.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids=overfilled_envs_ids)
-            else:
-                # Find all objects in overfilled totes
-                if overfilled_envs.any():
-                    # First, collect all environment/object pairs that need to be reset
-                    env_indices = []
-                    obj_indices = []
-                    
-                    for i, (env_id, tote_id) in enumerate(zip(env_ids[overfilled_envs], tote_ids[overfilled_envs])):
-                        objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
-                        if objects_in_tote.numel() > 0:
-                            env_indices.extend([env_id.item()] * objects_in_tote.numel())
-                            obj_indices.extend(objects_in_tote.tolist())
-                    
-                    if len(env_indices) > 0:
-                        env_indices = torch.tensor(env_indices, device=self.env.device)
-                        obj_indices = torch.tensor(obj_indices, device=self.env.device)
-                        
-                    # Process assets in batches by object ID for better vectorization
-                        unique_obj_ids = torch.unique(obj_indices)
-                        for obj_id in unique_obj_ids:
-                            asset_name = f"object{obj_id.item()}"
-                            asset = self.env.scene[asset_name]
-                            
-                            # Find which environments need this object reset
-                            mask = obj_indices == obj_id
-                            reset_env_ids = env_indices[mask]
-                            
-                            # Get default states for these environments
-                            default_root_states = asset.data.default_root_state[reset_env_ids].clone()
-                            # Add environment origins
-                            default_root_states[:, :3] += self.env.scene.env_origins[reset_env_ids, :3]
-                            
-                            # Apply poses and velocities in one operation per object
-                            asset.write_root_link_pose_to_sim(default_root_states[:, :7], env_ids=reset_env_ids)
-                            asset.write_root_com_velocity_to_sim(default_root_states[:, 7:], env_ids=reset_env_ids)
-                            asset.set_visibility(False, env_ids=reset_env_ids)
+
+        assets_to_eject = []
+        for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
+            # Get all objects in the overfilled tote
+            objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
+            if objects_in_tote.numel() > 0:
+                # Add to the list of assets to eject
+                assets_to_eject.append([f"object{obj_id.item()}" for obj_id in objects_in_tote])
+
+        for env_id, asset_names in zip(env_ids[overfilled_envs], assets_to_eject):
+            # Reset the asset to reserve
+            for asset_name in asset_names:
+                asset = self.env.scene[asset_name]
+                default_root_state = asset.data.default_root_state[env_id]
+                default_root_state[:3] += self.env.scene.env_origins[env_id, :3]
+                asset.write_root_link_pose_to_sim(
+                    default_root_state[:7], env_ids=torch.tensor([env_id], device=self.env.device)
+                )
+                asset.write_root_com_velocity_to_sim(
+                    default_root_state[7:], env_ids=torch.tensor([env_id], device=self.env.device)
+                )
+                asset.set_visibility(False, env_ids=torch.tensor([env_id], device=self.env.device))
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
