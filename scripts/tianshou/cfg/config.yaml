@@ -9,7 +9,7 @@ env:
   scheme: EMS                  # the scheme of generating candidate map: heightmap, EP, FC
   rot: True
   box_type: random              # random, cut
-  container_size: [52, 37, 26]
+  container_size: [52, 37, 40]
   step:           
   k_placement: 80              # number of candidate placements
   

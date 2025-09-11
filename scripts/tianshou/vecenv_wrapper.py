@@ -183,7 +183,7 @@ class TianShouVecEnvWrapper(VecEnv):
         orientation_one_hot = pos_rot[:, 2:]  # shape [batch, 2]
         orientation_idx = torch.argmax(orientation_one_hot, dim=1)  # shape [
         # Convert orientation index to quaternion
-        # 0: identity, 1: 90° around z, 2: 90° around x, 3: 90° around y
+        # 0: 90° around z, 1: identity, 2: 90° around x, 3: 90° around y
         qx = torch.zeros_like(orientation_idx, dtype=torch.float32)
         qy = torch.zeros_like(orientation_idx, dtype=torch.float32)
         qz = torch.zeros_like(orientation_idx, dtype=torch.float32)
@@ -192,7 +192,7 @@ class TianShouVecEnvWrapper(VecEnv):
         # Set values for each orientation
         z_rot_mask = orientation_idx == 1
 
-        # For 90° rotation around z (orientation 1)
+        # For 90° rotation around z (orientation 0)
         qx[z_rot_mask] = 0.7071068  # sin(π/4)
         qw[z_rot_mask] = 0.7071068  # cos(π/4)
 
@@ -203,16 +203,17 @@ class TianShouVecEnvWrapper(VecEnv):
 
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
             torch.arange(pos_rot.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)
-        ]
+        ][:, [0, 2, 1]]
         quats = torch.stack([qx, qy, qz, qw], dim=1)  # shape [batch, 4]
         rotated_dim = (
             calculate_rotated_bounding_box(
                 bbox_offset, quats, device=self.env.unwrapped.device
             )
         )
-        x = x / 37
-        y = y / 52
-        assert (x < 1.0).all() and (y < 1.0).all()
+        x = (52 - x) / 52
+        y = y / 37
+
+        assert (x <= 1.0).all() and (y <= 1.0).all()
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
         x = x * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
@@ -220,7 +221,6 @@ class TianShouVecEnvWrapper(VecEnv):
 
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)
-
         return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), [x_pos_range, y_pos_range], rotated_dim
 
 
@@ -229,6 +229,9 @@ class TianShouVecEnvWrapper(VecEnv):
         img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
         img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
         depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) / 100.0
+        # plt.imshow(depth_img[0].cpu())
+        # plt.savefig("depth_img.png")
+        # plt.close()
 
         # Rescale x_pos and y_pos to the range of the depth image
         total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
@@ -256,18 +259,27 @@ class TianShouVecEnvWrapper(VecEnv):
         x0_ = x0.view(-1, 1, 1)
         x1_ = x1.view(-1, 1, 1)
         mask = (grid_y >= y0_) & (grid_y <= y1_) & (grid_x >= x0_) & (grid_x <= x1_)
+        plt.imshow(mask[0].cpu())
+        plt.savefig("mask.png")
+        plt.close()
 
         # Masked min: set out-of-patch values and zeros to inf, then take min
         depth_img_masked = depth_img
         depth_img_masked[~mask] = 0.0
         depth_img_masked[depth_img_masked == 0] = 0.0
         
-        z_pos = depth_img_masked.view(depth_img.shape[0], -1).max(dim=1).values
+        # plt.imshow(depth_img_masked[0].cpu())
+        # plt.savefig("depth_img_masked.png")
+        # plt.close()
+        # print("x0, y0, x1, y1: ", x0_, y0_, x1_, y1_)
+        z_pos = depth_img_masked.reshape(depth_img.shape[0], -1).max(dim=1).values
         z_pos = z_pos.clamp(min=0.0, max=0.4)
         return z_pos
 
 
     def step(self, pos_rot: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+        pos_rot = pos_rot[:, [1, 0, 2, 3]]
+        # Swap x and y coordinates properly
         tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
         packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
         object_to_pack = [row[0] for row in packable_objects]

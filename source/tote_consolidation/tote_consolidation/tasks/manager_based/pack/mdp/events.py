@@ -334,7 +334,7 @@ def set_objects_to_invisible(
         if envs_obj_in_reserve:
             asset_cfg = SceneEntityCfg(f"object{obj_id}")
             asset = env.scene[asset_cfg.name]
-            asset.set_visibility(False, env_ids=envs_obj_in_reserve)
+            asset.set_visibility(True, env_ids=envs_obj_in_reserve)
 
 
 def check_obj_out_of_bounds(

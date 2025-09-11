@@ -64,10 +64,22 @@ def test(args):
     
     policy.eval()
     try:
-        policy.load_state_dict(torch.load(args.ckp, map_location=device))
+        checkpoint = torch.load(args.ckp, map_location=device)
+        # Handle different checkpoint formats
+        if isinstance(checkpoint, dict) and "model" in checkpoint:
+            # Checkpoint saved with both model and optimizer state
+            policy.load_state_dict(checkpoint["model"])
+            print("Loaded checkpoint with model and optimizer states")
+        else:
+            # Checkpoint saved as policy state dict only
+            policy.load_state_dict(checkpoint)
+            print("Loaded checkpoint with policy state dict only")
         # print(policy)
     except FileNotFoundError:
         print("No model found")
+        exit()
+    except Exception as e:
+        print(f"Error loading checkpoint: {e}")
         exit()
 
     test_collector = PackCollector(policy, test_env)

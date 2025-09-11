@@ -53,9 +53,9 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 include_ids = [
     "003",  # cracker_box
-    "004",  # sugar_box
-    "006",  # mustard_bottle
-    "007", # tuna_fish_can
+    # "004",  # sugar_box
+    # "006",  # mustard_bottle
+    # "007", # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
     # "036",  # wood_block
@@ -70,7 +70,7 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 20
+num_object_per_env = 30
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -154,9 +154,9 @@ class PackSceneCfg(InteractiveSceneCfg):
                         distribution=None,  # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(
                             kinematic_enabled=False,
-                            disable_gravity=True,
+                            disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=60,
+                            solver_position_iteration_count=0,
                             # solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,

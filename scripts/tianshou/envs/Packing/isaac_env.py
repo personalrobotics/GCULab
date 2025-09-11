@@ -65,6 +65,11 @@ class IsaacPackingEnv(PackingEnv):
             #     print(c)
             self.candidates[0:len(placements)] = placements
         size.extend([size[1], size[0], size[2]])
+        import matplotlib.pyplot as plt
+        plt.imshow(hmap)
+        plt.colorbar()
+        plt.savefig("heightmap_isaac_env.png")
+        plt.close()
         obs = np.concatenate((hmap.reshape(-1), np.array(size).reshape(-1), self.candidates.reshape(-1)))
         mask = mask.reshape(-1)
 
@@ -86,8 +91,13 @@ class IsaacPackingEnv(PackingEnv):
         self.container.heightmap = heightmap
         # print(self.next_box)
         pos, rot, size = self.idx2pos(action)
- 
-        # succeeded = self.container.place_box(self.next_box, pos, rot)
+        import matplotlib.pyplot as plt
+        plt.imshow(heightmap)
+        plt.colorbar()
+        plt.savefig("heightmap_isaac_env_before.png")
+        plt.close()
+
+        succeeded = self.container.place_box(self.next_box, pos, rot)
         
         if done:
             if self.reward_type == "terminal":  # Terminal reward
@@ -98,6 +108,9 @@ class IsaacPackingEnv(PackingEnv):
             
             self.render_box = [[0, 0, 0], [0, 0, 0]]
             info = {'counter': len(self.container.boxes), 'ratio': self.container.get_volume_ratio()}
+            self.container = Container(*self.bin_size)
+            self.candidates = np.zeros_like(self.candidates)
+
             return self.cur_observation, reward, done, False, info
 
         box_ratio = self.get_box_ratio()

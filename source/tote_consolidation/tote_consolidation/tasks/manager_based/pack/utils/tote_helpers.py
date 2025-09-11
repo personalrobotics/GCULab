@@ -25,7 +25,7 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
     Returns:
         torch.Tensor: Dimensions of rotated bounding boxes.
     """
-    object_half_dims = object_bboxes[:, [1, 2, 0]] / 2.0 * 0.01  # cm to m
+    object_half_dims = object_bboxes[:, [2, 1, 0]] / 2.0 * 0.01  # cm to m
 
     corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
         0
@@ -83,7 +83,7 @@ def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     Returns:
         torch.Tensor: Dimensions of rotated bounding boxes.
     """
-    object_half_dims = object_bboxes[:, [1, 2, 0]] / 2.0 * 0.01  # cm to m
+    object_half_dims = object_bboxes[:, [2, 1, 0]] / 2.0 * 0.01  # cm to m
 
     corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
         0
@@ -208,8 +208,8 @@ def update_object_positions_in_sim(env, objects, positions, orientations, cur_en
         # schemas.modify_rigid_body_properties(
         #     prim_path,
         #     schemas_cfg.RigidBodyPropertiesCfg(
-        #         kinematic_enabled=False,
-        #         disable_gravity=False,
+        #         kinematic_enabled=True,
+        #         disable_gravity=True,
         #     ),
         # )
 

@@ -475,13 +475,13 @@ class ToteManager:
             prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
 
             # Modify physics properties and apply pose and velocity
-            # schemas.modify_rigid_body_properties(
-            #     prim_path,
-            #     schemas_cfg.RigidBodyPropertiesCfg(
-            #         kinematic_enabled=False,
-            #         disable_gravity=False,
-            #     ),
-            # )
+            schemas.modify_rigid_body_properties(
+                prim_path,
+                schemas_cfg.RigidBodyPropertiesCfg(
+                    kinematic_enabled=True,
+                    disable_gravity=True,
+                ),
+            )
 
             # Apply position and orientation
             asset.write_root_link_pose_to_sim(

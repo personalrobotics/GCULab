@@ -103,13 +103,14 @@ def make_envs(args, obs):
 
     test_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
 
-    return test_envs, None
+    return test_envs
 
 @hydra_task_config(args_cli.task, "tianshou_cfg_entry_point")
-def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict):
+def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict, cli_args):
     """Train with RSL-RL agent."""
 
     args = OmegaConf.create(agent_cfg)
+    args = OmegaConf.merge(args, cli_args)
 
     # set the environment seed
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
@@ -257,10 +258,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     
     policy.eval()
     try:
-        policy.load_state_dict(torch.load(args.ckp, map_location=device))
+        checkpoint = torch.load(args.ckp, map_location=device)
+        # Handle different checkpoint formats
+        if isinstance(checkpoint, dict) and "model" in checkpoint:
+            # Checkpoint saved with both model and optimizer state
+            policy.load_state_dict(checkpoint["model"])
+            print("Loaded checkpoint with model and optimizer states")
+        else:
+            # Checkpoint saved as policy state dict only
+            policy.load_state_dict(checkpoint)
+            print("Loaded checkpoint with policy state dict only")
         # print(policy)
     except FileNotFoundError:
         print("No model found")
+        exit()
+    except Exception as e:
+        print(f"Error loading checkpoint: {e}")
         exit()
 
     log_path = './logs/' + time_str
@@ -292,6 +305,6 @@ if __name__ == "__main__":
     registration_envs()
     args = arguments.get_args()
     args.train.algo = args.train.algo.upper()
-    main()
+    main(args)
     # close sim app
     simulation_app.close()

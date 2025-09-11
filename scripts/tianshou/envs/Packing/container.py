@@ -544,7 +544,12 @@ class Container(object):
         Returns:
             list: _description_
         """
-        heightmap = copy.deepcopy(self.heightmap)
+        heightmap = copy.deepcopy(self.heightmap.astype(np.int32))
+        # import matplotlib.pyplot as plt
+        # plt.imshow(heightmap)
+        # plt.colorbar()
+        # plt.savefig("heightmap.png")
+        # plt.close()
         # left-bottom & right-top pos [bx, by, bz, tx, ty, tz], 
         # dimension: [tx-bx, ty-by, tz-bz],
         all_ems = compute_ems(heightmap, container_h=self.dimension[2])  

@@ -208,7 +208,6 @@ class IsaacPackCollector(Collector):
             # Each tuple is (array([x, y, z], dtype=int32), w), so concatenate to [x, y, z, w]
             pos_rot_array = np.array([np.concatenate([p[0], np.array([p[1]])]) for p in pos_rot])
             pos_rot_tensor = torch.tensor(pos_rot_array, dtype=torch.float32, device=self.isaac_env.device)
-
             image_obs = self.data.obs.obs[:, :self.container_size[0]*self.container_size[1]].reshape((len(pos_rot), 1, self.container_size[0], self.container_size[1]))
 
             # print("pos_rot_tensor:", pos_rot_tensor)

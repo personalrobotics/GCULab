@@ -82,8 +82,19 @@ def set_seed(seed: int, cuda: bool = False, cuda_deterministic: bool = False):
 
 def depth_to_heightmap(depth: np.ndarray) -> np.ndarray:
     """Convert depth map to height map."""
-    heightmap = 19.998 - depth
+    heightmap = np.maximum(19.99 - depth, 0)
     heightmap = np.floor(heightmap * 100)
+    # # 2, 37, 52 -> 2, 52, 37
+    # heightmap = heightmap.transpose(0, 2, 1)
+    import matplotlib.pyplot as plt
+    plt.imshow(depth[0])
+    plt.colorbar()
+    plt.savefig("depth.png")
+    plt.close()
+    plt.imshow(heightmap[0])
+    plt.colorbar()
+    plt.savefig("heightmap.png")
+    plt.close()
     return heightmap
 
 
