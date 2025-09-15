@@ -9,7 +9,7 @@ from omegaconf import OmegaConf
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=str, default="cfg/config.yaml")
-    parser.add_argument('--ckp', type=str, default=None, 
+    parser.add_argument('--ckp', type=str, default="/home/henri/henri_ws/prl_cp/GCULab/logs/IsaacOnlinePack-v1_34-51-26_EMS_80_random_PPO_seed5_Adam_2025.09.11-20-11-28/checkpoint.pth",
                         help="Path to the model to be tested")
     parser.add_argument('--no-cuda', action='store_true',
                         help='Cuda will be enabled by default')

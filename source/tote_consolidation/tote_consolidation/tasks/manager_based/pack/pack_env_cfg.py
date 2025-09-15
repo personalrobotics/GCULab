@@ -70,7 +70,7 @@ for usd_file in all_usd_files:
     if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 30
+num_object_per_env = 40
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -271,7 +271,7 @@ class CurriculumCfg:
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 0
+    obj_settle_wait_steps = 50
     disable_logging: bool = False
 
 

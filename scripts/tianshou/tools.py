@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 from gymnasium.envs.registration import register
 
+import torch.nn.functional as F
 
 def backup(time_str, args, upper_policy=None):
     if args.mode == "test":
@@ -83,19 +84,24 @@ def set_seed(seed: int, cuda: bool = False, cuda_deterministic: bool = False):
 def depth_to_heightmap(depth: np.ndarray) -> np.ndarray:
     """Convert depth map to height map."""
     heightmap = np.maximum(19.99 - depth, 0)
-    heightmap = np.floor(heightmap * 100)
-    # # 2, 37, 52 -> 2, 52, 37
-    # heightmap = heightmap.transpose(0, 2, 1)
-    import matplotlib.pyplot as plt
-    plt.imshow(depth[0])
-    plt.colorbar()
-    plt.savefig("depth.png")
-    plt.close()
-    plt.imshow(heightmap[0])
-    plt.colorbar()
-    plt.savefig("heightmap.png")
-    plt.close()
-    return heightmap
+    heightmap = np.round(heightmap * 100)
+    # Scale from (2, 37, 52, 1) to (2, 34, 51, 1)
+    heightmap = torch.tensor(heightmap)
+    heightmap = heightmap.permute(0, 3, 1, 2)  # (2, 1, 37, 52)
+
+    heightmap_resized = F.interpolate(heightmap, size=(34, 51), mode='bilinear', align_corners=False)
+    heightmap_resized = heightmap_resized.permute(0, 2, 3, 1)  # back to (2, 34, 51, 1)
+
+    # import matplotlib.pyplot as plt
+    # # plt.imshow(depth[0])
+    # # plt.colorbar()
+    # # plt.savefig("depth.png")
+    # # plt.close()
+    # plt.imshow(heightmap_resized[0])
+    # plt.colorbar()
+    # plt.savefig("heightmap.png")
+    # plt.close()
+    return heightmap_resized.numpy()
 
 
 class CategoricalMasked(torch.distributions.Categorical):

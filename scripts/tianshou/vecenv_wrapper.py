@@ -210,24 +210,24 @@ class TianShouVecEnvWrapper(VecEnv):
                 bbox_offset, quats, device=self.env.unwrapped.device
             )
         )
-        x = (52 - x) / 52
-        y = y / 37
+        max_x = 51
+        max_y = 34
+        x = x / max_x
+        y = y / max_y
+
 
         assert (x <= 1.0).all() and (y <= 1.0).all()
-        x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
-        y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
-        x = x * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
-        y = y * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
+        x = (1 - x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100) - rotated_dim[:, 0] - 0.02
+        y = y * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100) + 0.01
 
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)
-        return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), [x_pos_range, y_pos_range], rotated_dim
+        return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), None, rotated_dim
 
-
-    def _get_z_position_from_depth(self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
+    def _get_z_position_from_depth(self, image_obs: torch.Tensor, pos_rot: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
         """Get the z position from the depth image."""
-        img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
-        img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
+        img_h = 34
+        img_w = 51
         depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w) / 100.0
         # plt.imshow(depth_img[0].cpu())
         # plt.savefig("depth_img.png")
@@ -236,19 +236,19 @@ class TianShouVecEnvWrapper(VecEnv):
         # Rescale x_pos and y_pos to the range of the depth image
         total_tote_x = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100
         total_tote_y = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100
-        x_pos = torch.round(52 -(xy_pos[0] / total_tote_x) * 52).to(torch.int64)
-        y_pos = torch.round((xy_pos[1] / total_tote_y) * 37).to(torch.int64)
+        tote_x_m = self.env.unwrapped.tote_manager.true_tote_dim[0]
+        tote_y_m = self.env.unwrapped.tote_manager.true_tote_dim[1]
 
         # Compute patch extents in pixel units by scaling world dimensions to pixel coordinates
         # The image covers the total tote dimensions, so scale object dimensions relative to total tote dimensions
-        x_extent = torch.round((rotated_dim[:, 0] / total_tote_x) * 52).clamp(min=1).long()
-        y_extent = torch.round((rotated_dim[:, 1] / total_tote_y) * 37).clamp(min=1).long()
+        x_extent = torch.round((rotated_dim[:, 0] / total_tote_x) * tote_x_m).clamp(min=1).long()
+        y_extent = torch.round((rotated_dim[:, 1] / total_tote_y) * tote_y_m).clamp(min=1).long()
 
         # Compute patch start/end indices, clamp to image bounds
-        x1 = x_pos.clamp(0, 51)
-        y0 = y_pos.clamp(0, 36)
-        x0 = (x1 - x_extent).clamp(0, 51)
-        y1 = (y0 + y_extent).clamp(0, 36)
+        x0 = pos_rot[:, 0].clamp(0, tote_x_m)
+        y0 = pos_rot[:, 1].clamp(0, tote_y_m)
+        x1 = (x0 + x_extent).clamp(0, tote_x_m)
+        y1 = (y0 + y_extent).clamp(0, tote_y_m)
 
         # For each sample, extract the patch and get the max value
         # Use broadcasting to build masks for all pixels in one go
@@ -264,18 +264,17 @@ class TianShouVecEnvWrapper(VecEnv):
         plt.close()
 
         # Masked min: set out-of-patch values and zeros to inf, then take min
-        depth_img_masked = depth_img
-        depth_img_masked[~mask] = 0.0
-        depth_img_masked[depth_img_masked == 0] = 0.0
-        
+        depth_img_masked = depth_img.clone()
+        depth_img_masked[~mask] = 0
+        z_pos = depth_img_masked.view(depth_img.shape[0], -1).max(dim=1).values
         # plt.imshow(depth_img_masked[0].cpu())
+        # plt.colorbar()
         # plt.savefig("depth_img_masked.png")
         # plt.close()
-        # print("x0, y0, x1, y1: ", x0_, y0_, x1_, y1_)
-        z_pos = depth_img_masked.reshape(depth_img.shape[0], -1).max(dim=1).values
+
+        # print("zpos: ", z_pos)
         z_pos = z_pos.clamp(min=0.0, max=0.4)
         return z_pos
-
 
     def step(self, pos_rot: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         pos_rot = pos_rot[:, [1, 0, 2, 3]]
@@ -288,7 +287,7 @@ class TianShouVecEnvWrapper(VecEnv):
         
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(pos_rot, object_to_pack)
         # Get z_pos from depth image
-        z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
+        z_pos = self._get_z_position_from_depth(image_obs, pos_rot, rotated_dim)
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs

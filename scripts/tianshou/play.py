@@ -89,6 +89,7 @@ torch.backends.cudnn.benchmark = False
 from omegaconf import OmegaConf
 
 def make_envs(args, obs):
+    print("container size: ", args.env.container_size)
     test_envs = ts.env.IsaacSubprocVectorEnv(
         [lambda: gym.make(args.env.id, 
                           container_size=args.env.container_size,
@@ -101,7 +102,7 @@ def make_envs(args, obs):
                           for _ in range(args.train.num_processes)]
     )
 
-    test_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy()))
+    test_envs.seed(args.seed, next_box=obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]], heightmap=depth_to_heightmap(obs['sensor'].detach().cpu().numpy()))
 
     return test_envs
 
@@ -109,8 +110,8 @@ def make_envs(args, obs):
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: dict, cli_args):
     """Train with RSL-RL agent."""
 
-    args = OmegaConf.create(agent_cfg)
-    args = OmegaConf.merge(args, cli_args)
+    args = OmegaConf.create(cli_args)
+    args = OmegaConf.merge(args, agent_cfg)
 
     # set the environment seed
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs

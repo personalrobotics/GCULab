@@ -65,11 +65,6 @@ class IsaacPackingEnv(PackingEnv):
             #     print(c)
             self.candidates[0:len(placements)] = placements
         size.extend([size[1], size[0], size[2]])
-        import matplotlib.pyplot as plt
-        plt.imshow(hmap)
-        plt.colorbar()
-        plt.savefig("heightmap_isaac_env.png")
-        plt.close()
         obs = np.concatenate((hmap.reshape(-1), np.array(size).reshape(-1), self.candidates.reshape(-1)))
         mask = mask.reshape(-1)
 
@@ -88,17 +83,16 @@ class IsaacPackingEnv(PackingEnv):
                  info
         """
         self.next_box = np.round(np.array(next_box).squeeze() * 100).astype(int)
-        self.container.heightmap = heightmap
+        self.container.heightmap = heightmap.squeeze()
         # print(self.next_box)
         pos, rot, size = self.idx2pos(action)
-        import matplotlib.pyplot as plt
-        plt.imshow(heightmap)
-        plt.colorbar()
-        plt.savefig("heightmap_isaac_env_before.png")
-        plt.close()
+        # import matplotlib.pyplot as plt
+        # plt.imshow(heightmap)
+        # plt.colorbar()
+        # plt.savefig("heightmap_isaac_env_before.png")
+        # plt.close()
 
         succeeded = self.container.place_box(self.next_box, pos, rot)
-        
         if done:
             if self.reward_type == "terminal":  # Terminal reward
                 reward = self.container.get_volume_ratio()
@@ -141,5 +135,5 @@ class IsaacPackingEnv(PackingEnv):
             raise ValueError("heightmap must be provided")
 
         self.next_box = np.round(np.array(next_box).squeeze() * 100).astype(int)
-        self.container.heightmap = heightmap
+        self.container.heightmap = heightmap.squeeze()
         return self.cur_observation, {}

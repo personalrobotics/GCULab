@@ -178,37 +178,38 @@ class Container(object):
         pos_z = np.max(self.heightmap[pos_xy[0]:pos_xy[0] + box_size[0], pos_xy[1]:pos_xy[1] + box_size[1]])
 
         # whether cross the broder
-        if pos_z + box_size[2] > self.dimension[2]:
-            return -1
+        # if pos_z + box_size[2] > self.dimension[2]:
+        #     print("Cross the border")
+        #     return -1
         
         # check stability
-        if benchmark:
-            # zhao AAAI2021 paper
-            rec = self.heightmap[pos_xy[0]:pos_xy[0] + box_size[0], pos_xy[1]:pos_xy[1] + box_size[1]]
-            r00 = rec[0, 0]
-            r10 = rec[box_size[0] - 1, 0]
-            r01 = rec[0, box_size[1] - 1]
-            r11 = rec[box_size[0] - 1, box_size[1] - 1]
-            rm = max(r00, r10, r01, r11)
-            sc = int(r00 == rm) + int(r10 == rm) + int(r01 == rm) + int(r11 == rm)
-            # at least 3 support point
-            if sc < 3:
-                return -1
-            # check area and corner
-            max_area = np.sum(rec == pos_z)
-            area = box_size[0] * box_size[1]
-            # 
-            if max_area / area > 0.95:
-                return pos_z
-            if rm == pos_z and sc == 3 and max_area/area > 0.85:
-                return pos_z
-            if rm == pos_z and sc == 4 and max_area/area > 0.50:
-                return pos_z
-        else:
-            if self.is_stable(box_size, [pos_xy[0], pos_xy[1], pos_z]):
-                return pos_z
+        # if benchmark:
+        #     # zhao AAAI2021 paper
+        #     rec = self.heightmap[pos_xy[0]:pos_xy[0] + box_size[0], pos_xy[1]:pos_xy[1] + box_size[1]]
+        #     r00 = rec[0, 0]
+        #     r10 = rec[box_size[0] - 1, 0]
+        #     r01 = rec[0, box_size[1] - 1]
+        #     r11 = rec[box_size[0] - 1, box_size[1] - 1]
+        #     rm = max(r00, r10, r01, r11)
+        #     sc = int(r00 == rm) + int(r10 == rm) + int(r01 == rm) + int(r11 == rm)
+        #     # at least 3 support point
+        #     if sc < 3:
+        #         return -1
+        #     # check area and corner
+        #     max_area = np.sum(rec == pos_z)
+        #     area = box_size[0] * box_size[1]
+        #     # 
+        #     if max_area / area > 0.95:
+        #         return pos_z
+        #     if rm == pos_z and sc == 3 and max_area/area > 0.85:
+        #         return pos_z
+        #     if rm == pos_z and sc == 4 and max_area/area > 0.50:
+        #         return pos_z
+        # else:
+        #     if self.is_stable(box_size, [pos_xy[0], pos_xy[1], pos_z]):
+        #         return pos_z
 
-        return -1
+        return pos_z
 
     def check_box_ems(self, box_size, ems, benchmark=False):
         """
@@ -346,7 +347,12 @@ class Container(object):
         if new_h != -1:
             self.boxes.append(Box(size_x, size_y, size_z, pos[0], pos[1], pos[2]))  # record rotated box
             self.rot_flags.append(rot_flag)
-            self.heightmap = self.update_heightmap(plain, self.boxes[-1])
+            # self.heightmap = self.update_heightmap(plain, self.boxes[-1])
+            # import matplotlib.pyplot as plt
+            # plt.imshow(self.heightmap)
+            # plt.colorbar()
+            # plt.savefig("heightmap_isaac_env_after.png")
+            # plt.close()
             self.height = max(self.height, pos[2] + size_z)
             return True
         return False
@@ -530,7 +536,7 @@ class Container(object):
 
         self.candidates = candidates
         return np.array(candidates), mask
-    
+
     def candidate_from_EMS(self, 
         next_box, 
         max_n
@@ -545,11 +551,11 @@ class Container(object):
             list: _description_
         """
         heightmap = copy.deepcopy(self.heightmap.astype(np.int32))
-        # import matplotlib.pyplot as plt
-        # plt.imshow(heightmap)
-        # plt.colorbar()
-        # plt.savefig("heightmap.png")
-        # plt.close()
+        import matplotlib.pyplot as plt
+        plt.imshow(heightmap)
+        plt.colorbar()
+        plt.savefig("heightmap.png")
+        plt.close()
         # left-bottom & right-top pos [bx, by, bz, tx, ty, tz], 
         # dimension: [tx-bx, ty-by, tz-bz],
         all_ems = compute_ems(heightmap, container_h=self.dimension[2])  

@@ -84,7 +84,7 @@ class IsaacPackCollector(Collector):
         obs = extras['observations']
         gym_reset_kwargs = {
             "next_box": obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]],
-            "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
+            "heightmap": depth_to_heightmap(obs['sensor'].detach().cpu().numpy())
         }
         self.reset(gym_reset_kwargs=gym_reset_kwargs)
         self.container_size = self.isaac_env.observation_space['sensor'].shape[1:3] # 37, 52
@@ -208,14 +208,14 @@ class IsaacPackCollector(Collector):
             # Each tuple is (array([x, y, z], dtype=int32), w), so concatenate to [x, y, z, w]
             pos_rot_array = np.array([np.concatenate([p[0], np.array([p[1]])]) for p in pos_rot])
             pos_rot_tensor = torch.tensor(pos_rot_array, dtype=torch.float32, device=self.isaac_env.device)
-            image_obs = self.data.obs.obs[:, :self.container_size[0]*self.container_size[1]].reshape((len(pos_rot), 1, self.container_size[0], self.container_size[1]))
+            image_obs = self.data.obs.obs[:, :51*34].reshape((len(pos_rot), 1, 34, 51))
 
             # print("pos_rot_tensor:", pos_rot_tensor)
             obs, rew, dones, extras = self.isaac_env.step(pos_rot_tensor, image_obs=torch.tensor(image_obs, dtype=torch.float32, device=self.isaac_env.device))
             obs = extras['observations']
             isaac_obs = {
                 "next_box": obs['policy'][:, -3:].detach().cpu().numpy()[:, [2, 1, 0]],
-                "heightmap": depth_to_heightmap(obs['sensor'].squeeze().detach().cpu().numpy())
+                "heightmap": depth_to_heightmap(obs['sensor'].detach().cpu().numpy())
             }
             dones = dones.detach().cpu().numpy()
 
