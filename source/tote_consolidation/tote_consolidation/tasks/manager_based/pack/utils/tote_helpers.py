@@ -106,12 +106,14 @@ def step_in_sim(env, num_steps=1):
         num_steps (int): Number of steps to perform in the simulation.
     """
     step = env._sim_step_counter
-    for _ in range(num_steps):
+    for i in range(num_steps):
         env.sim.step(render=False)
         if step % env.cfg.sim.render_interval == 0:
             env.sim.render()
         step += 1
-        env.scene.update(dt=env.physics_dt)
+        # Only update scene on the last step to reduce GPU interface calls
+        if i == num_steps - 1:
+            env.scene.update(dt=env.physics_dt)
 
 
 def reappear_tote_animation(env, env_ids, eject_envs, eject_tote_ids, tote_keys):

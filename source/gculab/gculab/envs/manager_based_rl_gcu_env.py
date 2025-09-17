@@ -197,7 +197,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         # perform physics stepping
-        for _ in range(self.cfg.decimation):
+        for i in range(self.cfg.decimation):
             self._sim_step_counter += 1
             # set actions into buffers
             self.action_manager.apply_action()
@@ -210,8 +210,9 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.
             if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering:
                 self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
+            # update buffers at sim dt - only on last iteration to reduce GPU interface calls
+            if i == self.cfg.decimation - 1:
+                self.scene.update(dt=self.physics_dt)
         self.tote_manager.source_tote_ejected = torch.zeros(
             self.num_envs, dtype=torch.bool, device="cpu"
         )
@@ -222,8 +223,9 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.sim.step(render=False)
             # if self._sim_step_counter % self.cfg.sim.render_interval == 0:
             #     self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
+            # update buffers at sim dt - only on last iteration to reduce GPU interface calls
+            if i == wait_time - 1:
+                self.scene.update(dt=self.physics_dt)
         self.sim.render() # TODO (kaikwan): condition on animate_vis or headless
         self.scene.write_data_to_sim()
         self.sim.forward()
