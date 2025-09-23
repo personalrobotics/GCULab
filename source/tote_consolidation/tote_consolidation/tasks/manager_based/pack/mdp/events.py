@@ -488,14 +488,7 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
     """
     total_volume = env.tote_manager.tote_volume
-    # env.scene.write_data_to_sim()
-    # env.sim.step(render=True)
     heightmaps = 20 - env.observation_manager.compute()["sensor"]  # subtract distance from camera to tote
-    # import matplotlib.pyplot as plt
-    # plt.imshow(heightmaps[0].cpu().numpy(), cmap='viridis')
-    # plt.colorbar()
-    # plt.savefig("heightmap.png")
-    # plt.close()
     top_down_volumes = (0.26 - heightmaps) * 100 * 0.92  # 0.92
     top_down_volumes = torch.sum(top_down_volumes, dim=(1, 2))  # Sum over heightmap dimensions
     top_down_volumes = top_down_volumes / total_volume
