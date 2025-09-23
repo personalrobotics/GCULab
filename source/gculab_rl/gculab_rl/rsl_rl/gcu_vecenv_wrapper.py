@@ -19,7 +19,7 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
 PI = 3.141592653589793238462643383279502884
 
 
-def make_quaternion_prototypes(device='cpu', n_side=1):
+def make_quaternion_prototypes(device="cpu", n_side=1):
     """
     Generate quaternions uniformly on SO(3) using Hopf coordinates
     and HEALPix grids
@@ -30,11 +30,11 @@ def make_quaternion_prototypes(device='cpu', n_side=1):
     """
     # Uniformly sample the 3D sphere
     n_pix = 12 * n_side**2
-    p = torch.arange(12*n_side**2, device=device)
+    p = torch.arange(12 * n_side**2, device=device)
     ph = (p + 1) / 2
     i1 = torch.floor(torch.sqrt(ph - torch.sqrt(torch.floor(ph)))) + 1
-    j1 = p + 1 - 2*i1*(i1 - 1)
-    valid = torch.logical_and(i1 < n_side, j1 <= 4*i1)
+    j1 = p + 1 - 2 * i1 * (i1 - 1)
+    valid = torch.logical_and(i1 < n_side, j1 <= 4 * i1)
     i1 = i1[valid]
     j1 = j1[valid]
     z1 = 1 - i1**2 / 3 / n_side**2
@@ -42,38 +42,36 @@ def make_quaternion_prototypes(device='cpu', n_side=1):
     phi1 = PI / 2 / i1 * (j1 - s / 2)
     theta1 = torch.acos(z1)
 
-    ph = p - 2*n_side*(n_side - 1)
+    ph = p - 2 * n_side * (n_side - 1)
     i2 = torch.floor(ph / 4 / n_side) + n_side
-    j2 = ph % (4*n_side) + 1
-    j0 = j2[i2 == 2*n_side]
+    j2 = ph % (4 * n_side) + 1
+    j0 = j2[i2 == 2 * n_side]
     s = (n_side + 1) % 2
     phi0 = PI / 2 / n_side * (j0 - s / 2)
     theta0 = PI / 2 * torch.ones_like(phi0)
-    valid = torch.logical_and(n_side <= i2, i2 < 2*n_side)
+    valid = torch.logical_and(n_side <= i2, i2 < 2 * n_side)
     i2 = i2[valid]
     j2 = j2[valid]
-    z2 = 4 / 3 - 2*i2 / 3 / n_side
+    z2 = 4 / 3 - 2 * i2 / 3 / n_side
     s = (i2 - n_side + 1) % 2
     phi2 = PI / 2 / n_side * (j2 - s / 2)
     theta2 = torch.acos(z2)
 
-    theta = torch.concat([
-        theta1, PI - theta1, theta2,
-        PI - theta2, theta0], dim=0).reshape(1, -1)
-    phi = torch.concat([
-        phi1, phi1, phi2, phi2, phi0], dim=0).reshape(1, -1)
+    theta = torch.concat([theta1, PI - theta1, theta2, PI - theta2, theta0], dim=0).reshape(1, -1)
+    phi = torch.concat([phi1, phi1, phi2, phi2, phi0], dim=0).reshape(1, -1)
 
     # Generate prototypes using Hopf fibration
     n1 = torch.floor(torch.sqrt(torch.tensor(PI * n_pix, device=device)))
-    psi = torch.arange(0, 2*PI, step=2*PI / n1, device=device).reshape(-1, 1)
-    x1 = torch.cos(theta/2) * torch.cos(psi/2)
-    x2 = torch.sin(theta/2) * torch.sin(phi - psi/2)
-    x3 = torch.sin(theta/2) * torch.cos(phi - psi/2)
-    x4 = torch.cos(theta/2) * torch.sin(psi/2)
+    psi = torch.arange(0, 2 * PI, step=2 * PI / n1, device=device).reshape(-1, 1)
+    x1 = torch.cos(theta / 2) * torch.cos(psi / 2)
+    x2 = torch.sin(theta / 2) * torch.sin(phi - psi / 2)
+    x3 = torch.sin(theta / 2) * torch.cos(phi - psi / 2)
+    x4 = torch.cos(theta / 2) * torch.sin(psi / 2)
 
     prototypes = torch.stack([x1, x2, x3, x4], dim=-1).reshape(-1, 4)
     prototypes = prototypes / torch.norm(prototypes, dim=-1, keepdim=True)
     return prototypes
+
 
 def quaternion_from_bin_logits(logits):
     """
@@ -87,13 +85,11 @@ def quaternion_from_bin_logits(logits):
     batch_size, num_bins = logits.shape
     prototypes = make_quaternion_prototypes(device=logits.device)
     assert prototypes.shape[0] == num_bins, f"Prototypes shape: {prototypes.shape}, num_bins: {num_bins}"
-    prototypes_rep = torch.repeat_interleave(
-        prototypes.unsqueeze(0), batch_size, dim=0)
-    indices = torch.repeat_interleave(torch.argmax(
-        logits, dim=-1, keepdim=True), repeats=4, dim=1)
-    quaternions = torch.gather(
-        prototypes_rep, dim=1, index=indices.unsqueeze(1))
+    prototypes_rep = torch.repeat_interleave(prototypes.unsqueeze(0), batch_size, dim=0)
+    indices = torch.repeat_interleave(torch.argmax(logits, dim=-1, keepdim=True), repeats=4, dim=1)
+    quaternions = torch.gather(prototypes_rep, dim=1, index=indices.unsqueeze(1))
     return torch.squeeze(quaternions, dim=1)
+
 
 class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
     """
@@ -120,24 +116,20 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
     def _convert_to_pos_quat(self, actions: torch.Tensor, object_to_pack: list) -> torch.Tensor:
         orientation_logits = actions[:, 2:]  # shape [batch, 4]
         assert orientation_logits.shape[1] == 72, f"Orientation logits shape: {orientation_logits.shape}"
-        
+
         # Convert orientation logits to quaternions using bin logits
         quats = quaternion_from_bin_logits(orientation_logits)
-        
+
         # Convert (x, y, theta) actions to (x, y, z, qx, qy, qz, qw)
         # Assume z=0 for placement (to be updated), and theta is in radians
         x = actions[:, 0]
         y = actions[:, 1]
 
-
         bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device), torch.tensor(object_to_pack, device=self.env.unwrapped.device)
+            torch.arange(actions.shape[0], device=self.env.unwrapped.device),
+            torch.tensor(object_to_pack, device=self.env.unwrapped.device),
         ]
-        rotated_dim = (
-            calculate_rotated_bounding_box(
-                bbox_offset, quats, device=self.env.unwrapped.device
-            )
-        )
+        rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
         x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
@@ -146,12 +138,18 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)
 
-        return torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1), [x_pos_range, y_pos_range], rotated_dim
+        return (
+            torch.stack([x, y, z, quats[:, 0], quats[:, 1], quats[:, 2], quats[:, 3]], dim=1),
+            [x_pos_range, y_pos_range],
+            rotated_dim,
+        )
 
-    def _get_z_position_from_depth(self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor) -> torch.Tensor:
+    def _get_z_position_from_depth(
+        self, image_obs: torch.Tensor, xy_pos: torch.Tensor, xy_pos_range: torch.Tensor, rotated_dim: torch.Tensor
+    ) -> torch.Tensor:
         """Get the z position from the depth image."""
-        img_h = self.env.unwrapped.observation_space['sensor'].shape[-3]
-        img_w = self.env.unwrapped.observation_space['sensor'].shape[-2]
+        img_h = self.env.unwrapped.observation_space["sensor"].shape[-3]
+        img_w = self.env.unwrapped.observation_space["sensor"].shape[-2]
         depth_img = image_obs.reshape(self.env.unwrapped.num_envs, img_h, img_w)
 
         # Rescale x_pos and y_pos to the range of the depth image
@@ -159,7 +157,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         total_tote_y = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100
         tote_x_m = self.env.unwrapped.tote_manager.true_tote_dim[0]
         tote_y_m = self.env.unwrapped.tote_manager.true_tote_dim[1]
-        x_pos = torch.round(tote_x_m -(xy_pos[0] / total_tote_x) * tote_x_m).to(torch.int64)
+        x_pos = torch.round(tote_x_m - (xy_pos[0] / total_tote_x) * tote_x_m).to(torch.int64)
         y_pos = torch.round((xy_pos[1] / total_tote_y) * tote_y_m).to(torch.int64)
 
         # Compute patch extents in pixel units by scaling world dimensions to pixel coordinates
@@ -185,24 +183,31 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
         # Masked min: set out-of-patch values and zeros to inf, then take min
         depth_img_masked = depth_img.clone()
-        depth_img_masked[~mask] = float('inf')
-        depth_img_masked[depth_img_masked == 0] = float('inf')
+        depth_img_masked[~mask] = float("inf")
+        depth_img_masked[depth_img_masked == 0] = float("inf")
         z_pos = depth_img_masked.view(depth_img.shape[0], -1).min(dim=1).values
 
-        z_pos = 20. - z_pos
+        z_pos = 20.0 - z_pos
         z_pos = z_pos.clamp(min=0.0, max=0.4)
 
         return z_pos
 
-    def step(self, actions: torch.Tensor, image_obs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+    def step(
+        self, actions: torch.Tensor, image_obs: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
         tote_ids = torch.zeros(self.env.unwrapped.num_envs, device=self.env.unwrapped.device).int()
-        packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(self.env.unwrapped.tote_manager.num_objects, self.env.unwrapped.tote_manager, torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device), tote_ids)[0]
+        packable_objects = self.env.unwrapped.bpp.get_packable_object_indices(
+            self.env.unwrapped.tote_manager.num_objects,
+            self.env.unwrapped.tote_manager,
+            torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device),
+            tote_ids,
+        )[0]
         object_to_pack = [row[0] for row in packable_objects]
         for i in range(self.env.unwrapped.num_envs):
             self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
-        
+
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
-        
+
         # Get z_pos from depth image
         z_pos = self._get_z_position_from_depth(image_obs, [actions[:, 0], actions[:, 1]], xy_pos_range, rotated_dim)
         actions = torch.cat(
@@ -210,7 +215,8 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs
                 torch.tensor(object_to_pack, device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
                 actions,
-            ], dim=1
+            ],
+            dim=1,
         )
         actions[:, 4] = z_pos
 

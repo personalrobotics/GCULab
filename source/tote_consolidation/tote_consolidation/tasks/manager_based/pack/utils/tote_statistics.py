@@ -24,7 +24,14 @@ class ToteStatistics:
     and ejection counts for source and destination totes.
     """
 
-    def __init__(self, num_envs: int, num_totes: int, device: torch.device, save_path: str | None = None, disable_logging: bool = False):
+    def __init__(
+        self,
+        num_envs: int,
+        num_totes: int,
+        device: torch.device,
+        save_path: str | None = None,
+        disable_logging: bool = False,
+    ):
         """
         Initialize the tote statistics tracker.
 

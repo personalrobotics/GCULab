@@ -125,7 +125,6 @@ def main():
 
     bpp = env.unwrapped.bpp
 
-
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
@@ -154,9 +153,7 @@ def main():
             tote_ids = actions[:, 0].to(torch.int32)
 
             # Get the objects that can be packed
-            packable_objects = bpp.get_packable_object_indices(
-                num_obj_per_env, tote_manager, env_indices, tote_ids
-            )[0]
+            packable_objects = bpp.get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
             # Select random packable objects
             # obj_idx = select_random_packable_objects(
             #     packable_objects, packable_mask, env.unwrapped.device, num_obj_per_env

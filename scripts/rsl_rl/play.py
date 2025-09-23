@@ -179,8 +179,8 @@ def main():
                 actions = torch.rand(args_cli.num_envs, action_dim, device=env.unwrapped.device) * 2 - 1
                 actions[:, :2] = torch.rand(args_cli.num_envs, 2, device=env.unwrapped.device) * 2 - 1
                 # Generate random one-hot indices for the remaining action dimensions
-                one_hot_indices = torch.randint(0, action_dim-2, (args_cli.num_envs,), device=env.unwrapped.device)
-                one_hot = torch.zeros(args_cli.num_envs, action_dim-2, device=env.unwrapped.device)
+                one_hot_indices = torch.randint(0, action_dim - 2, (args_cli.num_envs,), device=env.unwrapped.device)
+                one_hot = torch.zeros(args_cli.num_envs, action_dim - 2, device=env.unwrapped.device)
                 one_hot.scatter_(1, one_hot_indices.unsqueeze(1), 1.0)
                 # Replace the remaining action dimensions with one-hot values
                 actions[:, 2:action_dim] = one_hot
@@ -189,7 +189,9 @@ def main():
 
             stats = env.unwrapped.tote_manager.get_stats_summary()
             ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
-            print("GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device)))
+            print(
+                "GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device))
+            )
             # print("\n===== Ejection Summary =====")
             # print(f"Total steps: {stats['total_steps']}")
             # if ejection_summary != {}:
@@ -213,7 +215,6 @@ def main():
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
-
 
         print(f"\nStep {timestep}:")
         env.unwrapped.tote_manager.stats.save_to_file()

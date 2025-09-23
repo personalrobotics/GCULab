@@ -37,6 +37,7 @@ class PackRGBCameraSceneCfg(PackSceneCfg):
 @configclass
 class PackDepthCameraSceneCfg(PackSceneCfg):
     """Configuration for the scene with a robotic arm."""
+
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
         offset=TiledCameraCfg.OffsetCfg(pos=(0.45, -0.645, 20.0), rot=(0.0, 0.0, 0.0, -1.0), convention="opengl"),
@@ -69,6 +70,7 @@ class RGBObservationsCfg:
 @configclass
 class DepthObservationsCfg:
     """Observation specifications for the MDP."""
+
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
@@ -83,6 +85,7 @@ class DepthObservationsCfg:
 
     class SensorCfg(ObsGroup):
         """Observations for sensor group."""
+
         image = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "data_type": "distance_to_camera"}
         )
@@ -90,6 +93,7 @@ class DepthObservationsCfg:
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     sensor: SensorCfg = SensorCfg()
+
 
 @configclass
 class ResNet18ObservationCfg:
@@ -132,6 +136,7 @@ class PackRGBCameraEnvCfg(PackEnvCfg):
         # remove ground as it obstructs the camera
         self.scene.ground = None
 
+
 @configclass
 class PackDepthCameraEnvCfg(PackEnvCfg):
     """Configuration for the packing environment with depth camera."""
@@ -143,6 +148,7 @@ class PackDepthCameraEnvCfg(PackEnvCfg):
         super().__post_init__()
         # remove ground as it obstructs the camera
         # self.scene.ground = None
+
 
 @configclass
 class PackResNet18DepthCameraEnvCfg(PackDepthCameraEnvCfg):

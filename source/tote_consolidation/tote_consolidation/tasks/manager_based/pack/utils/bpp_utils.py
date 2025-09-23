@@ -1,12 +1,12 @@
+import hashlib
 import math
+import os
+import pickle
 import time
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import deepcopy
 from typing import Any, Dict, List, Optional, Tuple
-import os
-import pickle
-import hashlib
 
 import isaaclab.utils.math as math_utils
 import matplotlib
@@ -28,17 +28,13 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box_np,
 )
 
+
 # Define worker functions at module level for picklability
 def create_items_worker(args):
     env_idx, obj_voxels, obj_asset_paths, objects = args
-    items = [
-        Item(
-            np.array(obj_voxels[j], dtype=np.float32),
-            obj_asset_paths[j]
-        )
-        for j in objects
-    ]
+    items = [Item(np.array(obj_voxels[j], dtype=np.float32), obj_asset_paths[j]) for j in objects]
     return env_idx, items
+
 
 def create_problem_worker(args):
     env_idx, tote_dims, items = args
@@ -58,7 +54,7 @@ class BPP:
     UNUSED_VOLUME_BUFFER = 5000  # 5L buffer for unpackable volume
     GRID_SEARCH_NUM = 25
     STEP_WIDTH = 90
-    
+
     # Cache directory for storing precomputed packing components
     CACHE_DIR = os.path.join(os.path.expanduser("~"), ".prl_cp_cache", "packing_cache")
 
@@ -78,7 +74,7 @@ class BPP:
         self.tote_manager = tote_manager
         self.num_envs = num_envs
         self.kwargs = kwargs
-        
+
         # Create cache directory if it doesn't exist
         os.makedirs(self.CACHE_DIR, exist_ok=True)
 
@@ -102,11 +98,11 @@ class BPP:
             f"seed={seed}",
             f"num_envs={self.num_envs}",
             f"num_objects={len(self.objects)}",
-            f"scale={self.scale}"
+            f"scale={self.scale}",
         ]
 
         # Create a hash of all components
-        key_str = '_'.join(key_components)
+        key_str = "_".join(key_components)
         print("Generating cache key:", key_str)
         return hashlib.md5(key_str.encode()).hexdigest()
 
@@ -114,33 +110,33 @@ class BPP:
         """Initialize tote dimensions, object data, and packing problems."""
         start_time = time.time()
         print("Initializing packing components...")
-        
+
         # Check if we have a cached version
         cache_key = self._get_cache_key()
         cache_file = os.path.join(self.CACHE_DIR, f"{cache_key}.pkl")
-        
+
         if os.path.exists(cache_file):
             print(f"Loading cached packing components from {cache_file}")
             try:
-                with open(cache_file, 'rb') as f:
+                with open(cache_file, "rb") as f:
                     cached_data = pickle.load(f)
-                    self.tote_dims = cached_data['tote_dims']
-                    self.obj_dims = cached_data['obj_dims']
-                    self.obj_voxels = cached_data['obj_voxels']
-                    self.problems = cached_data['problems']
-                    self.display = cached_data['display']
+                    self.tote_dims = cached_data["tote_dims"]
+                    self.obj_dims = cached_data["obj_dims"]
+                    self.obj_voxels = cached_data["obj_voxels"]
+                    self.problems = cached_data["problems"]
+                    self.display = cached_data["display"]
                 print(f"Successfully loaded cached data in {time.time() - start_time:.3f}s")
                 return
             except Exception as e:
                 print(f"Error loading cache: {e}. Rebuilding components...")
-        
+
         # If we reach here, we need to build the components from scratch
         self.tote_dims, self.obj_dims, self.obj_voxels = self._get_packing_variables()
-        
+
         # Convert all data to CPU and NumPy before multiprocessing to avoid CUDA errors
         cpu_obj_voxels = []
         cpu_asset_paths = []
-        
+
         for i in range(self.num_envs):
             # Convert voxels to CPU/NumPy if they're tensors
             env_voxels = []
@@ -150,7 +146,7 @@ class BPP:
                     voxel = voxel.cpu().numpy()
                 env_voxels.append(voxel)
             cpu_obj_voxels.append(env_voxels)
-            
+
             # Convert asset paths to CPU if needed
             env_paths = []
             for j in self.objects:
@@ -159,15 +155,14 @@ class BPP:
                     path = path.cpu().numpy()
                 env_paths.append(path)
             cpu_asset_paths.append(env_paths)
-        
+
         # Prepare arguments for item creation with CPU data
         item_args = []
         for i in range(self.num_envs):
             # Ensure objects list is CPU-based
-            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item() 
-                          for obj in self.objects]
+            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item() for obj in self.objects]
             item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
-        print("Time to prepare item arguments: {:.3f}s".format(time.time() - start_time))
+        print(f"Time to prepare item arguments: {time.time() - start_time:.3f}s")
 
         # Create items using multiprocessing with limited workers to avoid memory issues
         all_items = [None] * self.num_envs
@@ -175,37 +170,34 @@ class BPP:
             for env_idx, items in executor.map(create_items_worker, item_args):
                 all_items[env_idx] = items
         print(f"Time to create items: {time.time() - start_time:.3f}s")
-        
+
         # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
-        problem_args = [
-            (i, self.tote_dims, all_items[i])
-            for i in range(self.num_envs)
-        ]
-        
+        problem_args = [(i, self.tote_dims, all_items[i]) for i in range(self.num_envs)]
+
         # Create problems using multiprocessing with limited workers
         self.problems = [None] * self.num_envs
         with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
             for env_idx, problem in executor.map(create_problem_worker, problem_args):
                 self.problems[env_idx] = problem
-        print("Time to create problems: {:.3f}s".format(time.time() - start_time))
+        print(f"Time to create problems: {time.time() - start_time:.3f}s")
 
         self.display = Display(self.tote_dims)
-        
+
         # Save the components to cache for future use
         try:
             cache_data = {
-                'tote_dims': self.tote_dims,
-                'obj_dims': self.obj_dims,
-                'obj_voxels': self.obj_voxels,
-                'problems': self.problems,
-                'display': self.display
+                "tote_dims": self.tote_dims,
+                "obj_dims": self.obj_dims,
+                "obj_voxels": self.obj_voxels,
+                "problems": self.problems,
+                "display": self.display,
             }
-            with open(cache_file, 'wb') as f:
+            with open(cache_file, "wb") as f:
                 pickle.dump(cache_data, f)
             print(f"Saved packing components to cache: {cache_file}")
         except Exception as e:
             print(f"Error saving to cache: {e}")
-        
+
         print(f"Packing components initialization time: {time.time() - start_time:.3f}s")
 
     def _get_packing_variables(self) -> tuple[list[int], list, list]:
@@ -220,11 +212,7 @@ class BPP:
         """
         # Convert tote dimensions from xyz to zxy format and scale
         tote_dims = self.tote_manager.true_tote_dim.tolist()
-        tote_dims = [
-            int(tote_dims[2] * self.scale),
-            int(tote_dims[0] * self.scale),
-            int(tote_dims[1] * self.scale)
-        ]
+        tote_dims = [int(tote_dims[2] * self.scale), int(tote_dims[0] * self.scale), int(tote_dims[1] * self.scale)]
 
         # Scale object bounding boxes
         obj_dims = (self.tote_manager.obj_bboxes * self.scale).to(dtype=torch.int32).tolist()
@@ -232,8 +220,7 @@ class BPP:
 
         if self.scale != 1.0:
             raise ValueError(
-                "Scaling applied to tote dimensions but not to voxel grid. "
-                "This may lead to packing inaccuracies."
+                "Scaling applied to tote dimensions but not to voxel grid. This may lead to packing inaccuracies."
             )
 
         return tote_dims, obj_dims, obj_voxels
@@ -274,8 +261,7 @@ class BPP:
                 problem.container.add_item(curr_item)
                 container_items.append((obj["obj_idx"], transform))
 
-        return (env_idx, results, container_items,
-                problem.container if problem else None)
+        return (env_idx, results, container_items, problem.container if problem else None)
 
     @staticmethod
     def _calculate_object_transform(obj: dict[str, Any]) -> Transform:
@@ -293,11 +279,7 @@ class BPP:
 
         # Calculate rotated bounding box
         rotated_half_dim = (
-            calculate_rotated_bounding_box_np(
-                bbox_offset.unsqueeze(0),
-                asset_quat.unsqueeze(0),
-                device="cpu"
-            ) / 2.0
+            calculate_rotated_bounding_box_np(bbox_offset.unsqueeze(0), asset_quat.unsqueeze(0), device="cpu") / 2.0
         ).squeeze(0)
 
         # Transform to tote coordinate system
@@ -319,11 +301,7 @@ class BPP:
                 max(0, math.floor(asset_pos[1].item())),
                 max(0, math.floor(asset_pos[2].item())),
             ),
-            attitude=Attitude(
-                roll=euler_angles[0].item(),
-                pitch=euler_angles[1].item(),
-                yaw=euler_angles[2].item()
-            ),
+            attitude=Attitude(roll=euler_angles[0].item(), pitch=euler_angles[1].item(), yaw=euler_angles[2].item()),
         )
 
     def _extract_env_data(self, env, env_idx: int, tote_id: int) -> list[dict[str, Any]]:
@@ -350,7 +328,9 @@ class BPP:
                 "asset_quat": asset.data.root_state_w[env_idx, 3:7].detach().cpu().numpy(),
                 "bbox_offset": self.tote_manager.obj_bboxes[env_idx, obj_idx_val].detach().cpu().numpy(),
                 "true_tote_dim": self.tote_manager.true_tote_dim.detach().cpu().numpy(),
-                "tote_assets_state": self.tote_manager._tote_assets_state.permute(1, 0, 2).detach().cpu().numpy()[env_idx, tote_id],
+                "tote_assets_state": (
+                    self.tote_manager._tote_assets_state.permute(1, 0, 2).detach().cpu().numpy()[env_idx, tote_id]
+                ),
             })
         return data
 
@@ -384,7 +364,6 @@ class BPP:
         # # Execute multiprocessing
         with ProcessPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
             results = list(executor.map(self._update_container_worker, batch_args))
-
 
         # Update problems with results
         for env_idx, res, container_items, container in results:
@@ -438,9 +417,20 @@ class BPP:
         Returns:
             Tuple of (environment_index, processing_results)
         """
-        (i, env_idx, obj_indices, problem, obj_volumes, dest_gcu,
-         use_stability, use_subset_sum, use_desc_vol, source_tote_ejected,
-         subset_obj_indices, plot) = args
+        (
+            i,
+            env_idx,
+            obj_indices,
+            problem,
+            obj_volumes,
+            dest_gcu,
+            use_stability,
+            use_subset_sum,
+            use_desc_vol,
+            source_tote_ejected,
+            subset_obj_indices,
+            plot,
+        ) = args
 
         if not obj_indices:
             return (i, (None, None, None, None))
@@ -448,10 +438,8 @@ class BPP:
         print(f"Processing environment {env_idx} with {len(obj_indices)} objects.")
 
         curr_obj_indices = BPP._determine_object_subset(
-            obj_indices, obj_volumes, problem, use_subset_sum,
-            source_tote_ejected, subset_obj_indices, env_idx
+            obj_indices, obj_volumes, problem, use_subset_sum, source_tote_ejected, subset_obj_indices, env_idx
         )
-
 
         if use_desc_vol and len(curr_obj_indices) > 1:
             # Sort by volume in descending order
@@ -477,8 +465,7 @@ class BPP:
 
         # Search for valid transforms
         transforms = problem.container.search_possible_position(
-            item, grid_num=BPP.GRID_SEARCH_NUM,
-            step_width=BPP.STEP_WIDTH
+            item, grid_num=BPP.GRID_SEARCH_NUM, step_width=BPP.STEP_WIDTH
         )
 
         if use_stability:
@@ -493,10 +480,15 @@ class BPP:
         return (i, (None, torch.tensor([obj_idx]), None, curr_obj_indices))
 
     @staticmethod
-    def _determine_object_subset(obj_indices: list, obj_volumes: torch.Tensor,
-                               problem: PackingProblem, use_subset_sum: bool,
-                               source_tote_ejected: bool, subset_obj_indices: list | None,
-                               env_idx: int) -> list:
+    def _determine_object_subset(
+        obj_indices: list,
+        obj_volumes: torch.Tensor,
+        problem: PackingProblem,
+        use_subset_sum: bool,
+        source_tote_ejected: bool,
+        subset_obj_indices: list | None,
+        env_idx: int,
+    ) -> list:
         """Determine which objects to consider for packing based on configuration."""
         if not use_subset_sum:
             print("Use subset sum is disabled, using all objects.")
@@ -520,11 +512,12 @@ class BPP:
             print(f"SUBSET: New subset indices for environment {env_idx}: {sorted(best_subset)}")
             return best_subset
         else:
-            print(f"SUBSET: Current subset indices for environment {env_idx}: {sorted(subset_obj_indices or obj_indices)}")
+            print(
+                f"SUBSET: Current subset indices for environment {env_idx}: {sorted(subset_obj_indices or obj_indices)}"
+            )
             return subset_obj_indices or obj_indices
 
-    def _eject_and_reload(self, env_idx: int, tote_ids: torch.Tensor,
-                         is_dest: bool, overfill_check: bool = False):
+    def _eject_and_reload(self, env_idx: int, tote_ids: torch.Tensor, is_dest: bool, overfill_check: bool = False):
         """
         Eject and reload totes for the specified environment.
 
@@ -546,14 +539,15 @@ class BPP:
             )
             objects_to_remove = torch.where(tote_objects == 1)[1]
             self.unpackable_obj_idx[env_idx] = [
-                idx for idx in self.unpackable_obj_idx[env_idx]
-                if idx not in objects_to_remove
+                idx for idx in self.unpackable_obj_idx[env_idx] if idx not in objects_to_remove
             ]
 
         # Perform ejection
         self.tote_manager.eject_totes(
-            tote_tensor, torch.tensor([env_idx], device=self.tote_manager.device),
-            is_dest=is_dest, overfill_check=overfill_check
+            tote_tensor,
+            torch.tensor([env_idx], device=self.tote_manager.device),
+            is_dest=is_dest,
+            overfill_check=overfill_check,
         )
 
         if is_dest:
@@ -570,13 +564,16 @@ class BPP:
     def _get_new_objects(self, env_idx: int, dest_tote_ids: torch.Tensor) -> list:
         """Get new packable objects for the environment."""
         new_packable_objects, _ = self.get_packable_object_indices(
-            self.tote_manager.num_objects, self.tote_manager,
-            torch.tensor([env_idx]), dest_tote_ids[env_idx].unsqueeze(0).cpu()
+            self.tote_manager.num_objects,
+            self.tote_manager,
+            torch.tensor([env_idx]),
+            dest_tote_ids[env_idx].unsqueeze(0).cpu(),
         )
         return [new_packable_objects[0][i].cpu() for i in range(len(new_packable_objects[0]))]
 
-    def get_action(self, env, obj_indices: list[list], dest_tote_ids: torch.Tensor,
-                  env_indices: torch.Tensor, plot: bool = False) -> tuple[list, torch.Tensor | None]:
+    def get_action(
+        self, env, obj_indices: list[list], dest_tote_ids: torch.Tensor, env_indices: torch.Tensor, plot: bool = False
+    ) -> tuple[list, torch.Tensor | None]:
         """
         Get packing actions for multiple environments using parallel processing.
 
@@ -606,10 +603,7 @@ class BPP:
         obj_idx_list = [None] * len(env_indices)
 
         # Convert object indices to CPU
-        obj_indices = [
-            [obj_indices[i][j].cpu() for j in range(len(obj_indices[i]))]
-            for i in range(len(env_indices))
-        ]
+        obj_indices = [[obj_indices[i][j].cpu() for j in range(len(obj_indices[i]))] for i in range(len(env_indices))]
 
         # Extract configuration options
         use_stability = self.kwargs.get("use_stability", False)
@@ -624,8 +618,7 @@ class BPP:
             for i, env_idx in enumerate(env_indices.cpu()):
                 curr_obj_indices = obj_indices[env_idx]
                 job_args = self._prepare_job_args(
-                    i, env_idx, curr_obj_indices, use_stability,
-                    use_subset_sum, use_desc_vol, plot, dest_tote_ids
+                    i, env_idx, curr_obj_indices, use_stability, use_subset_sum, use_desc_vol, plot, dest_tote_ids
                 )
                 future = executor.submit(self._env_worker, job_args)
                 futures[future] = (i, env_idx, curr_obj_indices)
@@ -634,10 +627,20 @@ class BPP:
             while futures:
                 for future in as_completed(futures):
                     result = self._process_completed_job(
-                        future, futures, executor, env, env_indices,
-                        dest_tote_ids, source_tote_ids, transforms_list,
-                        obj_idx_list, use_stability, use_subset_sum,
-                        use_desc_vol, plot, start_time
+                        future,
+                        futures,
+                        executor,
+                        env,
+                        env_indices,
+                        dest_tote_ids,
+                        source_tote_ids,
+                        transforms_list,
+                        obj_idx_list,
+                        use_stability,
+                        use_subset_sum,
+                        use_desc_vol,
+                        plot,
+                        start_time,
                     )
                     if result:
                         break
@@ -653,9 +656,17 @@ class BPP:
 
         return valid_transforms, torch.cat(valid_obj_idxs, dim=0) if valid_obj_idxs else None
 
-    def _prepare_job_args(self, i: int, env_idx: int, curr_obj_indices: list,
-                         use_stability: bool, use_subset_sum: bool,
-                         use_desc_vol: bool, plot: bool, dest_tote_ids: torch.Tensor = None) -> tuple:
+    def _prepare_job_args(
+        self,
+        i: int,
+        env_idx: int,
+        curr_obj_indices: list,
+        use_stability: bool,
+        use_subset_sum: bool,
+        use_desc_vol: bool,
+        plot: bool,
+        dest_tote_ids: torch.Tensor = None,
+    ) -> tuple:
         """Prepare arguments for worker job submission."""
         obj_volumes = self.tote_manager.obj_volumes[env_idx].cpu()
 
@@ -669,17 +680,37 @@ class BPP:
         subset_obj_indices = self.subset_obj_indices.get(env_idx.item(), None)
 
         return (
-            i, env_idx, curr_obj_indices, self.problems[env_idx], obj_volumes,
-            dest_gcu, use_stability, use_subset_sum, use_desc_vol,
-            self.tote_manager.source_tote_ejected[env_idx], subset_obj_indices, plot
+            i,
+            env_idx,
+            curr_obj_indices,
+            self.problems[env_idx],
+            obj_volumes,
+            dest_gcu,
+            use_stability,
+            use_subset_sum,
+            use_desc_vol,
+            self.tote_manager.source_tote_ejected[env_idx],
+            subset_obj_indices,
+            plot,
         )
 
-    def _process_completed_job(self, future, futures: dict, executor, env,
-                             env_indices: torch.Tensor, dest_tote_ids: torch.Tensor,
-                             source_tote_ids: torch.Tensor, transforms_list: list,
-                             obj_idx_list: list, use_stability: bool,
-                             use_subset_sum: bool, use_desc_vol: bool,
-                             plot: bool, start_time: float) -> bool:
+    def _process_completed_job(
+        self,
+        future,
+        futures: dict,
+        executor,
+        env,
+        env_indices: torch.Tensor,
+        dest_tote_ids: torch.Tensor,
+        source_tote_ids: torch.Tensor,
+        transforms_list: list,
+        obj_idx_list: list,
+        use_stability: bool,
+        use_subset_sum: bool,
+        use_desc_vol: bool,
+        plot: bool,
+        start_time: float,
+    ) -> bool:
         """Process a completed job and handle various fallback scenarios."""
         i, env_idx, curr_obj_indices = futures.pop(future)
         env_idx = torch.tensor(env_idx).to(env.unwrapped.device)
@@ -691,34 +722,54 @@ class BPP:
             self.subset_obj_indices[env_idx.item()] = subset_obj_indices
             curr_obj_indices = subset_obj_indices
         else:
-            curr_obj_indices = [
-                obj for obj in curr_obj_indices
-                if obj not in self.unpackable_obj_idx[env_idx]
-            ]
+            curr_obj_indices = [obj for obj in curr_obj_indices if obj not in self.unpackable_obj_idx[env_idx]]
 
         # Handle various fallback scenarios
         if self._should_eject_destination(env_idx):
             self._handle_destination_ejection(
-                env_idx, dest_tote_ids, executor, futures, i,
-                use_stability, use_subset_sum, use_desc_vol,
-                subset_obj_indices, plot
+                env_idx,
+                dest_tote_ids,
+                executor,
+                futures,
+                i,
+                use_stability,
+                use_subset_sum,
+                use_desc_vol,
+                subset_obj_indices,
+                plot,
             )
         elif not curr_obj_indices:
             self._handle_empty_objects(
-                env_idx, source_tote_ids, dest_tote_ids, executor,
-                futures, i, use_stability, use_subset_sum, use_desc_vol,
-                subset_obj_indices, plot
+                env_idx,
+                source_tote_ids,
+                dest_tote_ids,
+                executor,
+                futures,
+                i,
+                use_stability,
+                use_subset_sum,
+                use_desc_vol,
+                subset_obj_indices,
+                plot,
             )
         elif obj_idx is not None:
             self._handle_successful_packing(
-                i, env_idx, obj_idx, obj_idx_tensor, transform,
-                transforms_list, obj_idx_list, start_time
+                i, env_idx, obj_idx, obj_idx_tensor, transform, transforms_list, obj_idx_list, start_time
             )
         elif obj_idx_tensor is not None:
             self._handle_unpackable_object(
-                env_idx, obj_idx_tensor, curr_obj_indices, executor,
-                futures, i, use_stability, use_subset_sum, use_desc_vol,
-                subset_obj_indices, plot, dest_tote_ids
+                env_idx,
+                obj_idx_tensor,
+                curr_obj_indices,
+                executor,
+                futures,
+                i,
+                use_stability,
+                use_subset_sum,
+                use_desc_vol,
+                subset_obj_indices,
+                plot,
+                dest_tote_ids,
             )
         else:
             raise ValueError(f"No valid object index or transform found for environment {env_idx}")
@@ -728,35 +779,55 @@ class BPP:
     def _should_eject_destination(self, env_idx: int) -> bool:
         """Check if destination tote should be ejected."""
         return (
-            self.source_eject_tries[env_idx] >= self.MAX_SOURCE_EJECT_TRIES or
-            self.tote_manager.get_reserved_objs_idx(torch.tensor([env_idx], device=self.tote_manager.device)).sum() == 0
+            self.source_eject_tries[env_idx] >= self.MAX_SOURCE_EJECT_TRIES
+            or self.tote_manager.get_reserved_objs_idx(torch.tensor([env_idx], device=self.tote_manager.device)).sum()
+            == 0
         )
 
-    def _handle_destination_ejection(self, env_idx: int, dest_tote_ids: torch.Tensor,
-                                   executor, futures: dict, i: int, use_stability: bool,
-                                   use_subset_sum: bool, use_desc_vol: bool,
-                                   subset_obj_indices: list | None, plot: bool):
+    def _handle_destination_ejection(
+        self,
+        env_idx: int,
+        dest_tote_ids: torch.Tensor,
+        executor,
+        futures: dict,
+        i: int,
+        use_stability: bool,
+        use_subset_sum: bool,
+        use_desc_vol: bool,
+        subset_obj_indices: list | None,
+        plot: bool,
+    ):
         """Handle destination tote ejection scenario."""
-        reason = ("Max source eject tries reached" if
-                 self.source_eject_tries[env_idx] >= self.MAX_SOURCE_EJECT_TRIES
-                 else "No reserved objects")
+        reason = (
+            "Max source eject tries reached"
+            if self.source_eject_tries[env_idx] >= self.MAX_SOURCE_EJECT_TRIES
+            else "No reserved objects"
+        )
         print(f"{reason} for environment {env_idx}. Ejecting destination tote.")
 
         self._eject_and_reload(env_idx, dest_tote_ids, is_dest=True)
         new_objs = self._get_new_objects(env_idx, dest_tote_ids)
 
         job_args = self._prepare_job_args(
-            i, env_idx.cpu(), new_objs, use_stability,
-            use_subset_sum, use_desc_vol, plot, dest_tote_ids
+            i, env_idx.cpu(), new_objs, use_stability, use_subset_sum, use_desc_vol, plot, dest_tote_ids
         )
         future = executor.submit(self._env_worker, job_args)
         futures[future] = (i, env_idx.cpu(), new_objs)
 
-    def _handle_empty_objects(self, env_idx: int, source_tote_ids: torch.Tensor,
-                            dest_tote_ids: torch.Tensor, executor, futures: dict,
-                            i: int, use_stability: bool, use_subset_sum: bool,
-                            use_desc_vol: bool, subset_obj_indices: list | None,
-                            plot: bool):
+    def _handle_empty_objects(
+        self,
+        env_idx: int,
+        source_tote_ids: torch.Tensor,
+        dest_tote_ids: torch.Tensor,
+        executor,
+        futures: dict,
+        i: int,
+        use_stability: bool,
+        use_subset_sum: bool,
+        use_desc_vol: bool,
+        subset_obj_indices: list | None,
+        plot: bool,
+    ):
         """Handle scenario where no packable objects remain."""
         print(f"No packable objects left in environment {env_idx}. Ejecting source tote.")
 
@@ -765,46 +836,58 @@ class BPP:
         print(f"New packable objects for environment {env_idx}: {new_objs}")
 
         job_args = self._prepare_job_args(
-            i, env_idx.cpu(), new_objs, use_stability,
-            use_subset_sum, use_desc_vol, plot, dest_tote_ids
+            i, env_idx.cpu(), new_objs, use_stability, use_subset_sum, use_desc_vol, plot, dest_tote_ids
         )
         future = executor.submit(self._env_worker, job_args)
         futures[future] = (i, env_idx.cpu(), new_objs)
 
-    def _handle_successful_packing(self, i: int, env_idx: int, obj_idx: int,
-                                 obj_idx_tensor: torch.Tensor, transform: Transform,
-                                 transforms_list: list, obj_idx_list: list,
-                                 start_time: float):
+    def _handle_successful_packing(
+        self,
+        i: int,
+        env_idx: int,
+        obj_idx: int,
+        obj_idx_tensor: torch.Tensor,
+        transform: Transform,
+        transforms_list: list,
+        obj_idx_list: list,
+        start_time: float,
+    ):
         """Handle successful object packing."""
         transforms_list[i] = transform
         obj_idx_list[i] = obj_idx_tensor
         self.packed_obj_idx[env_idx].append(obj_idx_tensor)
         print(f"Placement time for environment {env_idx}: {time.time() - start_time:.3f}s")
 
-    def _handle_unpackable_object(self, env_idx: int, obj_idx_tensor: torch.Tensor,
-                                curr_obj_indices: list, executor, futures: dict,
-                                i: int, use_stability: bool, use_subset_sum: bool,
-                                use_desc_vol: bool, subset_obj_indices: list | None,
-                                plot: bool, dest_tote_ids: torch.Tensor):
+    def _handle_unpackable_object(
+        self,
+        env_idx: int,
+        obj_idx_tensor: torch.Tensor,
+        curr_obj_indices: list,
+        executor,
+        futures: dict,
+        i: int,
+        use_stability: bool,
+        use_subset_sum: bool,
+        use_desc_vol: bool,
+        subset_obj_indices: list | None,
+        plot: bool,
+        dest_tote_ids: torch.Tensor,
+    ):
         """Handle objects that cannot be packed."""
-        print(f"No valid transform for object {obj_idx_tensor} in environment {env_idx}. "
-              "Adding to unpackable objects.")
+        print(f"No valid transform for object {obj_idx_tensor} in environment {env_idx}. Adding to unpackable objects.")
 
         self.unpackable_obj_idx[env_idx].extend(obj_idx_tensor)
-        remaining_objs = [
-            obj for obj in curr_obj_indices
-            if obj not in self.unpackable_obj_idx[env_idx]
-        ]
+        remaining_objs = [obj for obj in curr_obj_indices if obj not in self.unpackable_obj_idx[env_idx]]
 
         job_args = self._prepare_job_args(
-            i, env_idx.cpu(), remaining_objs, use_stability,
-            use_subset_sum, use_desc_vol, plot, dest_tote_ids
+            i, env_idx.cpu(), remaining_objs, use_stability, use_subset_sum, use_desc_vol, plot, dest_tote_ids
         )
         future = executor.submit(self._env_worker, job_args)
         futures[future] = (i, env_idx.cpu(), remaining_objs)
 
-    def get_packable_object_indices(self, num_obj_per_env: int, tote_manager,
-                                  env_indices: torch.Tensor, tote_ids: torch.Tensor) -> tuple[list, torch.Tensor]:
+    def get_packable_object_indices(
+        self, num_obj_per_env: int, tote_manager, env_indices: torch.Tensor, tote_ids: torch.Tensor
+    ) -> tuple[list, torch.Tensor]:
         """
         Get indices of objects that can be packed per environment.
 
@@ -837,9 +920,6 @@ class BPP:
         # Remove unpackable objects from valid indices
         for i in range(num_envs):
             env_idx = env_indices[i].item()
-            valid_indices[i] = [
-                obj for obj in valid_indices[i]
-                if obj not in self.unpackable_obj_idx[env_idx]
-            ]
+            valid_indices[i] = [obj for obj in valid_indices[i] if obj not in self.unpackable_obj_idx[env_idx]]
 
         return valid_indices, mask

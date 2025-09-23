@@ -57,11 +57,11 @@ ycb_include_ids = [
     "003",  # cracker_box
     "004",  # sugar_box
     "006",  # mustard_bottle
-    "007", # tuna_fish_can
+    "007",  # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
     # "010", # potted_meat_can
-    "011", # banana
+    "011",  # banana
     # "024", # bowl
     # "025", # mug
     "036",  # wood_block
@@ -222,15 +222,18 @@ class ObservationsCfg:
 
         def __post_init__(self):
             self.enable_corruption = True
+
         #     self.concatenate_terms = True
 
     class SensorCfg(ObsGroup):
         """Observations for sensor group."""
+
         heightmap = ObsTerm(func=mdp.heightmap)
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     sensor: SensorCfg = SensorCfg()
+
 
 @configclass
 class EventCfg:
@@ -250,7 +253,6 @@ class EventCfg:
         mode="reset",
     )
 
-
     set_objects_to_invisible = EventTerm(
         func=mdp.set_objects_to_invisible,
         mode="post_reset",
@@ -260,30 +262,29 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
+
     # gcu_reward = RewardTerm(
     #     func=mdp.gcu_reward_step, weight=1000.0
     # )
 
-    object_shift = RewardTerm(
-        func=mdp.object_shift, weight=10.0
-    )
+    object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
 
-    wasted_volume = RewardTerm(
-        func=mdp.inverse_wasted_volume, weight=40.0
-    )
+    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
+
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
+
     object_overfilled_tote = DoneTerm(
         func=mdp.object_overfilled_tote,
     )
 
 
-
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
+
     pass
     # object_shift = CurriculumTerm(
     #     func=mdp.modify_reward_weight, params={"term_name": "object_shift", "weight": 50.0, "num_steps": 10000}

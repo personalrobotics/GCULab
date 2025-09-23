@@ -36,13 +36,14 @@ class PackingAction(ActionTerm):
     _clip: torch.Tensor
     """The clip applied to the input action."""
 
-
     def __init__(self, cfg: actions_cfg.PackingActionCfg, env: ManagerBasedEnv) -> None:
         # initialize the action term
         super().__init__(cfg, env)
 
         # get pose of the asset
-        self.place_obj_bottomLeft = cfg.place_obj_bottomLeft # origin is bottom left of object placed at bottom left of tote
+        self.place_obj_bottomLeft = (
+            cfg.place_obj_bottomLeft
+        )  # origin is bottom left of object placed at bottom left of tote
         self.true_tote_dim = self._env.tote_manager.true_tote_dim / 100
         tote_keys = sorted(
             [key for key in self._env.scene.keys() if key.startswith("tote")], key=lambda k: int(k.removeprefix("tote"))
@@ -104,7 +105,6 @@ class PackingAction(ActionTerm):
         # offset to center of the tote
         self._processed_actions[:, 2:5] += tote_state[:, :3].squeeze(1)
 
-        
         if self.place_obj_bottomLeft:
             # offset to bottom left of the object
             self._processed_actions[:, 2:5] -= torch.tensor(

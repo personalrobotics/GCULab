@@ -17,8 +17,9 @@ from isaaclab.managers import EventManager
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
-from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
 from tote_consolidation.tasks.manager_based.pack.utils import bpp_utils
+from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
+
 
 class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
     """Base class for GCU environments.
@@ -213,15 +214,17 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             # update buffers at sim dt - only on last iteration to reduce GPU interface calls
             if i == self.cfg.decimation - 1:
                 self.scene.update(dt=self.physics_dt)
-        self.tote_manager.source_tote_ejected = torch.zeros(
-            self.num_envs, dtype=torch.bool, device="cpu"
-        )
+        self.tote_manager.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
         wait_time = self.tote_manager.obj_settle_wait_steps
         for i in range(wait_time):
             self.scene.write_data_to_sim()
             self.sim.step(render=False)
-            if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering and self.tote_manager.animate:
+            if (
+                self._sim_step_counter % self.cfg.sim.render_interval == 0
+                and is_rendering
+                and self.tote_manager.animate
+            ):
                 self.sim.render()
             # update buffers at sim dt - only on last iteration to reduce GPU interface calls
             if i == wait_time - 1:

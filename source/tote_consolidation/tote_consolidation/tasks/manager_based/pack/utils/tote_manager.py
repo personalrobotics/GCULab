@@ -78,9 +78,7 @@ class ToteManager:
         self.overfill_threshold = 0.3  # in meters
         self.max_objects_per_tote = 2
 
-        self.source_tote_ejected = torch.zeros(
-            self.num_envs, dtype=torch.bool, device="cpu"
-        )
+        self.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.log_stats = not cfg.disable_logging
 
         if self.log_stats:
@@ -201,6 +199,7 @@ class ToteManager:
 
         # Mark objects as placed in the specified tote
         self.tote_to_obj[env_indices, tote_indices, object_indices] = 1
+
     def _create_dest_totes_mask(self, empty_totes, env_ids):
         """
         Create a mask of destination totes for each environment (vectorized).
@@ -218,16 +217,15 @@ class ToteManager:
         if self.dest_totes.dim() == 1:
             # self.dest_totes: shape (total_totes,), one dest tote per env
             # Gather dest tote indices for the given env_ids
-            dest_indices = self.dest_totes[env_ids]           # (num_envs,)
+            dest_indices = self.dest_totes[env_ids]  # (num_envs,)
             dest_totes_mask[torch.arange(num_envs), dest_indices] = True
         else:
             # self.dest_totes: shape (num_envs_total, max_dest_per_env)
-            dest_indices = self.dest_totes[env_ids]           # (num_envs, max_dest_per_env)
+            dest_indices = self.dest_totes[env_ids]  # (num_envs, max_dest_per_env)
             env_range = torch.arange(num_envs).unsqueeze(1)  # (num_envs, 1)
-            dest_totes_mask[env_range, dest_indices] = True   # broadcasting
+            dest_totes_mask[env_range, dest_indices] = True  # broadcasting
 
         return dest_totes_mask
-
 
     def refill_source_totes(self, env_ids):
         """
@@ -385,7 +383,6 @@ class ToteManager:
         #         torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
         #     )
 
-
         assets_to_eject = []
         for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
             # Get all objects in the overfilled tote
@@ -532,7 +529,7 @@ class ToteManager:
                 all_env_origins,
                 all_obj_bboxes,
                 all_orientations,
-                min_separation=min_separation
+                min_separation=min_separation,
             )
 
             # Update object positions in simulation
@@ -541,7 +538,7 @@ class ToteManager:
         # Update tote tracking
         # Prepare tote IDs for each environment
         all_tote_ids = [torch.full_like(objects, tote_id.item()) for objects, tote_id in zip(sampled_objects, tote_ids)]
-        
+
         # Update tote tracking in batch
         self.put_objects_in_tote_batched(sampled_objects, all_tote_ids, env_ids)
 

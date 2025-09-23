@@ -39,6 +39,7 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
 
     return rotated_dims
 
+
 def matrix_from_quat(quaternions):
     """Convert rotations given as quaternions to rotation matrices.
 
@@ -70,6 +71,7 @@ def matrix_from_quat(quaternions):
         -1,
     )
     return o.reshape(quaternions.shape[:-1] + (3, 3))
+
 
 def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     """
@@ -336,7 +338,7 @@ def generate_orientations_batched(all_objects, device=None):
     # Get device from first non-empty tensor
     device = next((obj.device for obj in all_objects if obj.numel() > 0), device)
     if device is None:
-        device = torch.device('cpu')
+        device = torch.device("cpu")
 
     orientations_init = torch.tensor([1, 0, 0, 0], device=device)
     orientations_to_apply = torch.tensor([1, 0, 0, 0], device=device)
@@ -357,8 +359,14 @@ def generate_orientations_batched(all_objects, device=None):
 
 
 def generate_positions_batched(
-    all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-    min_separation=0.0, device=None, max_attempts=100
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation=0.0,
+    device=None,
+    max_attempts=100,
 ):
     """
     Generate random positions within tote bounds for objects with minimum separation in a fully vectorized manner.
@@ -448,10 +456,11 @@ def generate_positions_batched(
                     break
 
         # Add environment origin
-        env_origin = env_origins[env_idx] if hasattr(env_origins, '__getitem__') else env_origins
+        env_origin = env_origins[env_idx] if hasattr(env_origins, "__getitem__") else env_origins
         all_positions.append(positions + env_origin)
 
     return all_positions
+
 
 def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_orientations, env_ids):
     """
@@ -517,8 +526,15 @@ def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_
 
 
 def generate_positions_batched_multiprocess_cuda(
-    all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-    min_separation=0.0, device=None, max_attempts=10, num_processes=None
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation=0.0,
+    device=None,
+    max_attempts=10,
+    num_processes=None,
 ):
     """
     Generate random positions within tote bounds for objects with minimum separation using CUDA multiprocessing.
@@ -547,27 +563,54 @@ def generate_positions_batched_multiprocess_cuda(
     if num_processes <= 1 or len(all_objects) <= 1:
         # Fall back to single-threaded version for small workloads
         return generate_positions_batched(
-            all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-            min_separation, device, max_attempts
+            all_objects,
+            all_tote_bounds,
+            env_origins,
+            all_obj_bboxes,
+            all_orientations,
+            min_separation,
+            device,
+            max_attempts,
         )
 
     # For CUDA, we'll use a different approach - process in chunks with CUDA streams
-    if device.type == 'cuda':
+    if device.type == "cuda":
         return _generate_positions_batched_cuda_streams(
-            all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-            min_separation, device, max_attempts, num_processes
+            all_objects,
+            all_tote_bounds,
+            env_origins,
+            all_obj_bboxes,
+            all_orientations,
+            min_separation,
+            device,
+            max_attempts,
+            num_processes,
         )
 
     # For CPU, use normal multiprocessing
     return generate_positions_batched_multiprocess(
-        all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-        min_separation, device, max_attempts, num_processes
+        all_objects,
+        all_tote_bounds,
+        env_origins,
+        all_obj_bboxes,
+        all_orientations,
+        min_separation,
+        device,
+        max_attempts,
+        num_processes,
     )
 
 
 def _generate_positions_batched_cuda_streams(
-    all_objects, all_tote_bounds, env_origins, all_obj_bboxes, all_orientations,
-    min_separation, device, max_attempts, num_processes
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation,
+    device,
+    max_attempts,
+    num_processes,
 ):
     """
     Generate positions using CUDA streams for parallel processing on GPU.
@@ -589,14 +632,20 @@ def _generate_positions_batched_cuda_streams(
             # Extract chunk data
             chunk_objects = all_objects[i:end_idx]
             chunk_tote_bounds = all_tote_bounds[i:end_idx]
-            chunk_env_origins = env_origins[i:end_idx] if hasattr(env_origins, '__getitem__') else env_origins
+            chunk_env_origins = env_origins[i:end_idx] if hasattr(env_origins, "__getitem__") else env_origins
             chunk_obj_bboxes = all_obj_bboxes[i:end_idx]
             chunk_orientations = all_orientations[i:end_idx]
 
             # Process this chunk using the vectorized function
             chunk_positions = generate_positions_batched(
-                chunk_objects, chunk_tote_bounds, chunk_env_origins, chunk_obj_bboxes, chunk_orientations,
-                min_separation, device, max_attempts
+                chunk_objects,
+                chunk_tote_bounds,
+                chunk_env_origins,
+                chunk_obj_bboxes,
+                chunk_orientations,
+                min_separation,
+                device,
+                max_attempts,
             )
 
             all_positions.extend(chunk_positions)

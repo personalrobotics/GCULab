@@ -16,7 +16,7 @@ class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
     experiment_name = "no_arm_pack"
     empirical_normalization = True
     policy = RslRlPpoActorCriticConv2dCfg(
-        init_noise_std=40.0,        
+        init_noise_std=40.0,
         actor_hidden_dims=[128, 128],
         critic_hidden_dims=[128, 128],
         activation="elu",
