@@ -72,7 +72,7 @@ ycb_include_ids = [
 
 lw_include_names = [
     # "cracker_box",
-    "bowl_test",
+    "bowl",
 ]
 
 # Filter USD files based on ID prefixes
