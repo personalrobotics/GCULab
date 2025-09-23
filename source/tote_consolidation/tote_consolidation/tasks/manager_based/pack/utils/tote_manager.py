@@ -78,9 +78,7 @@ class ToteManager:
         self.overfill_threshold = 0.3  # in meters
         self.max_objects_per_tote = 2
 
-        self.source_tote_ejected = torch.zeros(
-            self.num_envs, dtype=torch.bool, device="cpu"
-        )
+        self.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.log_stats = not cfg.disable_logging
 
         if self.log_stats:
@@ -204,21 +202,29 @@ class ToteManager:
 
     def _create_dest_totes_mask(self, empty_totes, env_ids):
         """
-        Create a mask of destination totes for each environment.
+        Create a mask of destination totes for each environment (vectorized).
 
         Args:
-            empty_totes: Tensor indicating empty totes
-            env_ids: Environment IDs
+            empty_totes: Tensor of shape (num_envs, num_totes)
+            env_ids: Tensor of environment IDs (num_envs,)
 
         Returns:
-            Mask tensor for destination totes
+            Mask tensor for destination totes (same shape as empty_totes)
         """
+        num_envs, num_totes = empty_totes.shape
         dest_totes_mask = torch.zeros_like(empty_totes, dtype=torch.bool)
-        for i, env_id in enumerate(env_ids):
-            if self.dest_totes.dim() == 1:
-                dest_totes_mask[i, self.dest_totes[env_id]] = True
-            else:
-                dest_totes_mask[i, self.dest_totes[env_id, :]] = True
+
+        if self.dest_totes.dim() == 1:
+            # self.dest_totes: shape (total_totes,), one dest tote per env
+            # Gather dest tote indices for the given env_ids
+            dest_indices = self.dest_totes[env_ids]  # (num_envs,)
+            dest_totes_mask[torch.arange(num_envs), dest_indices] = True
+        else:
+            # self.dest_totes: shape (num_envs_total, max_dest_per_env)
+            dest_indices = self.dest_totes[env_ids]  # (num_envs, max_dest_per_env)
+            env_range = torch.arange(num_envs).unsqueeze(1)  # (num_envs, 1)
+            dest_totes_mask[env_range, dest_indices] = True  # broadcasting
+
         return dest_totes_mask
 
     def refill_source_totes(self, env_ids):
@@ -245,6 +251,7 @@ class ToteManager:
         first_empty = torch.argmax(empty_totes.float(), dim=1)
         self.source_tote_ejected[env_ids[has_empty]] = True
 
+        loop_iter = 0
         while has_empty.any():
             refilled = True
             # In all has-empty environments, teleport objects from reserve to the first empty tote
@@ -271,14 +278,14 @@ class ToteManager:
             has_empty = empty_totes.any(dim=1)
             refilled = False
             outbound_gcus = self.get_gcu(env_ids)
-
             first_empty = torch.argmax(empty_totes.float(), dim=1)
+            loop_iter += 1
 
         if refilled:
             inbound_gcus = self.get_gcu(env_ids)
             self.stats.log_tote_eject_gcus(inbound_gcus, outbound_gcus, totes_ejected=empty_totes)
 
-    def get_tote_fill_height(self, tote_ids, env_ids):
+    def get_tote_fill_height(self, tote_ids, env_ids, heightmaps=None):
         """
         Calculate the maximum height of objects in specified totes.
 
@@ -286,41 +293,46 @@ class ToteManager:
             env: Simulation environment
             tote_ids: Totes to check
             env_ids: Target environments
+            heightmaps: Heightmaps of the scene
 
         Returns:
             Maximum z-coordinate of objects in each tote
         """
-        # Get asset configurations for the specified environments
-        assets = [self.env.scene[f"object{obj_id}"] for obj_id in range(self.num_objects)]
-        max_z_positions = torch.zeros(self.env.num_envs, device=self.env.device)
+        if heightmaps is not None:
+            # heightmaps[env_ids] shape: (num_envs, H, W, 1)
+            min_height = 20 - torch.amin(heightmaps[env_ids], dim=(1, 2, 3))  # shape: (num_envs,)
+            return min_height
+        else:
+            # Get asset configurations for the specified environments
+            assets = [self.env.scene[f"object{obj_id}"] for obj_id in range(self.num_objects)]
+            max_z_positions = torch.zeros(self.env.num_envs, device=self.env.device)
 
-        for asset in assets:
-            obj_id = int(asset.cfg.prim_path.split("Object")[-1])
+            for asset in assets:
+                obj_id = int(asset.cfg.prim_path.split("Object")[-1])
 
-            # First check if object is in destination tote of any self.env to avoid unnecessary calculations
-            object_in_dest_tote = self.tote_to_obj[torch.arange(self.env.num_envs), tote_ids, obj_id] == 1
-            if not object_in_dest_tote.any():
-                continue
+                # First check if object is in destination tote of any self.env to avoid unnecessary calculations
+                object_in_dest_tote = self.tote_to_obj[torch.arange(self.env.num_envs), tote_ids, obj_id] == 1
+                if not object_in_dest_tote.any():
+                    continue
 
-            # Get positions for all environments
-            asset_position = asset.data.root_state_w[:, :3] - self.env.scene.env_origins[:, :3]
-            asset_orientation = asset.data.root_state_w[:, 3:7]
+                # Get positions for all environments
+                asset_position = asset.data.root_state_w[:, :3] - self.env.scene.env_origins[:, :3]
+                asset_orientation = asset.data.root_state_w[:, 3:7]
 
-            # Get rotated bounding box
-            obj_bbox = self.env.tote_manager.obj_bboxes[:, obj_id]
-            rotated_dims = calculate_rotated_bounding_box(obj_bbox, asset_orientation, self.env.device)
-            margin = rotated_dims / 2.0
-            top_z_positions = asset_position[:, 2] + margin[:, 2]
+                # Get rotated bounding box
+                obj_bbox = self.env.tote_manager.obj_bboxes[:, obj_id]
+                rotated_dims = calculate_rotated_bounding_box(obj_bbox, asset_orientation, self.env.device)
+                margin = rotated_dims / 2.0
+                top_z_positions = asset_position[:, 2] + margin[:, 2]
 
-            # Update max_z_positions only for relevant environments
-            max_z_positions[object_in_dest_tote] = torch.maximum(
-                max_z_positions[object_in_dest_tote], top_z_positions[object_in_dest_tote]
-            )
-        self.refill_source_totes(env_ids)
+                # Update max_z_positions only for relevant environments
+                max_z_positions[object_in_dest_tote] = torch.maximum(
+                    max_z_positions[object_in_dest_tote], top_z_positions[object_in_dest_tote]
+                )
 
-        return max_z_positions[env_ids]
+            return max_z_positions[env_ids]
 
-    def eject_totes(self, tote_ids, env_ids, is_dest=True, overfill_check=True):
+    def eject_totes(self, tote_ids, env_ids, is_dest=True, overfill_check=True, heightmaps=None):
         """
         Reset overfilled destination totes by returning objects to reserve.
 
@@ -331,7 +343,7 @@ class ToteManager:
             is_dest: Flag indicating if the totes are destination totes
             overfill_check: Flag to enable/disable overfill checking
         """
-        fill_heights = self.get_tote_fill_height(tote_ids, env_ids)
+        fill_heights = self.get_tote_fill_height(tote_ids, env_ids, heightmaps)
 
         # Check if any tote exceeds the overfill threshold
         if overfill_check:
@@ -353,71 +365,45 @@ class ToteManager:
                 self.tote_keys,
             )
 
-        # Log destination tote ejections
-        overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
-        overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
-        overfilled_totes = overfilled_totes[env_ids]
-        outbound_gcus = self.get_gcu(env_ids)
-        if self.log_stats:
-            if is_dest:
-                # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
-                #     print("logging dest tote for env_idx:", env_idx)
-                #     self.env.unwrapped.bpp.update_container_heightmap(
-                #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
-                #     )
-                #     self.stats.log_container(env_idx, problem.container)
-                self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
-            self.stats.log_tote_eject_gcus(
-                torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
-            )
+        # # Log destination tote ejections
+        # overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
+        # overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
+        # overfilled_totes = overfilled_totes[env_ids]
+        # outbound_gcus = self.get_gcu(env_ids)
+        # if self.log_stats:
+        #     if is_dest:
+        #         # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
+        #         #     print("logging dest tote for env_idx:", env_idx)
+        #         #     self.env.unwrapped.bpp.update_container_heightmap(
+        #         #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
+        #         #     )
+        #         #     self.stats.log_container(env_idx, problem.container)
+        #         self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
+        #     self.stats.log_tote_eject_gcus(
+        #         torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
+        #     )
 
-        # Reset all objects in overfilled envs
-        if overfilled_envs.any():
-            if not self.animate:
-                for rigid_object in self.env.scene.rigid_objects.values():
-                    # obtain default and deal with the offset for env origins
-                    default_root_state = rigid_object.data.default_root_state[env_ids[overfilled_envs]].clone()
-                    default_root_state[:, 0:3] += self.env.scene.env_origins[env_ids[overfilled_envs]]
-                    # set into the physics simulation
-                    rigid_object.write_root_pose_to_sim(default_root_state[:, :7], env_ids=env_ids[overfilled_envs])
-                    rigid_object.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids=env_ids[overfilled_envs])
-                    rigid_object.set_visibility(False, env_ids=env_ids[overfilled_envs])
-            else:
-                # Find all objects in overfilled totes
-                if overfilled_envs.any():
-                    # First, collect all environment/object pairs that need to be reset
-                    env_indices = []
-                    obj_indices = []
-                    
-                    for i, (env_id, tote_id) in enumerate(zip(env_ids[overfilled_envs], tote_ids[overfilled_envs])):
-                        objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
-                        if objects_in_tote.numel() > 0:
-                            env_indices.extend([env_id.item()] * objects_in_tote.numel())
-                            obj_indices.extend(objects_in_tote.tolist())
-                    
-                    if len(env_indices) > 0:
-                        env_indices = torch.tensor(env_indices, device=self.env.device)
-                        obj_indices = torch.tensor(obj_indices, device=self.env.device)
-                        
-                    # Process assets in batches by object ID for better vectorization
-                        unique_obj_ids = torch.unique(obj_indices)
-                        for obj_id in unique_obj_ids:
-                            asset_name = f"object{obj_id.item()}"
-                            asset = self.env.scene[asset_name]
-                            
-                            # Find which environments need this object reset
-                            mask = obj_indices == obj_id
-                            reset_env_ids = env_indices[mask]
-                            
-                            # Get default states for these environments
-                            default_root_states = asset.data.default_root_state[reset_env_ids].clone()
-                            # Add environment origins
-                            default_root_states[:, :3] += self.env.scene.env_origins[reset_env_ids, :3]
-                            
-                            # Apply poses and velocities in one operation per object
-                            asset.write_root_link_pose_to_sim(default_root_states[:, :7], env_ids=reset_env_ids)
-                            asset.write_root_com_velocity_to_sim(default_root_states[:, 7:], env_ids=reset_env_ids)
-                            asset.set_visibility(False, env_ids=reset_env_ids)
+        assets_to_eject = []
+        for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
+            # Get all objects in the overfilled tote
+            objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
+            if objects_in_tote.numel() > 0:
+                # Add to the list of assets to eject
+                assets_to_eject.append([f"object{obj_id.item()}" for obj_id in objects_in_tote])
+
+        for env_id, asset_names in zip(env_ids[overfilled_envs], assets_to_eject):
+            # Reset the asset to reserve
+            for asset_name in asset_names:
+                asset = self.env.scene[asset_name]
+                default_root_state = asset.data.default_root_state[env_id]
+                default_root_state[:3] += self.env.scene.env_origins[env_id, :3]
+                asset.write_root_link_pose_to_sim(
+                    default_root_state[:7], env_ids=torch.tensor([env_id], device=self.env.device)
+                )
+                asset.write_root_com_velocity_to_sim(
+                    default_root_state[7:], env_ids=torch.tensor([env_id], device=self.env.device)
+                )
+                asset.set_visibility(False, env_ids=torch.tensor([env_id], device=self.env.device))
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
@@ -524,36 +510,32 @@ class ToteManager:
         ]
 
         if self.animate:
-            # Only generate orientations and positions in totes if visualization is enabled
-            # Prepare batched data for parallel processing
-
-            # Collect tote bounds for all environments
+            # Collect tote bounds
             all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
 
-            # Collect object bboxes for all environments
+            # Collect object bboxes
             all_obj_bboxes = [self.obj_bboxes[cur_env, objects] for cur_env, objects in zip(env_ids, sampled_objects)]
 
-            # Collect environment origins for all environments
+            # Collect environment origins
             all_env_origins = [env.scene.env_origins[cur_env] for cur_env in env_ids]
 
-            # Generate orientations for all environments in batch
+            # Generate orientations
             all_orientations = generate_orientations_batched(sampled_objects, device=env_ids.device)
 
-            # Generate positions for all environments in batch
+            # Generate positions
             all_positions = generate_positions_batched_multiprocess_cuda(
                 sampled_objects,
                 all_tote_bounds,
                 all_env_origins,
                 all_obj_bboxes,
                 all_orientations,
-                min_separation=min_separation
+                min_separation=min_separation,
             )
 
-            # Update all object positions in simulation in batch
+            # Update object positions in simulation
             update_object_positions_in_sim_batched(env, sampled_objects, all_positions, all_orientations, env_ids)
 
-        # Update tote tracking for all environments
-
+        # Update tote tracking
         # Prepare tote IDs for each environment
         all_tote_ids = [torch.full_like(objects, tote_id.item()) for objects, tote_id in zip(sampled_objects, tote_ids)]
 

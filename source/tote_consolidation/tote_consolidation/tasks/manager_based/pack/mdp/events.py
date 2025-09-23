@@ -147,6 +147,13 @@ def object_props(
             asset_path = items[0].assetPath
 
             for mesh in find_meshes(prim):
+                # if mesh name contains Collision, skip
+                scale = 1
+
+                if "Collisions" in mesh.GetPath().__str__():
+                    continue
+                if "Visuals" in mesh.GetPath().__str__():
+                    scale = 100
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
 
@@ -154,10 +161,9 @@ def object_props(
                 if asset_path in mesh_properties_cache:
                     volume, bbox, vox = mesh_properties_cache[asset_path]
                 else:
-                    bbox = compute_mesh_bbox(mesh)
+                    bbox = compute_mesh_bbox(mesh) * scale
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
-
                     mesh_properties_cache[asset_path] = (volume, bbox, vox)
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
@@ -169,14 +175,13 @@ def object_props(
     env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_voxels(obj_voxels)
 
-def refill_source_totes(
-    env: ManagerBasedRLGCUEnv,
-    env_ids: torch.Tensor
-):
+
+def refill_source_totes(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
     """Refills the source totes with objects from the reserve."""
     if env_ids is None:
         return
     env.tote_manager.refill_source_totes(env_ids=torch.arange(env.num_envs, device=env.device)[env_ids])
+
 
 def randomize_object_pose_with_invalid_ranges(
     env: ManagerBasedRLGCUEnv,
@@ -414,16 +419,25 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
                 f"Object pose: {asset_pose[:, :3]}, Tote bounds: {env.tote_manager.tote_bounds}"
             )
 
+
 def obs_dims(env: ManagerBasedRLGCUEnv):
     """Returns the dimensions of the object to pack."""
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, 3), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+        env.unwrapped.tote_manager.num_objects,
+        env.unwrapped.tote_manager,
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
+        tote_ids,
+    )[0]
     objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
-    obj_dims = env.unwrapped.tote_manager.obj_bboxes[torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs]
+    obj_dims = env.unwrapped.tote_manager.obj_bboxes[
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs
+    ]
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     return obj_dims
+
 
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.
@@ -431,13 +445,18 @@ def heightmap(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    heightmap_stacked = torch.zeros((env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device)
+    heightmap_stacked = torch.zeros(
+        (env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device
+    )
     # If env does not have bpp attribute or it's None, return zeros
     if not hasattr(env, "bpp"):
-        return torch.zeros((env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device)
+        return torch.zeros(
+            (env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device
+        )
     for env_id in range(env.num_envs):
         heightmap_stacked[env_id] = torch.from_numpy(env.bpp.problems[env_id].container.heightmap).unsqueeze(-1)
     return heightmap_stacked
+
 
 def gcu_reward(env: ManagerBasedRLGCUEnv):
     """
@@ -460,6 +479,7 @@ def gcu_reward(env: ManagerBasedRLGCUEnv):
         rewards[reset_envs] = pre_reset_rewards[reset_envs, env.tote_manager.dest_totes[reset_envs]]
     return rewards
 
+
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
@@ -468,24 +488,21 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
     """
     total_volume = env.tote_manager.tote_volume
-    env.scene.write_data_to_sim()
-    env.sim.step(render=True)
-    heightmaps = 20 - env.observation_manager.compute()['sensor'] # subtract distance from camera to tote
-    # import matplotlib.pyplot as plt
-    # plt.imshow(heightmaps[0].cpu().numpy(), cmap='viridis')
-    # plt.colorbar()
-    # plt.savefig("heightmap.png")
-    # plt.close()
-    top_down_volumes = (0.26 - heightmaps) * 100 * 0.92 # 0.92
+    heightmaps = 20 - env.observation_manager.compute()["sensor"]  # subtract distance from camera to tote
+    top_down_volumes = (0.26 - heightmaps) * 100 * 0.92  # 0.92
     top_down_volumes = torch.sum(top_down_volumes, dim=(1, 2))  # Sum over heightmap dimensions
     top_down_volumes = top_down_volumes / total_volume
     top_down_volumes = torch.clamp(top_down_volumes, min=0.0, max=1.0).squeeze(1)  # Ensure values are between 0 and 1
-    objects_volume = env.tote_manager.stats.recent_gcu_values[torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes] * 0.8
+    objects_volume = (
+        env.tote_manager.stats.recent_gcu_values[
+            torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
+        ]
+        * 0.8
+    )
     wasted_volume = torch.clamp(1.0 - top_down_volumes - objects_volume, min=0.0, max=1.0)
     inverse_wasted_volume = 1 / (1 + wasted_volume)  # Inverse to make it a reward
-    print(f"Wasted volume: {wasted_volume}")
-    print(f"Inverse wasted volume: {inverse_wasted_volume}")
     return inverse_wasted_volume
+
 
 def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     """Checks if any object is overfilled the tote.
@@ -493,8 +510,39 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    envs_overfilled = env.tote_manager.eject_totes(env.tote_manager.dest_totes, torch.arange(env.num_envs, device=env.device))
+    envs_overfilled = env.tote_manager.eject_totes(
+        env.tote_manager.dest_totes,
+        torch.arange(env.num_envs, device=env.device),
+        heightmaps=env.observation_manager._obs_buffer["sensor"],
+    )
     if envs_overfilled.any():
         env.scene.write_data_to_sim()
         env.sim.step(render=True)
     return envs_overfilled
+
+
+def object_shift(env: ManagerBasedRLGCUEnv):
+    """Checks if any object has shifted from place pose.
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+    """
+    prev_action = env.tote_manager.last_action_pos_quat
+    obj_ids = prev_action[:, 0].long()  # [num_envs]
+    place_action_pos_quat = prev_action[:, -7:]  # [num_envs, 7]
+
+    # Get the settled pos quat of the objects for all envs in batch
+    scene_state = env.scene.get_state(is_relative=False)
+    # scene_state["rigid_object"] is a dict: { "object0": {...}, "object1": {...}, ... }
+    # For each env, get the correct object key and extract its root_pose
+    settled_pos_quat = torch.zeros(env.num_envs, 7, device=env.device)
+    for i in range(env.num_envs):
+        obj_key = f"object{int(obj_ids[i].item())}"
+        settled_pos_quat[i] = scene_state["rigid_object"][obj_key]["root_pose"][i]
+
+    pos_distance = torch.norm(place_action_pos_quat[:, :3] - settled_pos_quat[:, :3], dim=1)
+    rot_distance = math_utils.quat_error_magnitude(place_action_pos_quat[:, 3:], settled_pos_quat[:, 3:])
+
+    pos_distance_tanh = 1 - torch.tanh(pos_distance / 0.01)
+    rot_distance_tanh = 1 - torch.tanh(rot_distance / 0.01)
+    total_distance_tanh = pos_distance_tanh + rot_distance_tanh
+    return total_distance_tanh

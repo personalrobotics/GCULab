@@ -11,13 +11,18 @@ obj_bbox = {
     "036_wood_block.usd": (21, 10, 9),
 }
 
+
 def main():
     parser = argparse.ArgumentParser(description="Print the asset path filenames of placed objects in a container")
     parser.add_argument("--pkl_path", type=str, required=True, help="Path to the container pickle file")
     parser.add_argument("--show_positions", action="store_true", help="Also display position information")
     parser.add_argument("--show_attitudes", action="store_true", help="Also display attitude information")
     parser.add_argument("--show_bbox", action="store_true", help="Also display bounding box information")
-    parser.add_argument("--bbox_only", action="store_true", help="Display only filename and bounding box information in a compact format")
+    parser.add_argument(
+        "--bbox_only",
+        action="store_true",
+        help="Display only filename and bounding box information in a compact format",
+    )
 
     args = parser.parse_args()
 

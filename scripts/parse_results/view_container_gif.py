@@ -33,7 +33,12 @@ def main():
     parser.add_argument("--data_path", type=str, required=True, help="Base path where the container data is saved.")
     parser.add_argument("--env_id", type=int, required=True, help="Environment index to process.")
     parser.add_argument("--trunc_steps", type=int, default=None, help="Maximum number of steps to process (optional).")
-    parser.add_argument("--max_steps", type=int, default=None, help="Pad with still frames at the end until reaching this many total frames.")
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=None,
+        help="Pad with still frames at the end until reaching this many total frames.",
+    )
 
     args = parser.parse_args()
 

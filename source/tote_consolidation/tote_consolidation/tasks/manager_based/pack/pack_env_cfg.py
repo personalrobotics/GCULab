@@ -35,11 +35,13 @@ gcu_objects_path = os.path.abspath("gcu_objects")
 
 # Dynamically build list of USD paths by scanning the directory
 ycb_physics_dir = os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics")
-all_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
+lw_physics_dir = os.path.join(gcu_objects_path, "YCB/lightwheel_usds/gcu_assets")
+ycb_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
+lw_usd_files = glob.glob(os.path.join(lw_physics_dir, "*.usd"))
 
 # Extract all available object IDs and names for reference
 available_objects = {}
-for usd_file in all_usd_files:
+for usd_file in ycb_usd_files:
     basename = os.path.basename(usd_file)
     obj_id = basename[:3]
     obj_name = basename[4:].replace(".usd", "")
@@ -51,25 +53,43 @@ for obj_id, obj_name in sorted(available_objects.items()):
     print(f'"{obj_id}", # {obj_name}')
 
 # Define which object IDs to include
-include_ids = [
+ycb_include_ids = [
     "003",  # cracker_box
-    # "004",  # sugar_box
-    # "006",  # mustard_bottle
+    "004",  # sugar_box
+    "006",  # mustard_bottle
+    "007",  # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
-    # "036",  # wood_block
+    # "010", # potted_meat_can
+    "011",  # banana
+    # "024", # bowl
+    # "025", # mug
+    "036",  # wood_block
+    # "051", # large_clamp
+    # "052", # extra_large_clamp
     # "061",  # foam_brick
+]
+
+lw_include_names = [
+    # "cracker_box",
+    "bowl",
 ]
 
 # Filter USD files based on ID prefixes
 usd_paths = []
-for usd_file in all_usd_files:
+for usd_file in ycb_usd_files:
     basename = os.path.basename(usd_file)
     # Extract the 3-digit ID from filename (assuming format like "003_cracker_box.usd")
-    if basename[:3] in include_ids:
+    if basename[:3] in ycb_include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 35
+for usd_file in lw_usd_files:
+    basename = os.path.basename(usd_file)
+    base_name = basename.replace(".usd", "")
+    if base_name in lw_include_names:
+        usd_paths.append(usd_file)
+
+num_object_per_env = 70
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -155,11 +175,11 @@ class PackSceneCfg(InteractiveSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=60,
+                            solver_position_iteration_count=4,
                             solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
-                            max_depenetration_velocity=1000.0,
+                            # max_depenetration_velocity=1000.0,
                         ),
                     ),
                     init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
@@ -197,20 +217,23 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        actions = ObsTerm(func=mdp.last_action)
+        # actions = ObsTerm(func=mdp.last_action)
         obs_dims = ObsTerm(func=mdp.obs_dims)
 
         def __post_init__(self):
             self.enable_corruption = True
+
         #     self.concatenate_terms = True
 
     class SensorCfg(ObsGroup):
         """Observations for sensor group."""
+
         heightmap = ObsTerm(func=mdp.heightmap)
 
     # observation groups
     policy: PolicyCfg = PolicyCfg()
     sensor: SensorCfg = SensorCfg()
+
 
 @configclass
 class EventCfg:
@@ -230,7 +253,6 @@ class EventCfg:
         mode="reset",
     )
 
-
     set_objects_to_invisible = EventTerm(
         func=mdp.set_objects_to_invisible,
         mode="post_reset",
@@ -240,24 +262,33 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
-    gcu_reward = RewardTerm(
-        func=mdp.gcu_reward, weight=100.0
-    )
+
+    # gcu_reward = RewardTerm(
+    #     func=mdp.gcu_reward_step, weight=1000.0
+    # )
+
+    object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
+
+    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
 
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
+
     object_overfilled_tote = DoneTerm(
         func=mdp.object_overfilled_tote,
     )
 
 
-
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
+
     pass
+    # object_shift = CurriculumTerm(
+    #     func=mdp.modify_reward_weight, params={"term_name": "object_shift", "weight": 50.0, "num_steps": 10000}
+    # )
 
 
 @configclass
@@ -278,7 +309,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False , clone_in_fabric=True)
+    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False, clone_in_fabric=True)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -298,4 +329,8 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 60.0
+        self.sim.dt = 1.0 / 90.0
+        self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
+        self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
+        self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
+        self.sim.physx.gpu_max_rigid_contact_count = 2**26
