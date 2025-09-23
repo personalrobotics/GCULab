@@ -147,6 +147,13 @@ def object_props(
             asset_path = items[0].assetPath
 
             for mesh in find_meshes(prim):
+                # if mesh name contains Collision, skip
+                scale = 1
+
+                if "Collisions" in mesh.GetPath().__str__():
+                    continue
+                if "Visuals" in mesh.GetPath().__str__():
+                    scale = 100
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
 
@@ -154,10 +161,9 @@ def object_props(
                 if asset_path in mesh_properties_cache:
                     volume, bbox, vox = mesh_properties_cache[asset_path]
                 else:
-                    bbox = compute_mesh_bbox(mesh)
+                    bbox = compute_mesh_bbox(mesh) * scale
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
-
                     mesh_properties_cache[asset_path] = (volume, bbox, vox)
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
@@ -468,8 +474,8 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
     """
     total_volume = env.tote_manager.tote_volume
-    env.scene.write_data_to_sim()
-    env.sim.step(render=True)
+    # env.scene.write_data_to_sim()
+    # env.sim.step(render=True)
     heightmaps = 20 - env.observation_manager.compute()['sensor'] # subtract distance from camera to tote
     # import matplotlib.pyplot as plt
     # plt.imshow(heightmaps[0].cpu().numpy(), cmap='viridis')
@@ -483,8 +489,6 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
     objects_volume = env.tote_manager.stats.recent_gcu_values[torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes] * 0.8
     wasted_volume = torch.clamp(1.0 - top_down_volumes - objects_volume, min=0.0, max=1.0)
     inverse_wasted_volume = 1 / (1 + wasted_volume)  # Inverse to make it a reward
-    print(f"Wasted volume: {wasted_volume}")
-    print(f"Inverse wasted volume: {inverse_wasted_volume}")
     return inverse_wasted_volume
 
 def object_overfilled_tote(env: ManagerBasedRLGCUEnv):

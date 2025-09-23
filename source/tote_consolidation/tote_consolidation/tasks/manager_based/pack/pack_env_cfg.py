@@ -35,11 +35,13 @@ gcu_objects_path = os.path.abspath("gcu_objects")
 
 # Dynamically build list of USD paths by scanning the directory
 ycb_physics_dir = os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics")
-all_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
+lw_physics_dir = os.path.join(gcu_objects_path, "YCB/lightwheel_usds/gcu_assets")
+ycb_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
+lw_usd_files = glob.glob(os.path.join(lw_physics_dir, "*.usd"))
 
 # Extract all available object IDs and names for reference
 available_objects = {}
-for usd_file in all_usd_files:
+for usd_file in ycb_usd_files:
     basename = os.path.basename(usd_file)
     obj_id = basename[:3]
     obj_name = basename[4:].replace(".usd", "")
@@ -51,7 +53,7 @@ for obj_id, obj_name in sorted(available_objects.items()):
     print(f'"{obj_id}", # {obj_name}')
 
 # Define which object IDs to include
-include_ids = [
+ycb_include_ids = [
     "003",  # cracker_box
     "004",  # sugar_box
     "006",  # mustard_bottle
@@ -60,7 +62,7 @@ include_ids = [
     # "009",  # gelatin_box
     # "010", # potted_meat_can
     "011", # banana
-    "024", # bowl
+    # "024", # bowl
     # "025", # mug
     "036",  # wood_block
     # "051", # large_clamp
@@ -68,15 +70,26 @@ include_ids = [
     # "061",  # foam_brick
 ]
 
+lw_include_names = [
+    # "cracker_box",
+    "bowl_test",
+]
+
 # Filter USD files based on ID prefixes
 usd_paths = []
-for usd_file in all_usd_files:
+for usd_file in ycb_usd_files:
     basename = os.path.basename(usd_file)
     # Extract the 3-digit ID from filename (assuming format like "003_cracker_box.usd")
-    if basename[:3] in include_ids:
+    if basename[:3] in ycb_include_ids:
         usd_paths.append(usd_file)
 
-num_object_per_env = 50
+for usd_file in lw_usd_files:
+    basename = os.path.basename(usd_file)
+    base_name = basename.replace(".usd", "")
+    if base_name in lw_include_names:
+        usd_paths.append(usd_file)
+
+num_object_per_env = 70
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -247,12 +260,16 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
-    gcu_reward = RewardTerm(
-        func=mdp.gcu_reward, weight=1000.0
-    )
+    # gcu_reward = RewardTerm(
+    #     func=mdp.gcu_reward_step, weight=1000.0
+    # )
 
     object_shift = RewardTerm(
         func=mdp.object_shift, weight=10.0
+    )
+
+    wasted_volume = RewardTerm(
+        func=mdp.inverse_wasted_volume, weight=40.0
     )
 
 @configclass
@@ -314,3 +331,5 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 1.0 / 90.0
         self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
         self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
+        self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
+        self.sim.physx.gpu_max_rigid_contact_count = 2**26
