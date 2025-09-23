@@ -73,7 +73,6 @@ from isaaclab_rl.rsl_rl import (
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
-import matplotlib.pyplot as plt
 from rsl_rl.utils import normalize_and_flatten_image_obs
 
 
