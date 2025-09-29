@@ -22,6 +22,7 @@ from isaaclab.sim.schemas import schemas_cfg
 from packing3d import Container
 from pxr import UsdGeom
 from scipy.ndimage import binary_fill_holes, generate_binary_structure, label
+import os
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLGCUEnv
@@ -129,9 +130,23 @@ def object_props(
 
         return torch.from_numpy(filled_cropped).permute(2, 0, 1).float()  # Convert to (Z, Y, X) format
 
+    def load_latents(asset_path):
+        """Loads the latents for a mesh.
+        they are stored in the same directory as the mesh, in subfolder latents and _latent.pt suffix
+        """
+        # Get the directory of the asset path
+        asset_dir = os.path.dirname(asset_path)
+        # Get the filename without extension
+        asset_filename = os.path.basename(asset_path).replace(".usd", "")
+        # Construct path to latents subfolder
+        latents_path = os.path.join(asset_dir, "latents", f"{asset_filename}_latent.pt")
+        latents = torch.load(latents_path)
+        return latents
+
     # Cache for storing volumes of already computed objects
     obj_volumes = torch.zeros((env.num_envs, num_objects), device=env.device)
     obj_bboxes = torch.zeros((env.num_envs, num_objects, 3), device=env.device)
+    obj_latents = torch.zeros((env.num_envs, num_objects, 512, 8), device=env.device)
     obj_voxels = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
     obj_asset_paths = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
 
@@ -159,22 +174,25 @@ def object_props(
 
                 # Check if we've already calculated properties for this asset
                 if asset_path in mesh_properties_cache:
-                    volume, bbox, vox = mesh_properties_cache[asset_path]
+                    volume, bbox, vox, latents = mesh_properties_cache[asset_path]
                 else:
                     bbox = compute_mesh_bbox(mesh) * scale
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
-                    mesh_properties_cache[asset_path] = (volume, bbox, vox)
+                    latents = load_latents(asset_path)
+
+                    mesh_properties_cache[asset_path] = (volume, bbox, vox, latents)
                 obj_volumes[env_idx, obj_idx] = volume
                 obj_bboxes[env_idx, obj_idx] = bbox
                 obj_voxels[env_idx][obj_idx] = vox
+                obj_latents[env_idx, obj_idx] = latents.squeeze()
                 obj_asset_paths[env_idx][obj_idx] = asset_path
 
     env.tote_manager.set_object_asset_paths(obj_asset_paths, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_volume(obj_volumes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_object_voxels(obj_voxels)
-
+    env.tote_manager.set_object_latents(obj_latents, torch.arange(env.num_envs, device=env.device))
 
 def refill_source_totes(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
     """Refills the source totes with objects from the reserve."""
@@ -438,6 +456,16 @@ def obs_dims(env: ManagerBasedRLGCUEnv):
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     return obj_dims
 
+
+def obs_latents(env: ManagerBasedRLGCUEnv):
+    """Returns the latents of the object to pack."""
+    if not hasattr(env, "bpp"):
+        return torch.zeros((env.unwrapped.num_envs, 512, 8), device=env.unwrapped.device)
+    tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
+    obj_latents = env.unwrapped.tote_manager.obj_latents[torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs].reshape(env.unwrapped.num_envs, -1)
+    return obj_latents
 
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.

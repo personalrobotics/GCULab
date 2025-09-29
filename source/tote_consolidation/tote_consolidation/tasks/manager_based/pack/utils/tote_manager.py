@@ -67,6 +67,7 @@ class ToteManager:
         self.num_objects = cfg.num_object_per_env  # in cm
         self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
         self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
+        self.obj_latents = torch.zeros(self.num_envs, self.num_objects, 512, 8, device=env.device)
         self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.obj_asset_paths = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.tote_to_obj = torch.zeros(
@@ -128,6 +129,17 @@ class ToteManager:
             env_ids: Environment IDs to update
         """
         self.obj_bboxes[env_ids] = obj_bboxes
+
+    def set_object_latents(self, obj_latents, env_ids):
+        """
+        Set object latents for specified environments.
+
+        Args:
+            obj_latents: Tensor of object latents
+            env_ids: Environment IDs to update
+        """
+        self.obj_latents[env_ids] = obj_latents
+
 
     def set_object_voxels(self, obj_voxels):
         """
@@ -365,7 +377,7 @@ class ToteManager:
                 self.tote_keys,
             )
 
-        # # Log destination tote ejections
+        # Log destination tote ejections
         # overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
         # overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
         # overfilled_totes = overfilled_totes[env_ids]
