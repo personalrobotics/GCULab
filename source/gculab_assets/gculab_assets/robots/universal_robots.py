@@ -78,7 +78,7 @@ UR5_CFG = UR10_CFG.replace(
     ),
 )
 
-ur5_robotiq_path = "/home/henri/Downloads/ur5e_robotiq.usd"
+ur5_robotiq_path = "gcu_objects/assets/ur_description/ur5e_robotiq.usd"
 ur5_robotiq_abs_path = os.path.abspath(ur5_robotiq_path)
 
 UR5_ROBOTIQ_CFG = UR5_CFG.replace(

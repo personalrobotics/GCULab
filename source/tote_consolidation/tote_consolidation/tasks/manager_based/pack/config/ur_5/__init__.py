@@ -23,6 +23,6 @@ gym.register(
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.joint_pos_env_cfg:UR5PackEnvCfg",
+        "env_cfg_entry_point": f"{__name__}.joint_pos_env_teleop_cfg:UR5PackEnvTeleopCfg",
     },
 )
