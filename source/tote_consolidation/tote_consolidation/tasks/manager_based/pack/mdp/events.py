@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import math
+import os
 import random
 from itertools import product
 from typing import TYPE_CHECKING
@@ -22,7 +23,6 @@ from isaaclab.sim.schemas import schemas_cfg
 from packing3d import Container
 from pxr import UsdGeom
 from scipy.ndimage import binary_fill_holes, generate_binary_structure, label
-import os
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLGCUEnv
@@ -150,9 +150,10 @@ def object_props(
     obj_voxels = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
     obj_asset_paths = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
 
+    # Cache for storing unique object properties by asset path
     mesh_properties_cache = {}
 
-    # Get mesh from the asset
+    # Get mesh from the asset and populate asset paths
     for asset_cfg in asset_cfgs:
         object: RigidObject = env.scene[asset_cfg.name]
         prim_path_expr = object.cfg.prim_path  # fix prim path is regex
@@ -172,27 +173,20 @@ def object_props(
                 env_idx = int(mesh.GetPath().__str__().split("/")[3].split("_")[-1])
                 obj_idx = int("".join(filter(str.isdigit, mesh.GetPath().__str__().split("/")[4])))
 
-                # Check if we've already calculated properties for this asset
-                if asset_path in mesh_properties_cache:
-                    volume, bbox, vox, latents = mesh_properties_cache[asset_path]
-                else:
-                    bbox = compute_mesh_bbox(mesh) * scale
+                # Store asset path for this object
+                obj_asset_paths[env_idx][obj_idx] = asset_path
+
+                # Compute properties only once per unique asset path
+                if asset_path not in mesh_properties_cache:
+                    bbox = compute_mesh_bbox(mesh)
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
                     latents = load_latents(asset_path)
-
                     mesh_properties_cache[asset_path] = (volume, bbox, vox, latents)
-                obj_volumes[env_idx, obj_idx] = volume
-                obj_bboxes[env_idx, obj_idx] = bbox
-                obj_voxels[env_idx][obj_idx] = vox
-                obj_latents[env_idx, obj_idx] = latents.squeeze()
-                obj_asset_paths[env_idx][obj_idx] = asset_path
 
+    # Store only the unique properties and asset paths in tote_manager
     env.tote_manager.set_object_asset_paths(obj_asset_paths, torch.arange(env.num_envs, device=env.device))
-    env.tote_manager.set_object_volume(obj_volumes, torch.arange(env.num_envs, device=env.device))
-    env.tote_manager.set_object_bbox(obj_bboxes, torch.arange(env.num_envs, device=env.device))
-    env.tote_manager.set_object_voxels(obj_voxels)
-    env.tote_manager.set_object_latents(obj_latents, torch.arange(env.num_envs, device=env.device))
+    env.tote_manager.set_unique_object_properties(mesh_properties_cache)
 
 def refill_source_totes(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
     """Refills the source totes with objects from the reserve."""
@@ -450,9 +444,7 @@ def obs_dims(env: ManagerBasedRLGCUEnv):
         tote_ids,
     )[0]
     objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
-    obj_dims = env.unwrapped.tote_manager.obj_bboxes[
-        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs
-    ]
+    obj_dims = torch.stack([env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)])
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     return obj_dims
 
@@ -464,8 +456,33 @@ def obs_latents(env: ManagerBasedRLGCUEnv):
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
     packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
     objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
-    obj_latents = env.unwrapped.tote_manager.obj_latents[torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs].reshape(env.unwrapped.num_envs, -1)
+    obj_latents = torch.stack([env.unwrapped.tote_manager.get_object_latents(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)]).reshape(env.unwrapped.num_envs, -1)
     return obj_latents
+
+def obj_ids(env: ManagerBasedRLGCUEnv):
+    """Returns the asset IDs of the objects to pack."""
+    if not hasattr(env, "bpp"):
+        return torch.zeros((env.unwrapped.num_envs,1), device=env.unwrapped.device)
+
+    tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+
+    # Efficient lookup using pre-computed cache
+    bpp = env.unwrapped.bpp
+    env_indices = []
+    obj_indices = []
+
+    for env_idx, obj_list in enumerate(packable_objects):
+        if len(obj_list) > 0:
+            env_indices.append(env_idx)
+            obj_indices.append(obj_list[0].item())
+        else:
+            env_indices.append(env_idx)
+            obj_indices.append(0)  # Default object ID
+
+    # Use efficient batch lookup
+    asset_ids = bpp.get_asset_ids_batch(env_indices, obj_indices)
+    return asset_ids.unsqueeze(1)
 
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.
@@ -507,6 +524,35 @@ def gcu_reward(env: ManagerBasedRLGCUEnv):
         rewards[reset_envs] = pre_reset_rewards[reset_envs, env.tote_manager.dest_totes[reset_envs]]
     return rewards
 
+
+def gcu_reward_step(env: ManagerBasedRLGCUEnv):
+    """
+    Computes the stepwise GCU reward for each environment: the increase in GCU since the last step.
+    Returns 0 for environments being reset.
+
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+
+    Returns:
+        torch.Tensor: Reward tensor of shape [num_envs], where each entry is the GCU increase for that environment,
+                        or 0 if the environment is being reset.
+    """
+    tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
+    obj_dims = torch.stack([env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)])
+    obj_dims = obj_dims / 100.0  # Convert from cm to m
+    tote_dims = env.tote_manager.true_tote_dim / 100.0
+    next_box_vol = obj_dims[:, 0] * obj_dims[:, 1] * obj_dims[:, 2]
+    tote_vol = torch.prod(tote_dims, dim=-1)
+    gcu_values = next_box_vol / tote_vol
+
+    # Set reward to 0 for environments that are being reset
+    reset_envs = env.reset_buf.nonzero(as_tuple=False).squeeze(-1)
+    if len(reset_envs.shape) == 0:
+        reset_envs = reset_envs.unsqueeze(0)
+    gcu_values[reset_envs] = 0.0
+    return gcu_values
 
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv):
     """

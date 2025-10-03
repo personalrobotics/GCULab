@@ -125,11 +125,18 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         x = actions[:, 0]
         y = actions[:, 1]
 
-        bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device),
-            torch.tensor(object_to_pack, device=self.env.unwrapped.device),
-        ]
-        rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
+        bbox_offset = torch.stack([
+            self.env.unwrapped.tote_manager.get_object_bbox(env_idx, obj_idx)
+            for env_idx, obj_idx in zip(
+                torch.arange(actions.shape[0], device=self.env.unwrapped.device),
+                torch.tensor(object_to_pack, device=self.env.unwrapped.device)
+            )
+        ])
+        rotated_dim = (
+            calculate_rotated_bounding_box(
+                bbox_offset, quats, device=self.env.unwrapped.device
+            )
+        )
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
         x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
@@ -204,7 +211,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         )[0]
         object_to_pack = [row[0] for row in packable_objects]
         for i in range(self.env.unwrapped.num_envs):
-            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
+            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()], device=self.env.unwrapped.device))
 
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
 

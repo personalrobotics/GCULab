@@ -175,7 +175,7 @@ class PackSceneCfg(InteractiveSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=4,
+                            solver_position_iteration_count=10,
                             solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
@@ -262,15 +262,13 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
-
     # gcu_reward = RewardTerm(
     #     func=mdp.gcu_reward_step, weight=1000.0
     # )
 
-    object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
+    # object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
 
     wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
-
 
 @configclass
 class TerminationsCfg:
