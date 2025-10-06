@@ -77,8 +77,8 @@ class DepthObservationsCfg:
 
         # observation terms (order preserved)
         # actions = ObsTerm(func=mdp.last_action)
-        # obs_dims = ObsTerm(func=mdp.obs_dims)
-        obs_latents = ObsTerm(func=mdp.obs_latents)
+        obs_dims = ObsTerm(func=mdp.obs_dims)
+        # obs_latents = ObsTerm(func=mdp.obs_latents)
 
         # def __post_init__(self):
         #     self.enable_corruption = True

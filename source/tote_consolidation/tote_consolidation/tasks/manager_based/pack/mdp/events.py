@@ -443,11 +443,58 @@ def obs_dims(env: ManagerBasedRLGCUEnv):
         torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
         tote_ids,
     )[0]
-    objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
+
+    # Update FIFO queues and peek at the first object in each queue
+    env.unwrapped.bpp.update_fifo_queues(packable_objects)
+    objs = torch.tensor([
+        env.unwrapped.bpp.fifo_queues[env_idx][0].item()
+        if env.unwrapped.bpp.fifo_queues[env_idx]
+        else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
+        for env_idx in range(env.unwrapped.num_envs)
+    ], device=env.unwrapped.device)
     obj_dims = torch.stack([env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)])
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     return obj_dims
 
+
+
+
+def obs_lookahead(env: ManagerBasedRLGCUEnv):
+    """Returns the dimensions of all objects to pack, padded to 20 per environment, flattened to (num_envs, max_objects*3)."""
+    max_objects = 20
+    if not hasattr(env, "bpp"):
+        return torch.zeros((env.unwrapped.num_envs, max_objects * 3), device=env.unwrapped.device)
+    tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+        env.unwrapped.tote_manager.num_objects,
+        env.unwrapped.tote_manager,
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
+        tote_ids,
+    )[0]
+
+    # Update FIFO queues
+    env.unwrapped.bpp.update_fifo_queues(packable_objects)
+
+    obj_dims_list = []
+    for env_idx in range(env.unwrapped.num_envs):
+        obj_indices = []
+        # Use FIFO queue if available, else fall back to packable_objects
+        if env.unwrapped.bpp.fifo_queues[env_idx]:
+            obj_indices = [obj.item() for obj in env.unwrapped.bpp.fifo_queues[env_idx]]
+        elif packable_objects[env_idx]:
+            obj_indices = [obj.item() for obj in packable_objects[env_idx]]
+        # Pad or truncate to max_objects
+        obj_indices = obj_indices[:max_objects]
+        obj_indices += [0] * (max_objects - len(obj_indices))
+        # Get dimensions for each object
+        dims = [env.unwrapped.tote_manager.get_object_bbox(env_idx, obj_id) for obj_id in obj_indices]
+        dims = torch.stack(dims) if dims else torch.zeros((max_objects, 3), device=env.unwrapped.device)
+        obj_dims_list.append(dims)
+
+    obj_dims = torch.stack(obj_dims_list)  # (num_envs, max_objects, 3)
+    obj_dims = obj_dims / 100.0  # Convert from cm to m
+    obj_dims = obj_dims.reshape(env.unwrapped.num_envs, max_objects * 3)
+    return obj_dims
 
 def obs_latents(env: ManagerBasedRLGCUEnv):
     """Returns the latents of the object to pack."""

@@ -219,6 +219,7 @@ class ObservationsCfg:
         # observation terms (order preserved)
         # actions = ObsTerm(func=mdp.last_action)
         obs_dims = ObsTerm(func=mdp.obs_dims)
+        # obs_lookahead = ObsTerm(func=mdp.obs_lookahead)
 
         def __post_init__(self):
             self.enable_corruption = True

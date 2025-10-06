@@ -12,6 +12,8 @@ import isaaclab.utils.math as math_utils
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend for saving figures
+from collections import deque
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -91,6 +93,8 @@ class BPP:
         self.curr_obj_indices = [None] * num_envs
         self.source_loaded = [False] * num_envs
         self.subset_obj_indices = {}
+
+        self.fifo_queues = [deque() for _ in range(num_envs)]
 
         # Initialize unique properties storage
         self.unique_obj_dims = {}
@@ -1003,3 +1007,73 @@ class BPP:
             valid_indices[i] = [obj for obj in valid_indices[i] if obj not in self.unpackable_obj_idx[env_idx]]
 
         return valid_indices, mask
+
+    def select_fifo_packable_objects(self, packable_objects, device):
+        """
+        Select packable objects using FIFO (First In, First Out) ordering.
+
+        Args:
+            packable_objects: List of tensors with packable object indices for each environment
+            device: Device to create tensors on
+
+        Returns:
+            Tensor of selected object indices (-1 for environments with no packable objects)
+        """
+        import torch
+        num_envs = len(packable_objects)
+        selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
+
+        for env_idx, packable_list in enumerate(packable_objects):
+            if len(packable_list) == 0:
+                continue
+
+            packable_values = {obj.item() for obj in packable_list}
+
+            # Remove stale objects from front of FIFO
+            while self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() not in packable_values:
+                self.fifo_queues[env_idx].popleft()
+
+            # Pick the first object from FIFO, but don't remove it yet
+            if self.fifo_queues[env_idx]:
+                selected_obj_indices[env_idx] = self.fifo_queues[env_idx][0]  # Peek at first object
+            else:
+                # If FIFO is empty, pick the first available packable object
+                selected_obj_indices[env_idx] = packable_list[0]
+
+        return selected_obj_indices
+
+    def update_fifo_queues(self, packable_objects):
+        """
+        Update FIFO queues with new packable objects while maintaining FIFO order.
+
+        Args:
+            packable_objects: List of tensors with packable object indices for each environment
+        """
+        for env_idx, packable_list in enumerate(packable_objects):
+            fifo_queue = self.fifo_queues[env_idx]
+            packable_values = {obj.item() for obj in packable_list}
+
+            # Remove stale objects from FIFO that are no longer packable
+            from collections import deque
+            self.fifo_queues[env_idx] = deque([obj for obj in fifo_queue if obj.item() in packable_values])
+
+            # Append new objects that aren't already in FIFO
+            fifo_values = {obj.item() for obj in self.fifo_queues[env_idx]}
+            for obj in packable_list:
+                if obj.item() not in fifo_values:
+                    self.fifo_queues[env_idx].append(obj)
+                    fifo_values.add(obj.item())
+
+            # REORDER packable_objects to match FIFO order
+            packable_objects[env_idx] = list(self.fifo_queues[env_idx])
+
+    def remove_selected_from_fifo(self, selected_objects):
+        """
+        Remove selected objects from the front of FIFO queues.
+
+        Args:
+            selected_objects: Tensor of selected object indices
+        """
+        for env_idx, selected_obj in enumerate(selected_objects):
+            if selected_obj != -1 and self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() == selected_obj.item():
+                self.fifo_queues[env_idx].popleft()
