@@ -178,7 +178,7 @@ def object_props(
 
                 # Compute properties only once per unique asset path
                 if asset_path not in mesh_properties_cache:
-                    bbox = compute_mesh_bbox(mesh)
+                    bbox = compute_mesh_bbox(mesh) * scale
                     vox = compute_voxelized_geometry(mesh, bbox)
                     volume = compute_voxel_volume(vox)
                     latents = load_latents(asset_path)

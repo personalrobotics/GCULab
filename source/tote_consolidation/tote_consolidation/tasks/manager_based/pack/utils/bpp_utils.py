@@ -141,7 +141,6 @@ class BPP:
                     cached_data = pickle.load(f)
                     self.tote_dims = cached_data['tote_dims']
                     self.problems = cached_data['problems']
-                    self.display = cached_data['display']
                     self.unique_obj_dims = cached_data['unique_obj_dims']
                     self.unique_obj_voxels = cached_data['unique_obj_voxels']
                     self.unique_obj_latents = cached_data['unique_obj_latents']
@@ -182,44 +181,40 @@ class BPP:
                 env_paths.append(path)
             cpu_asset_paths.append(env_paths)
 
-        # TODO (kaikwan): Condition on FW BPP or during play eval for RL
-        # # Prepare arguments for item creation with CPU data
-        # item_args = []
-        # for i in range(self.num_envs):
-        #     # Ensure objects list is CPU-based
-        #     objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item()
-        #                   for obj in self.objects]
-        #     item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
-        # print("Time to prepare item arguments: {:.3f}s".format(time.time() - start_time))
+        # Prepare arguments for item creation with CPU data
+        item_args = []
+        for i in range(self.num_envs):
+            # Ensure objects list is CPU-based
+            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item()
+                          for obj in self.objects]
+            item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
+        print(f"Time to prepare item arguments: {time.time() - start_time:.3f}s")
 
-        # # Create items using multiprocessing with limited workers to avoid memory issues
-        # all_items = [None] * self.num_envs
-        # with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
-        #     for env_idx, items in executor.map(create_items_worker, item_args):
-        #         all_items[env_idx] = items
-        # print(f"Time to create items: {time.time() - start_time:.3f}s")
+        # Create items using multiprocessing with limited workers to avoid memory issues
+        all_items = [None] * self.num_envs
+        with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
+            for env_idx, items in executor.map(create_items_worker, item_args):
+                all_items[env_idx] = items
+        print(f"Time to create items: {time.time() - start_time:.3f}s")
 
-        # # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
-        # problem_args = [
-        #     (i, self.tote_dims, all_items[i])
-        #     for i in range(self.num_envs)
-        # ]
+        # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
+        problem_args = [
+            (i, self.tote_dims, all_items[i])
+            for i in range(self.num_envs)
+        ]
 
-        # # Create problems using multiprocessing with limited workers
-        # self.problems = [None] * self.num_envs
-        # with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
-        #     for env_idx, problem in executor.map(create_problem_worker, problem_args):
-        #         self.problems[env_idx] = problem
-        # print("Time to create problems: {:.3f}s".format(time.time() - start_time))
-
-        # self.display = Display(self.tote_dims)
+        # Create problems using multiprocessing with limited workers
+        self.problems = [None] * self.num_envs
+        with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
+            for env_idx, problem in executor.map(create_problem_worker, problem_args):
+                self.problems[env_idx] = problem
+        print(f"Time to create problems: {time.time() - start_time:.3f}s")
 
         # Save the components to cache for future use
         try:
             cache_data = {
                 'tote_dims': self.tote_dims,
                 'problems': self.problems,
-                'display': self.display,
                 'unique_obj_dims': self.unique_obj_dims,
                 'unique_obj_voxels': self.unique_obj_voxels,
                 'unique_obj_latents': self.unique_obj_latents,
