@@ -459,9 +459,8 @@ def obs_dims(env: ManagerBasedRLGCUEnv):
 
 
 
-def obs_lookahead(env: ManagerBasedRLGCUEnv):
+def obs_lookahead(env: ManagerBasedRLGCUEnv, max_objects: int = 20):
     """Returns the dimensions of all objects to pack, padded to 20 per environment, flattened to (num_envs, max_objects*3)."""
-    max_objects = 20
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, max_objects * 3), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
