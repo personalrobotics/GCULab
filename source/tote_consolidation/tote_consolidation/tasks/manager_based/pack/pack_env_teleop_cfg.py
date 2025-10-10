@@ -22,7 +22,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from source.tote_consolidation.tote_consolidation.tasks.manager_based.pack.pack_env_cfg import ActionsCfg, CommandsCfg, CurriculumCfg, EventCfg, ObservationsCfg, PackEnvCfg, PackSceneCfg, RewardsCfg, TerminationsCfg, ToteManagerCfg
+from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import ActionsCfg, CommandsCfg, CurriculumCfg, EventCfg, ObservationsCfg, PackEnvCfg, PackSceneCfg, RewardsCfg, TerminationsCfg, ToteManagerCfg
 
 from . import mdp
 
@@ -102,6 +102,34 @@ class PackSceneTeleopCfg(InteractiveSceneCfg):
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -1.5 * tote_spacing, 0.0)),
     )
+
+    tote2 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Tote2",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=tote_usd_path,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, -0.5 * tote_spacing, 0.0)),
+    )
+
+    tote3 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Tote3",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=tote_usd_path,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.5 * tote_spacing, 0.0)),
+    )
+
+    tote4 = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/Tote4",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=tote_usd_path,
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
+    )
+
 
     # robots
     right_robot: ArticulationCfg | None = None

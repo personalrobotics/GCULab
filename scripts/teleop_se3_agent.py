@@ -110,38 +110,42 @@ def pre_process_actions(
     elif "Pack-UR5" in args_cli.task:
         joint_pos, gripper_raw_command = teleop_data
         joint_pos = torch.tensor(joint_pos, dtype=torch.float, device=device).repeat(num_envs, 1)
-    
-        global smoothed_command
+        print(f"gripper_raw_command: {gripper_raw_command}")
+        # global smoothed_command
 
-        # Clamp positive values
-        gripper_raw_command = 0 if gripper_raw_command > 0 else gripper_raw_command
+        # # Clamp positive values
+        # gripper_raw_command = 0 if gripper_raw_command > 0 else gripper_raw_command
 
-        # Update smoothed command
-        smoothed_command = 0 if gripper_raw_command == 0 else alpha * gripper_raw_command + (1 - alpha) * smoothed_command
+        # # Update smoothed command
+        # smoothed_command = 0 if gripper_raw_command == 0 else alpha * gripper_raw_command + (1 - alpha) * smoothed_command
 
-        print(f"smoothed_command: {smoothed_command}")
+        # print(f"smoothed_command: {smoothed_command}")
 
-        max_value = 0.785398
-        min_gripper = -4045
+        # max_value = 0.785398
+        # min_gripper = -4045
 
-        gripper_joints = torch.tensor([
-            smoothed_command * (max_value / min_gripper),                           # finger_joint
-            smoothed_command * (max_value / min_gripper),                           # right_outer_knuckle_joint
-            smoothed_command * (max_value / -1*min_gripper) + max_value,            # right_outer_finger_joint
-            smoothed_command * (max_value / -1*min_gripper) + max_value,            # left_outer_finger_joint
-            smoothed_command * (max_value / min_gripper),                           # left_inner_finger_pad_joint
-            smoothed_command * (max_value / min_gripper),                           # right_inner_finger_pad_joint
-            -max_value,                                                             # left_inner_finger_joint
-            -max_value                                                              # right_inner_finger_joint
-        ],  dtype=torch.float,
-            device=device
-        ).repeat(num_envs, 1)
+        # gripper_joints = torch.tensor([
+        #     smoothed_command * (max_value / min_gripper),                           # finger_joint
+        #     smoothed_command * (max_value / min_gripper),                           # right_outer_knuckle_joint
+        #     smoothed_command * (max_value / -1*min_gripper) + max_value,            # right_outer_finger_joint
+        #     smoothed_command * (max_value / -1*min_gripper) + max_value,            # left_outer_finger_joint
+        #     smoothed_command * (max_value / min_gripper),                           # left_inner_finger_pad_joint
+        #     smoothed_command * (max_value / min_gripper),                           # right_inner_finger_pad_joint
+        #     -max_value,                                                             # left_inner_finger_joint
+        #     -max_value                                                              # right_inner_finger_joint
+        # ],  dtype=torch.float,
+        #     device=device
+        # ).repeat(num_envs, 1)
+
+        gripper_binary = torch.tensor([[1.0 if gripper_raw_command else 0.0]], dtype=torch.float, device=device).repeat(num_envs, 1)
         
 
         # gripper_vel = torch.zeros((delta_pose.shape[0], 1), dtype=torch.float, device=device)
         # gripper_vel[:] = -1 if gripper_command else 1
         # compute actions
-        return torch.concat([joint_pos, gripper_joints], dim=1)
+        #return torch.concat([joint_pos, gripper_joints], dim=1)
+        return torch.concat([joint_pos, gripper_binary], dim=1)
+
         '''gripper_state = 1 if gripper_command else 0
         # compute actions
         return delta_pose
@@ -176,6 +180,7 @@ def main():
         omni.log.warn(
             f"The environment '{args_cli.task}' does not support gripper control. The device command will be ignored."
         )
+    print(env.scene["right_robot"].data.joint_names)
 
     # Flags for controlling teleoperation flow
     should_reset_recording_instance = False
