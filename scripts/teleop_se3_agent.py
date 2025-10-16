@@ -137,7 +137,7 @@ def pre_process_actions(
         #     device=device
         # ).repeat(num_envs, 1)
 
-        gripper_binary = torch.tensor([[1.0 if gripper_raw_command else 0.0]], dtype=torch.float, device=device).repeat(num_envs, 1)
+        gripper_binary = torch.tensor([[-1.0 if gripper_raw_command else 0.0]], dtype=torch.float, device=device).repeat(num_envs, 1)
         
 
         # gripper_vel = torch.zeros((delta_pose.shape[0], 1), dtype=torch.float, device=device)
