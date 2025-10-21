@@ -5,6 +5,8 @@
 
 import gymnasium as gym
 
+from . import agents
+
 ##
 # Register Gym environments.
 ##
@@ -15,5 +17,16 @@ gym.register(
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.joint_pos_env_cfg:NoArmPackEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:NoArmPackPPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="Isaac-Pack-NoArm-Camera-v0",
+    entry_point="gculab.envs:ManagerBasedRLGCUEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.joint_pos_camera_env_cfg:NoArmPackCameraEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_camera_cfg:NoArmPackPPOCameraRunnerCfg",
     },
 )

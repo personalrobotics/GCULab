@@ -27,11 +27,8 @@ from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import (
     CommandsCfg,
     CurriculumCfg,
     EventCfg,
-    ObservationsCfg,
     PackEnvCfg,
     PackSceneCfg,
-    RewardsCfg,
-    TerminationsCfg,
     ToteManagerCfg,
 )
 
@@ -177,6 +174,32 @@ class PackSceneTeleopCfg(InteractiveSceneCfg):
                 ),
             )
 
+
+@configclass
+class ObservationsCfg:
+    """Observation specifications for the MDP."""
+
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
+
+        # observation terms (order preserved)
+        actions = ObsTerm(func=mdp.last_action)
+
+        def __post_init__(self):
+            self.enable_corruption = True
+
+    policy: PolicyCfg = PolicyCfg()
+
+@configclass
+class RewardsCfg:
+    """Reward terms for the MDP."""
+    pass
+
+@configclass
+class TerminationsCfg:
+    """Termination terms for the MDP."""
+    pass
 
 @configclass
 class TeleopEventCfg:

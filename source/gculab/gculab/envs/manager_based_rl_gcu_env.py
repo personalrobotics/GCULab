@@ -17,6 +17,7 @@ from isaaclab.managers import EventManager
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
+from tote_consolidation.tasks.manager_based.pack.utils import bpp_utils
 from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
 
 
@@ -130,6 +131,18 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             # add timeline event to load managers
             self.load_managers()
 
+        self.num_obj_per_env = self.tote_manager.num_objects
+
+        args = {
+            "decreasing_vol": False,  # Whether to use decreasing volume for packing
+            "use_stability": False,  # Whether to use stability checks for packing
+            "use_subset_sum": False,  # Whether to use subset sum for packing
+        }
+
+        self.bpp = bpp_utils.BPP(
+            self.tote_manager, self.num_envs, torch.arange(self.num_obj_per_env, device=self.device), **args
+        )
+
         # extend UI elements
         # we need to do this here after all the managers are initialized
         # this is because they dictate the sensors and commands right now
@@ -185,7 +198,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         is_rendering = self.sim.has_gui() or self.sim.has_rtx_sensors()
 
         # perform physics stepping
-        for _ in range(self.cfg.decimation):
+        for i in range(self.cfg.decimation):
             self._sim_step_counter += 1
             # set actions into buffers
             self.action_manager.apply_action()
@@ -198,18 +211,25 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             #    If a camera needs rendering at a faster frequency, this will lead to unexpected behavior.
             if self._sim_step_counter % self.cfg.sim.render_interval == 0 and is_rendering:
                 self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
-
+            # update buffers at sim dt - only on last iteration to reduce GPU interface calls
+            if i == self.cfg.decimation - 1:
+                self.scene.update(dt=self.physics_dt)
+        self.tote_manager.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
-        wait_time = 100
+        wait_time = self.tote_manager.obj_settle_wait_steps
         for i in range(wait_time):
             self.scene.write_data_to_sim()
             self.sim.step(render=False)
-            if self._sim_step_counter % self.cfg.sim.render_interval == 0:
+            if (
+                self._sim_step_counter % self.cfg.sim.render_interval == 0
+                and is_rendering
+                and self.tote_manager.animate
+            ):
                 self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
+            # update buffers at sim dt - only on last iteration to reduce GPU interface calls
+            if i == wait_time - 1:
+                self.scene.update(dt=self.physics_dt)
+        self.sim.render()
         self.scene.write_data_to_sim()
         self.sim.forward()
 
@@ -279,17 +299,17 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             env_step_count = self._sim_step_counter // self.cfg.decimation
             self.event_manager.apply(mode="reset", env_ids=env_ids, global_env_step_count=env_step_count)
 
-        # wait until objects settle
-        wait_time = 100
-        for i in range(wait_time):
-            self.scene.write_data_to_sim()
-            self.sim.step(render=False)
-            if self._sim_step_counter % self.cfg.sim.render_interval == 0:
-                self.sim.render()
-            # update buffers at sim dt
-            self.scene.update(dt=self.physics_dt)
-        self.scene.write_data_to_sim()
-        self.sim.forward()
+        # kaikwan (07/31): Disabling resets since it is a lifelong reset free environment
+        # wait_time = self.tote_manager.obj_settle_wait_steps
+        # for i in range(wait_time):
+        #     self.scene.write_data_to_sim()
+        #     self.sim.step(render=False)
+        #     if self._sim_step_counter % self.cfg.sim.render_interval == 0:
+        #         self.sim.render()
+        #     # update buffers at sim dt
+        #     self.scene.update(dt=self.physics_dt)
+        # self.scene.write_data_to_sim()
+        # self.sim.forward()
 
         if "post_reset" in self.event_manager.available_modes:
             env_step_count = self._sim_step_counter // self.cfg.decimation

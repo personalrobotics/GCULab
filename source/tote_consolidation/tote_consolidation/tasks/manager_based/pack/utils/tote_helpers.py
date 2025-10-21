@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import itertools
+import multiprocessing as mp
 
 import isaaclab.utils.math as math_utils
 import numpy as np
@@ -39,6 +40,39 @@ def calculate_rotated_bounding_box(object_bboxes, orientations, device):
     return rotated_dims
 
 
+def matrix_from_quat(quaternions):
+    """Convert rotations given as quaternions to rotation matrices.
+
+    Args:
+        quaternions: The quaternion orientation in (w, x, y, z). Shape is (..., 4).
+
+    Returns:
+        Rotation matrices. The shape is (..., 3, 3).
+
+    Reference:
+        https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
+    """
+    r, i, j, k = torch.unbind(quaternions, -1)
+    # Calculate two_s = 2.0 / (quaternions * quaternions).sum(-1)
+    two_s = 2.0 / (quaternions * quaternions).sum(-1)
+
+    o = torch.stack(
+        (
+            1 - two_s * (j * j + k * k),
+            two_s * (i * j - k * r),
+            two_s * (i * k + j * r),
+            two_s * (i * j + k * r),
+            1 - two_s * (i * i + k * k),
+            two_s * (j * k - i * r),
+            two_s * (i * k - j * r),
+            two_s * (j * k + i * r),
+            1 - two_s * (i * i + j * j),
+        ),
+        -1,
+    )
+    return o.reshape(quaternions.shape[:-1] + (3, 3))
+
+
 def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     """
     Calculate rotated bounding boxes for objects efficiently.
@@ -56,7 +90,7 @@ def calculate_rotated_bounding_box_np(object_bboxes, orientations, device):
     corners = torch.tensor(list(itertools.product([-1, 1], repeat=3)), device=device).unsqueeze(
         0
     ) * object_half_dims.unsqueeze(1)
-    rot_matrices = math_utils.matrix_from_quat(orientations)
+    rot_matrices = matrix_from_quat(orientations)
     rotated_corners = torch.bmm(corners, rot_matrices.transpose(1, 2)).detach().cpu()
     rotated_corners_np = rotated_corners.numpy()
     min_vals = np.min(rotated_corners_np, axis=1)
@@ -74,12 +108,14 @@ def step_in_sim(env, num_steps=1):
         num_steps (int): Number of steps to perform in the simulation.
     """
     step = env._sim_step_counter
-    for _ in range(num_steps):
+    for i in range(num_steps):
         env.sim.step(render=False)
         if step % env.cfg.sim.render_interval == 0:
             env.sim.render()
         step += 1
-        env.scene.update(dt=env.physics_dt)
+        # Only update scene on the last step to reduce GPU interface calls
+        if i == num_steps - 1:
+            env.scene.update(dt=env.physics_dt)
 
 
 def reappear_tote_animation(env, env_ids, eject_envs, eject_tote_ids, tote_keys):
@@ -173,13 +209,13 @@ def update_object_positions_in_sim(env, objects, positions, orientations, cur_en
         prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
 
         # Modify physics properties and apply pose and velocity
-        schemas.modify_rigid_body_properties(
-            prim_path,
-            schemas_cfg.RigidBodyPropertiesCfg(
-                kinematic_enabled=False,
-                disable_gravity=False,
-            ),
-        )
+        # schemas.modify_rigid_body_properties(
+        #     prim_path,
+        #     schemas_cfg.RigidBodyPropertiesCfg(
+        #         kinematic_enabled=False,
+        #         disable_gravity=False,
+        #     ),
+        # )
 
         # Apply position and orientation
         asset.write_root_link_pose_to_sim(
@@ -286,3 +322,335 @@ def generate_positions(
     positions_tensor = torch.stack(positions, dim=0)
 
     return positions_tensor + env_origin
+
+
+def generate_orientations_batched(all_objects, device=None):
+    """
+    Generate default orientations for objects in a fully vectorized manner.
+
+    Args:
+        all_objects (list): List of object tensors for each environment.
+        device (torch.device, optional): Device to use for tensors.
+
+    Returns:
+        list: Orientations for the objects in each environment.
+    """
+    # Get device from first non-empty tensor
+    device = next((obj.device for obj in all_objects if obj.numel() > 0), device)
+    if device is None:
+        device = torch.device("cpu")
+
+    orientations_init = torch.tensor([1, 0, 0, 0], device=device)
+    orientations_to_apply = torch.tensor([1, 0, 0, 0], device=device)
+
+    # Create the base orientation once
+    base_orientation = math_utils.quat_mul(orientations_init, orientations_to_apply)
+
+    orientations = []
+    for objects in all_objects:
+        if objects.numel() > 0:
+            # Repeat the base orientation for all objects in this environment
+            repeated_orientations = base_orientation.unsqueeze(0).repeat(objects.numel(), 1)
+            orientations.append(repeated_orientations)
+        else:
+            orientations.append(torch.tensor([], device=device))
+
+    return orientations
+
+
+def generate_positions_batched(
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation=0.0,
+    device=None,
+    max_attempts=100,
+):
+    """
+    Generate random positions within tote bounds for objects with minimum separation in a fully vectorized manner.
+
+    Args:
+        all_objects (list): List of object tensors for each environment.
+        all_tote_bounds (list): List of tote bounds for each environment.
+        env_origins (torch.Tensor): Origins of all environments.
+        all_obj_bboxes (list): List of object bounding boxes for each environment.
+        all_orientations (list): List of orientations for each environment.
+        min_separation (float): Minimum distance between objects (in meters).
+        device (torch.device, optional): Device to use for tensors.
+        max_attempts (int): Maximum number of attempts to place an object.
+
+    Returns:
+        list: Positions for the objects in each environment.
+    """
+    device = env_origins[0].device if device is None else device
+    all_positions = []
+
+    for env_idx, (objects, tote_bounds, obj_bboxes, orientations) in enumerate(
+        zip(all_objects, all_tote_bounds, all_obj_bboxes, all_orientations)
+    ):
+        if objects.numel() == 0:
+            all_positions.append(torch.tensor([], device=device))
+            continue
+
+        # Extract tote boundaries
+        x_min, x_max = tote_bounds[0]
+        y_min, y_max = tote_bounds[1]
+        z_min, z_max = tote_bounds[2]
+
+        # Calculate rotated bounding boxes
+        rotated_dims = calculate_rotated_bounding_box(obj_bboxes, orientations, device)
+
+        # Calculate margins for all objects at once
+        margins = rotated_dims / 2.0
+
+        # Adjusted boundaries considering object size - vectorized
+        adj_x_min = x_min + margins[:, 0]
+        adj_x_max = x_max - margins[:, 0]
+        adj_y_min = y_min + margins[:, 1]
+        adj_y_max = y_max - margins[:, 1]
+        adj_z_min = z_min + margins[:, 2]
+        adj_z_max = z_max - margins[:, 2]
+
+        # Generate all random positions at once
+        x_ranges = adj_x_max - adj_x_min
+        y_ranges = adj_y_max - adj_y_min
+        z_ranges = adj_z_max - adj_z_min
+
+        # Generate multiple attempts for all objects simultaneously
+        x = torch.rand(max_attempts, objects.numel(), device=device) * x_ranges.unsqueeze(0) + adj_x_min.unsqueeze(0)
+        y = torch.rand(max_attempts, objects.numel(), device=device) * y_ranges.unsqueeze(0) + adj_y_min.unsqueeze(0)
+        z = torch.rand(max_attempts, objects.numel(), device=device) * z_ranges.unsqueeze(0) + adj_z_min.unsqueeze(0)
+
+        # Stack into positions [max_attempts, num_objects, 3]
+        candidate_positions = torch.stack([x, y, z], dim=-1)
+
+        # Initialize final positions
+        positions = torch.zeros(objects.numel(), 3, device=device)
+        placed_mask = torch.zeros(objects.numel(), dtype=torch.bool, device=device)
+
+        # For the first object, always accept the first attempt
+        if objects.numel() > 0:
+            positions[0] = candidate_positions[0, 0]
+            placed_mask[0] = True
+
+        # For remaining objects, check separation from all previously placed objects
+        for obj_idx in range(1, objects.numel()):
+            for attempt in range(max_attempts):
+                candidate = candidate_positions[attempt, obj_idx]
+
+                # Check separation from all previously placed objects - vectorized
+                if obj_idx == 0 or attempt == max_attempts - 1:
+                    positions[obj_idx] = candidate
+                    placed_mask[obj_idx] = True
+                    break
+
+                # Calculate distances to all previously placed objects
+                distances = torch.norm(candidate.unsqueeze(0) - positions[:obj_idx], dim=1)
+                min_distance = torch.min(distances)
+
+                if min_distance >= min_separation:
+                    positions[obj_idx] = candidate
+                    placed_mask[obj_idx] = True
+                    break
+
+        # Add environment origin
+        env_origin = env_origins[env_idx] if hasattr(env_origins, "__getitem__") else env_origins
+        all_positions.append(positions + env_origin)
+
+    return all_positions
+
+
+def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_orientations, env_ids):
+    """
+    Update object positions and orientations in the simulation in a fully vectorized manner.
+
+    Args:
+        env: Simulation environment object.
+        all_objects (list): List of object tensors for each environment.
+        all_positions (list): List of position tensors for each environment.
+        all_orientations (list): List of orientation tensors for each environment.
+        env_ids (torch.Tensor): Environment IDs.
+
+    Returns:
+        None
+    """
+    device = env_ids.device
+
+    # Process all environments in parallel
+    for env_idx, (objects, positions, orientations) in enumerate(zip(all_objects, all_positions, all_orientations)):
+        if objects.numel() == 0:
+            continue
+
+        cur_env = env_ids[env_idx]
+        positions = positions.to(env.device)
+        orientations = orientations.to(env.device)
+
+        # Update the object positions in the simulation
+        for j, obj_id in enumerate(objects):
+            env_id = cur_env.item()
+
+            env_id_tensor = torch.tensor([env_id], device=device)
+
+            # Get the asset based on object identifier type
+            if isinstance(obj_id, str):
+                asset = env.scene[obj_id]
+            else:
+                asset = env.scene[f"object{obj_id.item()}"]
+
+            # Update prim path for the specific environment
+            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
+
+            # Modify physics properties and apply pose and velocity
+            # schemas.modify_rigid_body_properties(
+            #     prim_path,
+            #     schemas_cfg.RigidBodyPropertiesCfg(
+            #         kinematic_enabled=False,
+            #         disable_gravity=False,
+            #     ),
+            # )
+
+            # Apply position and orientation
+            asset.write_root_link_pose_to_sim(
+                torch.cat([positions[j], orientations[j]]),
+                env_ids=env_id_tensor,
+            )
+
+            # Reset velocity
+            asset.write_root_com_velocity_to_sim(
+                torch.zeros(6, device=device),
+                env_ids=env_id_tensor,
+            )
+            asset.set_visibility(True, env_ids=env_id_tensor)
+
+
+def generate_positions_batched_multiprocess_cuda(
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation=0.0,
+    device=None,
+    max_attempts=10,
+    num_processes=None,
+):
+    """
+    Generate random positions within tote bounds for objects with minimum separation using CUDA multiprocessing.
+    This version uses CUDA streams and proper GPU memory management for parallel processing.
+
+    Args:
+        all_objects (list): List of object tensors for each environment.
+        all_tote_bounds (list): List of tote bounds for each environment.
+        env_origins (torch.Tensor): Origins of all environments.
+        all_obj_bboxes (list): List of object bounding boxes for each environment.
+        all_orientations (list): List of orientations for each environment.
+        min_separation (float): Minimum distance between objects (in meters).
+        device (torch.device, optional): Device to use for tensors.
+        max_attempts (int): Maximum number of attempts to place an object.
+        num_processes (int, optional): Number of processes to use. If None, uses CPU count.
+
+    Returns:
+        list: Positions for the objects in each environment.
+    """
+    device = env_origins[0].device if device is None else device
+
+    # Determine number of processes
+    if num_processes is None:
+        num_processes = min(mp.cpu_count(), len(all_objects))
+
+    if num_processes <= 1 or len(all_objects) <= 1:
+        # Fall back to single-threaded version for small workloads
+        return generate_positions_batched(
+            all_objects,
+            all_tote_bounds,
+            env_origins,
+            all_obj_bboxes,
+            all_orientations,
+            min_separation,
+            device,
+            max_attempts,
+        )
+
+    # For CUDA, we'll use a different approach - process in chunks with CUDA streams
+    if device.type == "cuda":
+        return _generate_positions_batched_cuda_streams(
+            all_objects,
+            all_tote_bounds,
+            env_origins,
+            all_obj_bboxes,
+            all_orientations,
+            min_separation,
+            device,
+            max_attempts,
+            num_processes,
+        )
+
+    # For CPU, use normal multiprocessing
+    return generate_positions_batched_multiprocess(
+        all_objects,
+        all_tote_bounds,
+        env_origins,
+        all_obj_bboxes,
+        all_orientations,
+        min_separation,
+        device,
+        max_attempts,
+        num_processes,
+    )
+
+
+def _generate_positions_batched_cuda_streams(
+    all_objects,
+    all_tote_bounds,
+    env_origins,
+    all_obj_bboxes,
+    all_orientations,
+    min_separation,
+    device,
+    max_attempts,
+    num_processes,
+):
+    """
+    Generate positions using CUDA streams for parallel processing on GPU.
+    """
+    # Split environments across chunks
+    chunk_size = max(1, len(all_objects) // num_processes)
+    all_positions = []
+
+    # Create CUDA streams for parallel processing
+    streams = [torch.cuda.Stream() for _ in range(num_processes)]
+
+    # Process chunks in parallel using CUDA streams
+    for i in range(0, len(all_objects), chunk_size):
+        end_idx = min(i + chunk_size, len(all_objects))
+        stream_idx = (i // chunk_size) % num_processes
+        stream = streams[stream_idx]
+
+        with torch.cuda.stream(stream):
+            # Extract chunk data
+            chunk_objects = all_objects[i:end_idx]
+            chunk_tote_bounds = all_tote_bounds[i:end_idx]
+            chunk_env_origins = env_origins[i:end_idx] if hasattr(env_origins, "__getitem__") else env_origins
+            chunk_obj_bboxes = all_obj_bboxes[i:end_idx]
+            chunk_orientations = all_orientations[i:end_idx]
+
+            # Process this chunk using the vectorized function
+            chunk_positions = generate_positions_batched(
+                chunk_objects,
+                chunk_tote_bounds,
+                chunk_env_origins,
+                chunk_obj_bboxes,
+                chunk_orientations,
+                min_separation,
+                device,
+                max_attempts,
+            )
+
+            all_positions.extend(chunk_positions)
+
+    # Synchronize all streams
+    torch.cuda.synchronize()
+
+    return all_positions

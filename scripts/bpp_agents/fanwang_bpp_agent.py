@@ -36,12 +36,13 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import os
+import random
 from datetime import datetime
 
-import bpp_utils
 import gymnasium as gym
 import isaaclab.utils.math as math_utils
 import isaaclab_tasks  # noqa: F401
+import numpy as np
 import torch
 import tote_consolidation.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
@@ -93,6 +94,11 @@ def main():
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
     env_cfg.seed = args_cli.seed
+    random.seed(args_cli.seed)
+    np.random.seed(args_cli.seed)
+    torch.manual_seed(args_cli.seed)
+    torch.cuda.manual_seed_all(args_cli.seed)
+
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
@@ -106,23 +112,21 @@ def main():
         args_cli.num_envs, device=env.unwrapped.device, dtype=torch.int32
     )  # Track object indices per environment
     tote_manager = env.unwrapped.tote_manager
+    bpp = env.unwrapped.bpp
     num_obj_per_env = tote_manager.num_objects
     num_totes = len([key for key in env.unwrapped.scene.keys() if key.startswith("tote")])
 
     env_indices = torch.arange(args_cli.num_envs, device=env.unwrapped.device)  # Indices of all environments
 
-    exp_log_interval = 1  # Log stats every 50 steps
+    exp_log_interval = 1
 
     step_count = 0
 
     args = {
         "decreasing_vol": False,  # Whether to use decreasing volume for packing
-        "use_stability": True,  # Whether to use stability checks for packing
+        "use_stability": False,  # Whether to use stability checks for packing
+        "use_subset_sum": False,  # Whether to use subset sum for packing
     }
-
-    bpp = bpp_utils.BPP(
-        tote_manager, args_cli.num_envs, torch.arange(num_obj_per_env, device=env.unwrapped.device), **args
-    )
 
     while simulation_app.is_running():
         # run everything in inference mode
@@ -144,9 +148,7 @@ def main():
             # [1] currently is the object idx (0-indexed. -1 for no packable objects)
             # [2-9] is the desired object position and orientation
             # [10] is the action to indicate if an object is being placed
-            actions[:, 0] = torch.arange(args_cli.num_envs, device=env.unwrapped.device) % num_totes
-
-            tote_manager.eject_totes(actions[:, 0].to(torch.int32), env_indices)  # Eject destination totes
+            actions[:, 0] = torch.zeros(args_cli.num_envs, device=env.unwrapped.device)
 
             # Destination tote IDs for each environment
             tote_ids = actions[:, 0].to(torch.int32)

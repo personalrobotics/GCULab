@@ -24,13 +24,13 @@ class PackRGBCameraSceneCfg(PackSceneCfg):
 
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
-        offset=TiledCameraCfg.OffsetCfg(pos=(2.42, 0.0, 1.15), rot=(0.0, -0.2588, 0.0, 0.9659), convention="world"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.45, -0.645, 20.0), rot=(0.0, 0.0, 0.0, -1.0), convention="opengl"),
         data_types=["rgb"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 2.0)
+            focal_length=810.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 21.0)
         ),
-        width=100,
-        height=100,
+        width=52,
+        height=37,
     )
 
 
@@ -40,13 +40,13 @@ class PackDepthCameraSceneCfg(PackSceneCfg):
 
     tiled_camera: TiledCameraCfg = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Camera",
-        offset=TiledCameraCfg.OffsetCfg(pos=(1.5, 0.0, 0.5), rot=(0, -0.4455493, 0, 0.8952574), convention="world"),
+        offset=TiledCameraCfg.OffsetCfg(pos=(0.45, -0.645, 20.0), rot=(0.0, 0.0, 0.0, -1.0), convention="opengl"),
         data_types=["distance_to_camera"],
         spawn=sim_utils.PinholeCameraCfg(
-            focal_length=24.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 20.0)
+            focal_length=810.0, focus_distance=400.0, horizontal_aperture=20.955, clipping_range=(0.1, 21.0)
         ),
-        width=100,
-        height=100,
+        width=52,
+        height=37,
     )
 
 
@@ -72,14 +72,27 @@ class DepthObservationsCfg:
     """Observation specifications for the MDP."""
 
     @configclass
-    class DepthCameraPolicyCfg(ObsGroup):
-        """Observations for policy group with depth images."""
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
+
+        # observation terms (order preserved)
+        # actions = ObsTerm(func=mdp.last_action)
+        obs_dims = ObsTerm(func=mdp.obs_dims)
+
+        # def __post_init__(self):
+        #     self.enable_corruption = True
+        #     self.concatenate_terms = True
+
+    class SensorCfg(ObsGroup):
+        """Observations for sensor group."""
 
         image = ObsTerm(
             func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "data_type": "distance_to_camera"}
         )
 
-    policy: ObsGroup = DepthCameraPolicyCfg()
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+    sensor: SensorCfg = SensorCfg()
 
 
 @configclass
@@ -115,32 +128,26 @@ class ResNet18ObservationCfg:
 class PackRGBCameraEnvCfg(PackEnvCfg):
     """Configuration for the packing environment with RGB camera."""
 
-    scene: PackRGBCameraSceneCfg = PackRGBCameraSceneCfg(num_envs=512, env_spacing=2.5)
+    scene: PackRGBCameraSceneCfg = PackRGBCameraSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
     observations: RGBObservationsCfg = RGBObservationsCfg()
 
     def __post_init__(self):
         super().__post_init__()
         # remove ground as it obstructs the camera
         self.scene.ground = None
-        # viewer settings
-        self.viewer.eye = (7.0, 0.0, 2.5)
-        self.viewer.lookat = (0.0, 0.0, 2.5)
 
 
 @configclass
 class PackDepthCameraEnvCfg(PackEnvCfg):
     """Configuration for the packing environment with depth camera."""
 
-    scene: PackDepthCameraSceneCfg = PackDepthCameraSceneCfg(num_envs=512, env_spacing=2.5)
+    scene: PackDepthCameraSceneCfg = PackDepthCameraSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
     observations: DepthObservationsCfg = DepthObservationsCfg()
 
     def __post_init__(self):
         super().__post_init__()
         # remove ground as it obstructs the camera
-        self.scene.ground = None
-        # viewer settings
-        self.viewer.eye = (7.0, 0.0, 2.5)
-        self.viewer.lookat = (0.0, 0.0, 2.5)
+        # self.scene.ground = None
 
 
 @configclass
