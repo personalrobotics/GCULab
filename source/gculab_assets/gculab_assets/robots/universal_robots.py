@@ -85,9 +85,7 @@ UR5_ROBOTIQ_CFG = UR5_CFG.replace(
     spawn=sim_utils.UsdFileCfg(
         usd_path=ur5_robotiq_abs_path,
     ),
-    init_state=ArticulationCfg.InitialStateCfg(
-        joint_pos=UR5_DEFAULT_JOINT_POS
-    ),
+    init_state=ArticulationCfg.InitialStateCfg(joint_pos=UR5_DEFAULT_JOINT_POS),
 )
 
 IMPLICIT_UR5_ROBOTIQ = UR5_ROBOTIQ_CFG.copy()  # type: ignore

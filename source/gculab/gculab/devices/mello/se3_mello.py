@@ -5,34 +5,36 @@
 
 """Mello conrtroller for SE(3) teleoperation devices."""
 
-import numpy as np
-import serial # For serial communication with Mello
+import ast  # For parsing string data from Mello
 import threading
 import time
-import ast # For parsing string data from Mello
 from collections.abc import Callable
-from scipy.spatial.transform import Rotation # For handling rotations
 
-from ..device_base import DeviceBase # Interface for device base class
+import numpy as np
+import serial  # For serial communication with Mello
+from scipy.spatial.transform import Rotation  # For handling rotations
+
+from ..device_base import DeviceBase  # Interface for device base class
+
 
 class Se3Mello(DeviceBase):
-    """ A mello controller for SE(3) commands as delta poses.
+    """A mello controller for SE(3) commands as delta poses.
 
-        This class implements a mello controller to provide commands to a robotic arm with a Mello device.
-        It uses the mello arm  to control the robot's end-effector in SE(3) space, allowing for
-        teleoperation of the robot's pose in 3D space using motorized input devices.
+    This class implements a mello controller to provide commands to a robotic arm with a Mello device.
+    It uses the mello arm  to control the robot's end-effector in SE(3) space, allowing for
+    teleoperation of the robot's pose in 3D space using motorized input devices.
 
-        The command comprises of two parts:
-        * delta pose: a 6D vector of (x, y, z, roll, pitch, yaw) in meters and radians.
-        * gripper: a binary command to open or close the gripper.
+    The command comprises of two parts:
+    * delta pose: a 6D vector of (x, y, z, roll, pitch, yaw) in meters and radians.
+    * gripper: a binary command to open or close the gripper.
 
     """
 
-    def __init__(self, 
-                 port: str ='/dev/serial/by-id/usb-M5Stack_Technology_Co.__Ltd_M5Stack_UiFlow_2.0_4827e266dd480000-if00', 
-                 baudrate: int = 115200
-                 ):
-        
+    def __init__(
+        self,
+        port: str = "/dev/serial/by-id/usb-M5Stack_Technology_Co.__Ltd_M5Stack_UiFlow_2.0_4827e266dd480000-if00",
+        baudrate: int = 115200,
+    ):
         """Initialize the Mello Gello controller.
 
         Args:
@@ -41,14 +43,14 @@ class Se3Mello(DeviceBase):
         """
 
         # store inputs
-        self.port = port                            # serial port for Mello
-        self.baudrate = baudrate                    # baudrate for serial communication
+        self.port = port  # serial port for Mello
+        self.baudrate = baudrate  # baudrate for serial communication
 
         # Serial communication
-        self.serial = None                          # serial communication interface for Mello
-        self._setup_serial()                        # setup the serial communication with Mello
+        self.serial = None  # serial communication interface for Mello
+        self._setup_serial()  # setup the serial communication with Mello
 
-        # State variables 
+        # State variables
         self.prev_joints = [0] * 6
         self.prev_gripper = 0
         self.latest_values = self.prev_joints
@@ -60,11 +62,10 @@ class Se3Mello(DeviceBase):
 
         # run a thread for listening to a devite updates
         self._start_read_thread()
-    
+
     def __del__(self):
         """Dectructor for the class."""
         self.cleanup()
-
 
     def __str__(self) -> str:
         """Returns: A string containing the information of joystick."""
@@ -75,7 +76,7 @@ class Se3Mello(DeviceBase):
         msg += "\tMove the arm in any direction by rotating motors (up, down, left right, diagonal)\n"
         msg += "\tUse analog stick to open/close the gripper\n"
         return msg
-    
+
     def cleanup(self):
         """Clean up resources."""
         self.running = False
@@ -110,22 +111,18 @@ class Se3Mello(DeviceBase):
     def _setup_serial(self):
         """Set up serial connection to Mello device."""
         try:
-            self.serial = serial.Serial(
-                port=self.port,
-                baudrate=self.baudrate,
-                timeout=1  # 1 second timeout
-            )
+            self.serial = serial.Serial(port=self.port, baudrate=self.baudrate, timeout=1)  # 1 second timeout
             print(f"Successfully connected to {self.port}")
         except serial.SerialException as e:
             print(f"Error opening serial port: {e}")
             raise
-    
+
     def _start_read_thread(self):
         """Start a thread to read data from the Mello device."""
         self.read_thread = threading.Thread(target=self._read_thread)
         self.read_thread.daemon = True
         self.read_thread.start()
-    
+
     def _read_thread(self):
         """Continuously read and parse joint data from Mello."""
         while self.running:
@@ -141,16 +138,11 @@ class Se3Mello(DeviceBase):
                         joints_deg[2] *= -1  # Flip direction if needed
                         joints_rad = self._degrees_to_radians(joints_deg)
 
-                        gripper_value = (
-                            joint_positions[-1]
-                            if len(joint_positions) > 6
-                            else self.prev_gripper
-                        )
+                        gripper_value = joint_positions[-1] if len(joint_positions) > 6 else self.prev_gripper
 
                         # Compute deltas if not zero
                         if not all(j == 0 for j in joints_rad):
                             self.prev_joints = joints_rad
-                        
 
                         # Gripper state
                         self.prev_gripper = gripper_value
@@ -163,7 +155,6 @@ class Se3Mello(DeviceBase):
                 print(f"Error reading serial data: {e}")
 
             time.sleep(0.01)
-     
 
     def _degrees_to_radians(self, degrees):
         """Convert a list of angles from degrees to radians."""

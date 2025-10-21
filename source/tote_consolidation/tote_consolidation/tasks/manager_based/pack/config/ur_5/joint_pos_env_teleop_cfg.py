@@ -9,9 +9,13 @@ import isaaclab_tasks.manager_based.manipulation.reach.mdp as mdp
 from isaaclab.assets import ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.utils import configclass
-from tote_consolidation.tasks.manager_based.pack.config.ur_5.joint_pos_env_cfg import UR5PackEnvCfg
-from tote_consolidation.tasks.manager_based.pack.pack_env_teleop_cfg import TeleopPackEnvCfg
+from tote_consolidation.tasks.manager_based.pack.config.ur_5.joint_pos_env_cfg import (
+    UR5PackEnvCfg,
+)
 from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import PackEnvCfg
+from tote_consolidation.tasks.manager_based.pack.pack_env_teleop_cfg import (
+    TeleopPackEnvCfg,
+)
 
 ##
 # Pre-defined configs
@@ -22,6 +26,7 @@ from gculab_assets import UR5_ROBOTIQ_CFG, IMPLICIT_UR5_ROBOTIQ, UR5_CFG  # isor
 ##
 # Environment configuration
 ##
+
 
 @configclass
 class UR5PackEnvTeleopCfg(TeleopPackEnvCfg):
@@ -77,39 +82,53 @@ class UR5PackEnvTeleopCfg(TeleopPackEnvCfg):
         # self.rewards.end_effector_orientation_tracking.params["asset_cfg"].body_names = ["wrist_3_link"]
         # override actions
         self.actions.arm_action = mdp.JointPositionActionCfg(
-            asset_name="right_robot", joint_names=["shoulder_pan_joint",
-                "shoulder_lift_joint", 
+            asset_name="right_robot",
+            joint_names=[
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
                 "elbow_joint",
                 "wrist_1_joint",
-                "wrist_2_joint", 
-                "wrist_3_joint"], scale=1.0, use_default_offset= False
+                "wrist_2_joint",
+                "wrist_3_joint",
+            ],
+            scale=1.0,
+            use_default_offset=False,
         )
-
-        # self.actions.gripper_action = mdp.JointPositionActionCfg(
-        #     asset_name="right_robot",
-        #     joint_names=["finger_joint", "right_outer_knuckle_joint", "right_outer_finger_joint", "left_outer_finger_joint",
-        #                  "left_inner_finger_pad_joint", "right_inner_finger_pad_joint",
-        #                  "left_inner_finger_joint", "right_inner_finger_joint"],
-        #     scale=1.0, use_default_offset=False,
-        # )
 
         self.actions.gripper_action = mdp.BinaryJointPositionActionCfg(
-               asset_name="right_robot",
-            joint_names=["finger_joint", "right_outer_knuckle_joint", "right_outer_finger_joint", "left_outer_finger_joint",
-                          "left_inner_finger_pad_joint", "right_inner_finger_pad_joint",
-                         "left_inner_finger_joint", "right_inner_finger_joint"],
-            open_command_expr={"finger_joint": 0.0, "right_outer_knuckle_joint": 0.0, "right_outer_finger_joint": 0.785398,
+            asset_name="right_robot",
+            joint_names=[
+                "finger_joint",
+                "right_outer_knuckle_joint",
+                "right_outer_finger_joint",
+                "left_outer_finger_joint",
+                "left_inner_finger_pad_joint",
+                "right_inner_finger_pad_joint",
+                "left_inner_finger_joint",
+                "right_inner_finger_joint",
+            ],
+            open_command_expr={
+                "finger_joint": 0.0,
+                "right_outer_knuckle_joint": 0.0,
+                "right_outer_finger_joint": 0.785398,
                 "left_outer_finger_joint": 0.785398,
-                "left_inner_finger_pad_joint": 0.0, "right_inner_finger_pad_joint": 0.0,
-                "left_inner_finger_joint": -0.785398, "right_inner_finger_joint": -0.785398},
-            close_command_expr={"finger_joint": 0.785398, "right_outer_knuckle_joint": 0.785398, "right_outer_finger_joint": 0.0,
-                               "left_outer_finger_joint": 0.0,
-                                 "left_inner_finger_pad_joint": 0.785398, "right_inner_finger_pad_joint": 0.785398,
-                                    "left_inner_finger_joint": -0.785398, "right_inner_finger_joint": -0.785398},
-
+                "left_inner_finger_pad_joint": 0.0,
+                "right_inner_finger_pad_joint": 0.0,
+                "left_inner_finger_joint": -0.785398,
+                "right_inner_finger_joint": -0.785398,
+            },
+            close_command_expr={
+                "finger_joint": 0.785398,
+                "right_outer_knuckle_joint": 0.785398,
+                "right_outer_finger_joint": 0.0,
+                "left_outer_finger_joint": 0.0,
+                "left_inner_finger_pad_joint": 0.785398,
+                "right_inner_finger_pad_joint": 0.785398,
+                "left_inner_finger_joint": -0.785398,
+                "right_inner_finger_joint": -0.785398,
+            },
             debug_vis=False,
         )
-
 
         # override command generator body
         # end-effector is along x-direction

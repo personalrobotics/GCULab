@@ -47,33 +47,43 @@ simulation_app = app_launcher.app
 
 import gymnasium as gym
 import numpy as np
-import torch
-
 import omni.log
+import torch
 
 if "handtracking" in args_cli.teleop_device.lower():
     from isaacsim.xr.openxr import OpenXRSpec
 
-from isaaclab.devices import OpenXRDevice, Se3Gamepad, Se3Keyboard, Se3SpaceMouse, Se3Mello
+from isaaclab.devices import (
+    OpenXRDevice,
+    Se3Gamepad,
+    Se3Keyboard,
+    Se3Mello,
+    Se3SpaceMouse,
+)
 
 if args_cli.enable_pinocchio:
     from isaaclab.devices.openxr.retargeters.humanoid.fourier.gr1t2_retargeter import GR1T2Retargeter
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
-from isaaclab.devices.openxr.retargeters.manipulator import GripperRetargeter, Se3AbsRetargeter, Se3RelRetargeter
-from isaaclab.managers import TerminationTermCfg as DoneTerm
 
 import isaaclab_tasks  # noqa: F401
 import tote_consolidation.tasks  # noqa: F401
+from isaaclab.devices.openxr.retargeters.manipulator import (
+    GripperRetargeter,
+    Se3AbsRetargeter,
+    Se3RelRetargeter,
+)
+from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab_tasks.manager_based.manipulation.lift import mdp
 from isaaclab_tasks.utils import parse_env_cfg
-
 
 smoothed_command = 0.0
 alpha = 0.1
 
 
 def pre_process_actions(
-    teleop_data: tuple[np.ndarray, bool] | tuple[np.ndarray, float] | list[tuple[np.ndarray, np.ndarray, np.ndarray]], num_envs: int, device: str
+    teleop_data: tuple[np.ndarray, bool] | tuple[np.ndarray, float] | list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+    num_envs: int,
+    device: str,
 ) -> torch.Tensor:
     """Convert teleop data to the format expected by the environment action space.
 
@@ -110,46 +120,17 @@ def pre_process_actions(
     elif "Pack-UR5" in args_cli.task:
         joint_pos, gripper_raw_command = teleop_data
         joint_pos = torch.tensor(joint_pos, dtype=torch.float, device=device).repeat(num_envs, 1)
-        print(f"gripper_raw_command: {gripper_raw_command}")
-        # global smoothed_command
 
-        # # Clamp positive values
-        # gripper_raw_command = 0 if gripper_raw_command > 0 else gripper_raw_command
+        gripper_binary = torch.tensor(
+            [[-1.0 if gripper_raw_command else 0.0]], dtype=torch.float, device=device
+        ).repeat(num_envs, 1)
 
-        # # Update smoothed command
-        # smoothed_command = 0 if gripper_raw_command == 0 else alpha * gripper_raw_command + (1 - alpha) * smoothed_command
-
-        # print(f"smoothed_command: {smoothed_command}")
-
-        # max_value = 0.785398
-        # min_gripper = -4045
-
-        # gripper_joints = torch.tensor([
-        #     smoothed_command * (max_value / min_gripper),                           # finger_joint
-        #     smoothed_command * (max_value / min_gripper),                           # right_outer_knuckle_joint
-        #     smoothed_command * (max_value / -1*min_gripper) + max_value,            # right_outer_finger_joint
-        #     smoothed_command * (max_value / -1*min_gripper) + max_value,            # left_outer_finger_joint
-        #     smoothed_command * (max_value / min_gripper),                           # left_inner_finger_pad_joint
-        #     smoothed_command * (max_value / min_gripper),                           # right_inner_finger_pad_joint
-        #     -max_value,                                                             # left_inner_finger_joint
-        #     -max_value                                                              # right_inner_finger_joint
-        # ],  dtype=torch.float,
-        #     device=device
-        # ).repeat(num_envs, 1)
-
-        gripper_binary = torch.tensor([[-1.0 if gripper_raw_command else 0.0]], dtype=torch.float, device=device).repeat(num_envs, 1)
-        
-
-        # gripper_vel = torch.zeros((delta_pose.shape[0], 1), dtype=torch.float, device=device)
-        # gripper_vel[:] = -1 if gripper_command else 1
-        # compute actions
-        #return torch.concat([joint_pos, gripper_joints], dim=1)
         return torch.concat([joint_pos, gripper_binary], dim=1)
 
-        '''gripper_state = 1 if gripper_command else 0
+        """gripper_state = 1 if gripper_command else 0
         # compute actions
         return delta_pose
-        #return delta_pose'''
+        #return delta_pose"""
     else:
         # resolve gripper command
         delta_pose, gripper_command = teleop_data
@@ -291,8 +272,8 @@ def main():
         teleoperation_active = False
     else:
         raise ValueError(
-            f"Invalid device interface '{args_cli.teleop_device}'. Supported: 'keyboard', 'spacemouse', 'mello', 'gamepad',"
-            " 'handtracking', 'handtracking_abs'."
+            f"Invalid device interface '{args_cli.teleop_device}'. Supported: 'keyboard', 'spacemouse', 'mello',"
+            " 'gamepad', 'handtracking', 'handtracking_abs'."
         )
 
     # add teleoperation key for env reset (for all devices)
@@ -311,7 +292,7 @@ def main():
             teleop_data = teleop_interface.advance()
 
             # Only apply teleop commands when active
-            
+
             if teleoperation_active:
                 print(f"Teleoperation data: {teleop_data}")
                 # compute actions based on environment

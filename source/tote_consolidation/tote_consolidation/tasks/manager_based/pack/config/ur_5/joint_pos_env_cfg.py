@@ -21,6 +21,7 @@ from gculab_assets import UR5_ROBOTIQ_CFG, IMPLICIT_UR5_ROBOTIQ, UR5_CFG  # isor
 # Environment configuration
 ##
 
+
 @configclass
 class UR5PackEnvCfg(PackEnvCfg):
     def __post_init__(self):
@@ -75,20 +76,33 @@ class UR5PackEnvCfg(PackEnvCfg):
         # self.rewards.end_effector_orientation_tracking.params["asset_cfg"].body_names = ["wrist_3_link"]
         # override actions
         self.actions.arm_action = mdp.JointPositionActionCfg(
-            asset_name="right_robot", joint_names=["shoulder_pan_joint",
-                "shoulder_lift_joint", 
+            asset_name="right_robot",
+            joint_names=[
+                "shoulder_pan_joint",
+                "shoulder_lift_joint",
                 "elbow_joint",
                 "wrist_1_joint",
-                "wrist_2_joint", 
-                "wrist_3_joint"], scale=1.0, use_default_offset= False
+                "wrist_2_joint",
+                "wrist_3_joint",
+            ],
+            scale=1.0,
+            use_default_offset=False,
         )
 
         self.actions.gripper_action = mdp.JointPositionActionCfg(
             asset_name="right_robot",
-            joint_names=["finger_joint", "right_outer_knuckle_joint", "right_outer_finger_joint", "left_outer_finger_joint",
-                         "left_inner_finger_pad_joint", "right_inner_finger_pad_joint",
-                         "left_inner_finger_joint", "right_inner_finger_joint"],
-            scale=1.0, use_default_offset=False,
+            joint_names=[
+                "finger_joint",
+                "right_outer_knuckle_joint",
+                "right_outer_finger_joint",
+                "left_outer_finger_joint",
+                "left_inner_finger_pad_joint",
+                "right_inner_finger_pad_joint",
+                "left_inner_finger_joint",
+                "right_inner_finger_joint",
+            ],
+            scale=1.0,
+            use_default_offset=False,
         )
 
         # self.actions.gripper_action = mdp.BinaryJointPositionActionCfg(
@@ -106,8 +120,7 @@ class UR5PackEnvCfg(PackEnvCfg):
         #                             "left_inner_finger_joint": -0.785398, "right_inner_finger_joint": -0.785398},
 
         #     debug_vis=False,
-        # )   
-
+        # )
 
         # override command generator body
         # end-effector is along x-direction

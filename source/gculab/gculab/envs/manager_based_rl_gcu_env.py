@@ -177,9 +177,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         """
         # process actions
         self.action_manager.process_action(action.to(self.device))
- 
 
-        
         self.recorder_manager.record_pre_step()
 
         # check if we need to do rendering within the physics loop

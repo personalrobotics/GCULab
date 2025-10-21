@@ -22,7 +22,18 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
-from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import ActionsCfg, CommandsCfg, CurriculumCfg, EventCfg, ObservationsCfg, PackEnvCfg, PackSceneCfg, RewardsCfg, TerminationsCfg, ToteManagerCfg
+from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import (
+    ActionsCfg,
+    CommandsCfg,
+    CurriculumCfg,
+    EventCfg,
+    ObservationsCfg,
+    PackEnvCfg,
+    PackSceneCfg,
+    RewardsCfg,
+    TerminationsCfg,
+    ToteManagerCfg,
+)
 
 from . import mdp
 
@@ -130,7 +141,6 @@ class PackSceneTeleopCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
     )
 
-
     # robots
     right_robot: ArticulationCfg | None = None
     left_robot: ArticulationCfg | None = None
@@ -171,7 +181,9 @@ class PackSceneTeleopCfg(InteractiveSceneCfg):
 @configclass
 class TeleopEventCfg:
     """Configuration for events."""
+
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+
 
 ##
 # Environment configuration
