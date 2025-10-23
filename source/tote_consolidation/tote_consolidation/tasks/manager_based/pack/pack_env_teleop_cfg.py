@@ -19,11 +19,18 @@ from isaaclab.managers import ActionTermCfg as ActionTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
-from isaaclab.managers import RewardTermCfg as RewardTerm
 from isaaclab.managers import SceneEntityCfg
-from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
+from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import (
+    ActionsCfg,
+    CommandsCfg,
+    CurriculumCfg,
+    EventCfg,
+    PackEnvCfg,
+    PackSceneCfg,
+    ToteManagerCfg,
+)
 
 from . import mdp
 
@@ -35,13 +42,11 @@ gcu_objects_path = os.path.abspath("gcu_objects")
 
 # Dynamically build list of USD paths by scanning the directory
 ycb_physics_dir = os.path.join(gcu_objects_path, "YCB/Axis_Aligned_Physics")
-lw_physics_dir = os.path.join(gcu_objects_path, "YCB/lightwheel_usds/gcu_assets")
-ycb_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
-lw_usd_files = glob.glob(os.path.join(lw_physics_dir, "*.usd"))
+all_usd_files = glob.glob(os.path.join(ycb_physics_dir, "*.usd"))
 
 # Extract all available object IDs and names for reference
 available_objects = {}
-for usd_file in ycb_usd_files:
+for usd_file in all_usd_files:
     basename = os.path.basename(usd_file)
     obj_id = basename[:3]
     obj_name = basename[4:].replace(".usd", "")
@@ -53,50 +58,33 @@ for obj_id, obj_name in sorted(available_objects.items()):
     print(f'"{obj_id}", # {obj_name}')
 
 # Define which object IDs to include
-ycb_include_ids = [
+include_ids = [
     "003",  # cracker_box
     "004",  # sugar_box
     "006",  # mustard_bottle
-    "007",  # tuna_fish_can
-    # "008",  # pudding_box
-    # "009",  # gelatin_box
-    # "010", # potted_meat_can
-    "011",  # banana
-    # "024", # bowl
-    # "025", # mug
+    "008",  # pudding_box
+    "009",  # gelatin_box
     "036",  # wood_block
-    # "051", # large_clamp
-    # "052", # extra_large_clamp
-    # "061",  # foam_brick
-]
-
-lw_include_names = [
-    # "cracker_box",
-    "bowl",
+    "061",  # foam_brick
 ]
 
 # Filter USD files based on ID prefixes
 usd_paths = []
-for usd_file in ycb_usd_files:
+for usd_file in all_usd_files:
     basename = os.path.basename(usd_file)
     # Extract the 3-digit ID from filename (assuming format like "003_cracker_box.usd")
-    if basename[:3] in ycb_include_ids:
+    if basename[:3] in include_ids:
         usd_paths.append(usd_file)
 
-for usd_file in lw_usd_files:
-    basename = os.path.basename(usd_file)
-    base_name = basename.replace(".usd", "")
-    if base_name in lw_include_names:
-        usd_paths.append(usd_file)
-
-num_object_per_env = 70
+num_object_per_env = 50
+num_objects_to_reserve = 50
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
 
 
 @configclass
-class PackSceneCfg(InteractiveSceneCfg):
+class PackSceneTeleopCfg(InteractiveSceneCfg):
     """Configuration for the scene with a robotic arm."""
 
     # world
@@ -152,7 +140,7 @@ class PackSceneCfg(InteractiveSceneCfg):
 
     # robots
     right_robot: ArticulationCfg | None = None
-    # left_robot: ArticulationCfg | None = None
+    left_robot: ArticulationCfg | None = None
 
     # lights
     light = AssetBaseCfg(
@@ -175,37 +163,16 @@ class PackSceneCfg(InteractiveSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=4,
+                            solver_position_iteration_count=90,
                             solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
-                            # max_depenetration_velocity=1000.0,
+                            max_depenetration_velocity=1000.0,
                         ),
                     ),
                     init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
                 ),
             )
-
-
-##
-# MDP settings
-##
-
-
-@configclass
-class CommandsCfg:
-    """Command terms for the MDP."""
-
-    pass
-
-
-@configclass
-class ActionsCfg:
-    """Action specifications for the MDP."""
-
-    arm_action: ActionTerm | None = None
-    gripper_action: ActionTerm | None = None
-    packing_action: mdp.PackingAction | None = None
 
 
 @configclass
@@ -217,86 +184,28 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        # actions = ObsTerm(func=mdp.last_action)
-        obs_dims = ObsTerm(func=mdp.obs_dims)
+        actions = ObsTerm(func=mdp.last_action)
 
         def __post_init__(self):
             self.enable_corruption = True
 
-        #     self.concatenate_terms = True
-
-    class SensorCfg(ObsGroup):
-        """Observations for sensor group."""
-
-        heightmap = ObsTerm(func=mdp.heightmap)
-
-    # observation groups
     policy: PolicyCfg = PolicyCfg()
-    sensor: SensorCfg = SensorCfg()
-
-
-@configclass
-class EventCfg:
-    """Configuration for events."""
-
-    obj_volume = EventTerm(
-        func=mdp.object_props,
-        params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env)],
-            "num_objects": num_object_per_env,
-        },
-        mode="startup",
-    )
-
-    refill_source_totes = EventTerm(
-        func=mdp.refill_source_totes,
-        mode="reset",
-    )
-
-    set_objects_to_invisible = EventTerm(
-        func=mdp.set_objects_to_invisible,
-        mode="post_reset",
-    )
-
 
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
-
-    # gcu_reward = RewardTerm(
-    #     func=mdp.gcu_reward_step, weight=1000.0
-    # )
-
-    object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
-
-    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
-
+    pass
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
-
-    object_overfilled_tote = DoneTerm(
-        func=mdp.object_overfilled_tote,
-    )
-
-
-@configclass
-class CurriculumCfg:
-    """Curriculum terms for the MDP."""
-
     pass
-    # object_shift = CurriculumTerm(
-    #     func=mdp.modify_reward_weight, params={"term_name": "object_shift", "weight": 50.0, "num_steps": 10000}
-    # )
-
 
 @configclass
-class ToteManagerCfg:
-    num_object_per_env = num_object_per_env
-    animate_vis = False
-    obj_settle_wait_steps = 50
-    disable_logging: bool = False
+class TeleopEventCfg:
+    """Configuration for events."""
+
+    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 
 ##
@@ -305,11 +214,11 @@ class ToteManagerCfg:
 
 
 @configclass
-class PackEnvCfg(ManagerBasedRLEnvCfg):
+class TeleopPackEnvCfg(PackEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
+    scene: PackSceneTeleopCfg = PackSceneTeleopCfg(num_envs=4096, env_spacing=2.5, replicate_physics=False)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -317,20 +226,16 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     # MDP settings
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
-    events: EventCfg = EventCfg()
+    events: TeleopEventCfg = TeleopEventCfg()
     curriculum: CurriculumCfg = CurriculumCfg()
     tote_manager: ToteManagerCfg = ToteManagerCfg()
 
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 1
+        self.decimation = 2
         self.sim.render_interval = self.decimation
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
         self.sim.dt = 1.0 / 90.0
-        self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
-        self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
-        self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
-        self.sim.physx.gpu_max_rigid_contact_count = 2**26

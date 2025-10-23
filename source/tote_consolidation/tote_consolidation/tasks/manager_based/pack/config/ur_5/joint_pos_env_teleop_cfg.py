@@ -9,7 +9,13 @@ import isaaclab_tasks.manager_based.manipulation.reach.mdp as mdp
 from isaaclab.assets import ArticulationCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.utils import configclass
+from tote_consolidation.tasks.manager_based.pack.config.ur_5.joint_pos_env_cfg import (
+    UR5PackEnvCfg,
+)
 from tote_consolidation.tasks.manager_based.pack.pack_env_cfg import PackEnvCfg
+from tote_consolidation.tasks.manager_based.pack.pack_env_teleop_cfg import (
+    TeleopPackEnvCfg,
+)
 
 ##
 # Pre-defined configs
@@ -23,7 +29,7 @@ from gculab_assets import UR5_ROBOTIQ_CFG, IMPLICIT_UR5_ROBOTIQ, UR5_CFG  # isor
 
 
 @configclass
-class UR5PackEnvCfg(PackEnvCfg):
+class UR5PackEnvTeleopCfg(TeleopPackEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
@@ -89,7 +95,7 @@ class UR5PackEnvCfg(PackEnvCfg):
             use_default_offset=False,
         )
 
-        self.actions.gripper_action = mdp.JointPositionActionCfg(
+        self.actions.gripper_action = mdp.BinaryJointPositionActionCfg(
             asset_name="right_robot",
             joint_names=[
                 "finger_joint",
@@ -101,26 +107,28 @@ class UR5PackEnvCfg(PackEnvCfg):
                 "left_inner_finger_joint",
                 "right_inner_finger_joint",
             ],
-            scale=1.0,
-            use_default_offset=False,
+            open_command_expr={
+                "finger_joint": 0.0,
+                "right_outer_knuckle_joint": 0.0,
+                "right_outer_finger_joint": 0.785398,
+                "left_outer_finger_joint": 0.785398,
+                "left_inner_finger_pad_joint": 0.0,
+                "right_inner_finger_pad_joint": 0.0,
+                "left_inner_finger_joint": -0.785398,
+                "right_inner_finger_joint": -0.785398,
+            },
+            close_command_expr={
+                "finger_joint": 0.785398,
+                "right_outer_knuckle_joint": 0.785398,
+                "right_outer_finger_joint": 0.0,
+                "left_outer_finger_joint": 0.0,
+                "left_inner_finger_pad_joint": 0.785398,
+                "right_inner_finger_pad_joint": 0.785398,
+                "left_inner_finger_joint": -0.785398,
+                "right_inner_finger_joint": -0.785398,
+            },
+            debug_vis=False,
         )
-
-        # self.actions.gripper_action = mdp.BinaryJointPositionActionCfg(
-        #     asset_name="right_robot",
-        #     joint_names=["finger_joint", "right_outer_knuckle_joint", "right_outer_finger_joint", "left_outer_finger_joint",
-        #                   "left_inner_finger_pad_joint", "right_inner_finger_pad_joint",
-        #                  "left_inner_finger_joint", "right_inner_finger_joint"],
-        #     open_command_expr={"finger_joint": 0.0, "right_outer_knuckle_joint": 0.0, "right_outer_finger_joint": 0.785398,
-        #         "left_outer_finger_joint": 0.785398,
-        #         "left_inner_finger_pad_joint": 0.0, "right_inner_finger_pad_joint": 0.0,
-        #         "left_inner_finger_joint": -0.785398, "right_inner_finger_joint": -0.785398},
-        #     close_command_expr={"finger_joint": 0.785398, "right_outer_knuckle_joint": 0.785398, "right_outer_finger_joint": 0.0,
-        #                        "left_outer_finger_joint": 0.0,
-        #                          "left_inner_finger_pad_joint": 0.785398, "right_inner_finger_pad_joint": 0.785398,
-        #                             "left_inner_finger_joint": -0.785398, "right_inner_finger_joint": -0.785398},
-
-        #     debug_vis=False,
-        # )
 
         # override command generator body
         # end-effector is along x-direction
@@ -129,7 +137,7 @@ class UR5PackEnvCfg(PackEnvCfg):
 
 
 @configclass
-class UR5PackEnvCfg_PLAY(UR5PackEnvCfg):
+class UR5PackEnvTeleopCfg_PLAY(UR5PackEnvTeleopCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
