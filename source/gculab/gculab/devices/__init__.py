@@ -16,4 +16,5 @@ to add user-defined callback functions to be called when a particular input is p
 the peripheral device.
 """
 
+from .keyboard import Se3Keyboard, Se3KeyboardCfg
 from .mello import Se3Mello

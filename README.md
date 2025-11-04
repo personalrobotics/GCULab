@@ -16,9 +16,17 @@ This will be adapted to use depth camera (#13)
 **Command:**
 ```bash
 # For training
-python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
+python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 2 --enable_cameras --headless 
 # For inference
-python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-v0  --num_envs 20
+python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-Camera-v0  --num_envs 2 --enable_camera --headless
+```
+
+#### Pack Task
+Demo for Amazon Packing Task, places all candidate objects in top right corner
+
+**Command:**
+```bash
+python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 
@@ -32,14 +40,6 @@ Defaults to DBLF heuristic
 **Command:**
 ```bash
 python scripts/bpp_agents/fanwang_bpp_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 100
-```
-
-#### Pack Task
-Demo for Amazon Packing Task
-
-**Command:**
-```bash
-python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
 ```
 
 ---
