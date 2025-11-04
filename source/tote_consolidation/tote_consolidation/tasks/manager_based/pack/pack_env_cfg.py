@@ -55,16 +55,16 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 ycb_include_ids = [
     "003",  # cracker_box
-    # "004",  # sugar_box
-    # "006",  # mustard_bottle
-    # "007",  # tuna_fish_can
+    "004",  # sugar_box
+    "006",  # mustard_bottle
+    "007",  # tuna_fish_can
     # "008",  # pudding_box
     # "009",  # gelatin_box
     # "010", # potted_meat_can
-    # "011",  # banana
+    "011",  # banana
     # "024", # bowl
     # "025", # mug
-    # "036",  # wood_block
+    "036",  # wood_block
     # "051", # large_clamp
     # "052", # extra_large_clamp
     # "061",  # foam_brick
@@ -72,8 +72,7 @@ ycb_include_ids = [
 
 lw_include_names = [
     # "cracker_box",
-    # "mustard_bottle",
-    # "bowl",
+    "bowl",
 ]
 
 # Filter USD files based on ID prefixes
@@ -270,7 +269,7 @@ class RewardsCfg:
 
     object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
 
-    # wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
+    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
 
 
 @configclass
@@ -296,7 +295,7 @@ class CurriculumCfg:
 class ToteManagerCfg:
     num_object_per_env = num_object_per_env
     animate_vis = False
-    obj_settle_wait_steps = 30
+    obj_settle_wait_steps = 50
     disable_logging: bool = False
 
 
@@ -310,7 +309,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False, clone_in_fabric=True)
+    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -328,11 +327,10 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 1
         self.sim.render_interval = self.decimation
         self.episode_length_s = 10.0
-        self.viewer.eye = (0.25, -0.7, 1.0)
-        self.viewer.lookat = [0.3, -0.7, 0.5]
+        self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 60.0
-        # self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
-        # self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
-        # self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
-        # self.sim.physx.gpu_max_rigid_contact_count = 2**26
+        self.sim.dt = 1.0 / 90.0
+        self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
+        self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
+        self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
+        self.sim.physx.gpu_max_rigid_contact_count = 2**26
