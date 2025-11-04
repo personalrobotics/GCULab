@@ -5,18 +5,17 @@
 
 """Keyboard controller for SE(3) control."""
 
-import numpy as np
 import time
-import torch
 import weakref
 from collections.abc import Callable
 from dataclasses import dataclass
-from scipy.spatial.transform import Rotation
 
 import carb
+import numpy as np
 import omni
-
+import torch
 from isaaclab.devices.device_base import DeviceBase, DeviceCfg
+from scipy.spatial.transform import Rotation
 
 
 @dataclass
@@ -95,7 +94,7 @@ class Se3Keyboard(DeviceBase):
         self._delta_rot = np.zeros(3)  # (roll, pitch, yaw)
         # key hold timing
         self._key_press_times = {}  # Track when keys were first pressed
-        self._keys_held = set()     # Track which keys are currently held down
+        self._keys_held = set()  # Track which keys are currently held down
         # single press tracking
         self._single_press_pos = np.zeros(3)  # Accumulated single press position commands
         self._single_press_rot = np.zeros(3)  # Accumulated single press rotation commands
@@ -137,9 +136,9 @@ class Se3Keyboard(DeviceBase):
         self._single_press_pos = np.zeros(3)
         self._single_press_rot = np.zeros(3)
         # reset active key tracking
-        if hasattr(self, '_active_pos_keys'):
+        if hasattr(self, "_active_pos_keys"):
             self._active_pos_keys.clear()
-        if hasattr(self, '_active_rot_keys'):
+        if hasattr(self, "_active_rot_keys"):
             self._active_rot_keys.clear()
 
     def add_callback(self, key: str, func: Callable):
@@ -165,16 +164,16 @@ class Se3Keyboard(DeviceBase):
         """
         # Update held keys based on hold delay
         self._update_held_keys()
-        
+
         # Combine single press commands with continuous hold commands
         total_pos = self._delta_pos + self._single_press_pos
         total_rot = self._delta_rot + self._single_press_rot
-        
+
         # Clear single press commands after combining (they only last one frame)
         # Using fill() to ensure proper reset for rapid presses
         self._single_press_pos.fill(0.0)
         self._single_press_rot.fill(0.0)
-        
+
         # convert to rotation vector
         rot_vec = Rotation.from_euler("XYZ", total_rot).as_rotvec()
         # return the command and gripper state
@@ -192,18 +191,18 @@ class Se3Keyboard(DeviceBase):
     def _update_held_keys(self):
         """Update movement commands for keys that have been held long enough."""
         current_time = time.time()
-        
+
         # Initialize active key sets if they don't exist
-        if not hasattr(self, '_active_pos_keys'):
+        if not hasattr(self, "_active_pos_keys"):
             self._active_pos_keys = set()
-        if not hasattr(self, '_active_rot_keys'):
+        if not hasattr(self, "_active_rot_keys"):
             self._active_rot_keys = set()
-        
+
         # Check each held key to see if it should start continuous movement
         for key_name in list(self._keys_held):
             if key_name in self._key_press_times:
                 time_held = current_time - self._key_press_times[key_name]
-                
+
                 if time_held >= self.hold_delay:
                     # Key has been held long enough, activate continuous movement
                     if key_name in ["W", "S", "A", "D", "Q", "E"]:
@@ -222,7 +221,7 @@ class Se3Keyboard(DeviceBase):
             https://docs.omniverse.nvidia.com/dev-guide/latest/programmer_ref/input-devices/keyboard.html
         """
         current_time = time.time()
-        
+
         # apply the command when pressed
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
             if event.input.name == "L":
@@ -236,12 +235,12 @@ class Se3Keyboard(DeviceBase):
                     self._single_press_pos += self._INPUT_KEY_MAPPING[event.input.name]
                 elif event.input.name in ["Z", "X", "T", "G", "C", "V"]:
                     self._single_press_rot += self._INPUT_KEY_MAPPING[event.input.name]
-                
+
                 # Track hold timing - allow re-entry for rapid presses
                 # Reset timing if this is a new press on an already tracked key
                 self._key_press_times[event.input.name] = current_time
                 self._keys_held.add(event.input.name)
-                            
+
         # remove the command when un-pressed
         elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
             # Always clean up tracking for the released key
@@ -249,13 +248,13 @@ class Se3Keyboard(DeviceBase):
                 self._keys_held.remove(event.input.name)
             if event.input.name in self._key_press_times:
                 del self._key_press_times[event.input.name]
-                    
+
             # Initialize active key sets if they don't exist
-            if not hasattr(self, '_active_pos_keys'):
+            if not hasattr(self, "_active_pos_keys"):
                 self._active_pos_keys = set()
-            if not hasattr(self, '_active_rot_keys'):
+            if not hasattr(self, "_active_rot_keys"):
                 self._active_rot_keys = set()
-                    
+
             # Remove continuous movement command when key is released (if it was being held)
             if event.input.name in ["W", "S", "A", "D", "Q", "E"]:
                 if event.input.name in self._active_pos_keys:
@@ -265,7 +264,7 @@ class Se3Keyboard(DeviceBase):
                 if event.input.name in self._active_rot_keys:
                     self._delta_rot -= self._INPUT_KEY_MAPPING[event.input.name]
                     self._active_rot_keys.remove(event.input.name)
-                    
+
         # additional callbacks
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
             if event.input.name in self._additional_callbacks:

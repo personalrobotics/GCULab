@@ -16,9 +16,19 @@ This will be adapted to use depth camera (#13)
 **Command:**
 ```bash
 # For training
-python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 2 --enable_cameras --headless 
+python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 2 --enable_cameras --headless
 # For inference
 python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-Camera-v0  --num_envs 2 --enable_camera --headless
+```
+
+#### Data collection
+# Recording demos
+```bash
+python scripts/teleoperation/pack_so3.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 1 --enable_cameras  --seed 0
+```
+# Replaying demos
+```bash
+python scripts/teleoperation/replay_demos.py --task Isaac-Pack-NoArm-Camera-v0 --device cpu --dataset_file ./datasets/dataset.hdf5 --enable_cameras --seed 0
 ```
 
 #### Pack Task
