@@ -14,7 +14,7 @@ import numpy as np
 import serial  # For serial communication with Mello
 from scipy.spatial.transform import Rotation  # For handling rotations
 
-from ..device_base import DeviceBase  # Interface for device base class
+from isaaclab.devices.device_base import DeviceBase  # Interface for device base class
 
 
 class Se3Mello(DeviceBase):

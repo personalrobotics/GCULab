@@ -11,7 +11,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import isaaclab.utils.math as math_utils
 import matplotlib
 
-matplotlib.use("Agg")  # Use non-interactive backend for saving figures
+from collections import deque
+
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -32,7 +33,13 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
 # Define worker functions at module level for picklability
 def create_items_worker(args):
     env_idx, obj_voxels, obj_asset_paths, objects = args
-    items = [Item(np.array(obj_voxels[j], dtype=np.float32), obj_asset_paths[j]) for j in objects]
+    items = []
+    for j in objects:
+        if j < len(obj_voxels) and obj_voxels[j] is not None:
+            items.append(Item(
+                np.array(obj_voxels[j], dtype=np.float32),
+                obj_asset_paths[j] if j < len(obj_asset_paths) else None
+            ))
     return env_idx, items
 
 
@@ -86,6 +93,17 @@ class BPP:
         self.source_loaded = [False] * num_envs
         self.subset_obj_indices = {}
 
+        self.fifo_queues = [deque() for _ in range(num_envs)]
+
+        # Initialize unique properties storage
+        self.unique_obj_dims = {}
+        self.unique_obj_voxels = {}
+        self.asset_path_to_id = {}
+        self.id_to_asset_path = {}
+
+        # Cache for efficient asset ID lookups
+        self._obj_to_asset_id_cache = None
+
         # Setup packing problem components
         self._initialize_packing_components()
 
@@ -120,29 +138,35 @@ class BPP:
             try:
                 with open(cache_file, "rb") as f:
                     cached_data = pickle.load(f)
-                    self.tote_dims = cached_data["tote_dims"]
-                    self.obj_dims = cached_data["obj_dims"]
-                    self.obj_voxels = cached_data["obj_voxels"]
-                    self.problems = cached_data["problems"]
-                    self.display = cached_data["display"]
+                    self.tote_dims = cached_data['tote_dims']
+                    self.problems = cached_data['problems']
+                    self.unique_obj_dims = cached_data['unique_obj_dims']
+                    self.unique_obj_voxels = cached_data['unique_obj_voxels']
+                    self.unique_obj_latents = cached_data['unique_obj_latents']
+                    self.asset_path_to_id = cached_data['asset_path_to_id']
+                    self.id_to_asset_path = cached_data['id_to_asset_path']
+                    # Build cache after loading
+                    self._build_obj_to_asset_id_cache()
                 print(f"Successfully loaded cached data in {time.time() - start_time:.3f}s")
                 return
             except Exception as e:
                 print(f"Error loading cache: {e}. Rebuilding components...")
 
         # If we reach here, we need to build the components from scratch
-        self.tote_dims, self.obj_dims, self.obj_voxels = self._get_packing_variables()
+        self.tote_dims, _, _, _ = self._get_packing_variables()
 
         # Convert all data to CPU and NumPy before multiprocessing to avoid CUDA errors
         cpu_obj_voxels = []
         cpu_asset_paths = []
 
         for i in range(self.num_envs):
-            # Convert voxels to CPU/NumPy if they're tensors
+            # Convert voxels to CPU/NumPy if they're tensors using unique properties
             env_voxels = []
             for j in self.objects:
-                voxel = self.obj_voxels[i][j]
-                if isinstance(voxel, torch.Tensor):
+                asset_path = self.tote_manager.obj_asset_paths[i][j]
+                asset_id = self.asset_path_to_id.get(asset_path, None)
+                voxel = self.unique_obj_voxels.get(asset_id, None) if asset_id is not None else None
+                if voxel is not None and isinstance(voxel, torch.Tensor):
                     voxel = voxel.cpu().numpy()
                 env_voxels.append(voxel)
             cpu_obj_voxels.append(env_voxels)
@@ -160,7 +184,8 @@ class BPP:
         item_args = []
         for i in range(self.num_envs):
             # Ensure objects list is CPU-based
-            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item() for obj in self.objects]
+            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item()
+                          for obj in self.objects]
             item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
         print(f"Time to prepare item arguments: {time.time() - start_time:.3f}s")
 
@@ -172,7 +197,10 @@ class BPP:
         print(f"Time to create items: {time.time() - start_time:.3f}s")
 
         # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
-        problem_args = [(i, self.tote_dims, all_items[i]) for i in range(self.num_envs)]
+        problem_args = [
+            (i, self.tote_dims, all_items[i])
+            for i in range(self.num_envs)
+        ]
 
         # Create problems using multiprocessing with limited workers
         self.problems = [None] * self.num_envs
@@ -181,16 +209,16 @@ class BPP:
                 self.problems[env_idx] = problem
         print(f"Time to create problems: {time.time() - start_time:.3f}s")
 
-        self.display = Display(self.tote_dims)
-
         # Save the components to cache for future use
         try:
             cache_data = {
-                "tote_dims": self.tote_dims,
-                "obj_dims": self.obj_dims,
-                "obj_voxels": self.obj_voxels,
-                "problems": self.problems,
-                "display": self.display,
+                'tote_dims': self.tote_dims,
+                'problems': self.problems,
+                'unique_obj_dims': self.unique_obj_dims,
+                'unique_obj_voxels': self.unique_obj_voxels,
+                'unique_obj_latents': self.unique_obj_latents,
+                'asset_path_to_id': self.asset_path_to_id,
+                'id_to_asset_path': self.id_to_asset_path
             }
             with open(cache_file, "wb") as f:
                 pickle.dump(cache_data, f)
@@ -199,6 +227,37 @@ class BPP:
             print(f"Error saving to cache: {e}")
 
         print(f"Packing components initialization time: {time.time() - start_time:.3f}s")
+
+    def _build_obj_to_asset_id_cache(self):
+        """Build a cache for fast object ID to asset ID lookups."""
+        if self._obj_to_asset_id_cache is not None:
+            return
+
+        self._obj_to_asset_id_cache = {}
+        for env_idx in range(self.tote_manager.num_envs):
+            self._obj_to_asset_id_cache[env_idx] = {}
+            for obj_idx in range(self.tote_manager.num_objects):
+                asset_path = self.tote_manager.obj_asset_paths[env_idx][obj_idx]
+                asset_id = self.asset_path_to_id.get(asset_path, 0)
+                self._obj_to_asset_id_cache[env_idx][obj_idx] = asset_id
+
+    def get_asset_id(self, env_idx: int, obj_idx: int) -> int:
+        """Get asset ID for a specific object efficiently."""
+        if self._obj_to_asset_id_cache is None:
+            self._build_obj_to_asset_id_cache()
+        return self._obj_to_asset_id_cache[env_idx].get(obj_idx, 0)
+
+    def get_asset_ids_batch(self, env_indices: list, obj_indices: list) -> torch.Tensor:
+        """Get asset IDs for a batch of environments and objects efficiently."""
+        if self._obj_to_asset_id_cache is None:
+            self._build_obj_to_asset_id_cache()
+
+        asset_ids = []
+        for env_idx, obj_idx in zip(env_indices, obj_indices):
+            asset_id = self._obj_to_asset_id_cache[env_idx].get(obj_idx, 0)
+            asset_ids.append(asset_id)
+
+        return torch.tensor(asset_ids, device=self.tote_manager.device, dtype=torch.float32)
 
     def _get_packing_variables(self) -> tuple[list[int], list, list]:
         """
@@ -212,18 +271,37 @@ class BPP:
         """
         # Convert tote dimensions from xyz to zxy format and scale
         tote_dims = self.tote_manager.true_tote_dim.tolist()
-        tote_dims = [int(tote_dims[2] * self.scale), int(tote_dims[0] * self.scale), int(tote_dims[1] * self.scale)]
+        tote_dims = [
+            int(tote_dims[2] * self.scale),
+            int(tote_dims[0] * self.scale),
+            int(tote_dims[1] * self.scale)
+        ]
 
-        # Scale object bounding boxes
-        obj_dims = (self.tote_manager.obj_bboxes * self.scale).to(dtype=torch.int32).tolist()
-        obj_voxels = self.tote_manager.obj_voxels
+        # Get unique object dimensions and voxels by asset path ID
+        self.unique_obj_dims = {}
+        self.unique_obj_voxels = {}
+        self.unique_obj_latents = {}
+        self.asset_path_to_id = {}
+        self.id_to_asset_path = {}
+
+        # Extract unique asset paths and their properties, assign IDs
+        asset_id = 0
+        for asset_path, (volume, bbox, voxels, latents) in self.tote_manager.unique_object_properties.items():
+            self.asset_path_to_id[asset_path] = asset_id
+            self.id_to_asset_path[asset_id] = asset_path
+            self.unique_obj_dims[asset_id] = (bbox * self.scale).to(dtype=torch.int32).tolist()
+            self.unique_obj_voxels[asset_id] = voxels
+            self.unique_obj_latents[asset_id] = latents
+            asset_id += 1
+
+        # No need to create full environment-specific arrays - use unique properties directly
 
         if self.scale != 1.0:
             raise ValueError(
                 "Scaling applied to tote dimensions but not to voxel grid. This may lead to packing inaccuracies."
             )
 
-        return tote_dims, obj_dims, obj_voxels
+        return tote_dims, None, None, None  # Return None since we're using unique properties directly
 
     @staticmethod
     def _update_container_worker(args: dict[str, Any]) -> tuple[int, list, list, Container]:
@@ -326,7 +404,7 @@ class BPP:
                 "obj_idx": obj_idx_val,
                 "asset_pos": asset.data.root_state_w[env_idx, :3].detach().cpu().numpy(),
                 "asset_quat": asset.data.root_state_w[env_idx, 3:7].detach().cpu().numpy(),
-                "bbox_offset": self.tote_manager.obj_bboxes[env_idx, obj_idx_val].detach().cpu().numpy(),
+                "bbox_offset": self.tote_manager.get_object_bbox(env_idx, obj_idx_val).detach().cpu().numpy(),
                 "true_tote_dim": self.tote_manager.true_tote_dim.detach().cpu().numpy(),
                 "tote_assets_state": (
                     self.tote_manager._tote_assets_state.permute(1, 0, 2).detach().cpu().numpy()[env_idx, tote_id]
@@ -668,7 +746,7 @@ class BPP:
         dest_tote_ids: torch.Tensor = None,
     ) -> tuple:
         """Prepare arguments for worker job submission."""
-        obj_volumes = self.tote_manager.obj_volumes[env_idx].cpu()
+        obj_volumes = torch.tensor([self.tote_manager.get_object_volume(env_idx, obj_idx) for obj_idx in range(self.tote_manager.num_objects)]).cpu()
 
         # Get GCU and ensure it's a scalar value - need to index by destination tote
         if dest_tote_ids is not None:
@@ -923,3 +1001,73 @@ class BPP:
             valid_indices[i] = [obj for obj in valid_indices[i] if obj not in self.unpackable_obj_idx[env_idx]]
 
         return valid_indices, mask
+
+    def select_fifo_packable_objects(self, packable_objects, device):
+        """
+        Select packable objects using FIFO (First In, First Out) ordering.
+
+        Args:
+            packable_objects: List of tensors with packable object indices for each environment
+            device: Device to create tensors on
+
+        Returns:
+            Tensor of selected object indices (-1 for environments with no packable objects)
+        """
+        import torch
+        num_envs = len(packable_objects)
+        selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
+
+        for env_idx, packable_list in enumerate(packable_objects):
+            if len(packable_list) == 0:
+                continue
+
+            packable_values = {obj.item() for obj in packable_list}
+
+            # Remove stale objects from front of FIFO
+            while self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() not in packable_values:
+                self.fifo_queues[env_idx].popleft()
+
+            # Pick the first object from FIFO, but don't remove it yet
+            if self.fifo_queues[env_idx]:
+                selected_obj_indices[env_idx] = self.fifo_queues[env_idx][0]  # Peek at first object
+            else:
+                # If FIFO is empty, pick the first available packable object
+                selected_obj_indices[env_idx] = packable_list[0]
+
+        return selected_obj_indices
+
+    def update_fifo_queues(self, packable_objects):
+        """
+        Update FIFO queues with new packable objects while maintaining FIFO order.
+
+        Args:
+            packable_objects: List of tensors with packable object indices for each environment
+        """
+        for env_idx, packable_list in enumerate(packable_objects):
+            fifo_queue = self.fifo_queues[env_idx]
+            packable_values = {obj.item() for obj in packable_list}
+
+            # Remove stale objects from FIFO that are no longer packable
+            from collections import deque
+            self.fifo_queues[env_idx] = deque([obj for obj in fifo_queue if obj.item() in packable_values])
+
+            # Append new objects that aren't already in FIFO
+            fifo_values = {obj.item() for obj in self.fifo_queues[env_idx]}
+            for obj in packable_list:
+                if obj.item() not in fifo_values:
+                    self.fifo_queues[env_idx].append(obj)
+                    fifo_values.add(obj.item())
+
+            # REORDER packable_objects to match FIFO order
+            packable_objects[env_idx] = list(self.fifo_queues[env_idx])
+
+    def remove_selected_from_fifo(self, selected_objects):
+        """
+        Remove selected objects from the front of FIFO queues.
+
+        Args:
+            selected_objects: Tensor of selected object indices
+        """
+        for env_idx, selected_obj in enumerate(selected_objects):
+            if selected_obj != -1 and self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() == selected_obj.item():
+                self.fifo_queues[env_idx].popleft()

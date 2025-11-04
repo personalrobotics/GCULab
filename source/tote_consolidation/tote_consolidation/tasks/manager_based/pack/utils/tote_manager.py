@@ -61,14 +61,19 @@ class ToteManager:
         self.tote_assets = [env.scene[key] for key in self.tote_keys]
         self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self.tote_assets], dim=0)
 
-        self.true_tote_dim = torch.tensor([51, 34, 26], device=env.device)  # in cm
+        self.true_tote_dim = torch.tensor([50, 34, 26], device=env.device)  # in cm (52 x 36 x 26)
         self.tote_volume = torch.prod(self.true_tote_dim).item()
         self.num_envs = env.num_envs
         self.num_objects = cfg.num_object_per_env  # in cm
         self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
         self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
+        self.obj_latents = torch.zeros(self.num_envs, self.num_objects, 512, 8, device=env.device)
         self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.obj_asset_paths = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
+        # Store unique object properties by asset path (volume, bbox, voxels)
+        self.unique_object_properties = {}
+        # Cache for fast volume lookups
+        self._volume_cache = None
         self.tote_to_obj = torch.zeros(
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
@@ -77,6 +82,9 @@ class ToteManager:
         self.dest_totes = torch.zeros(self.num_envs, device=env.device).int()  # Default to one tote per env
         self.overfill_threshold = 0.3  # in meters
         self.max_objects_per_tote = 2
+
+        self.last_pbrs = torch.zeros(self.num_envs, device=env.device, dtype=torch.float32)
+        self.reset_pbrs = torch.zeros(self.num_envs, device=env.device, dtype=torch.bool)
 
         self.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.log_stats = not cfg.disable_logging
@@ -109,35 +117,157 @@ class ToteManager:
         """
         self.obj_asset_paths = obj_asset_paths
 
-    def set_object_volume(self, obj_volumes, env_ids):
+    def set_unique_object_properties(self, unique_properties):
         """
-        Set object volumes for specified environments.
+        Set unique object properties by asset path.
 
         Args:
-            obj_volumes: Tensor of object volumes
-            env_ids: Environment IDs to update
+            unique_properties: Dictionary mapping asset paths to (volume, bbox, voxels)
         """
-        self.obj_volumes[env_ids] = obj_volumes
+        self.unique_object_properties = unique_properties
+        # Build volume cache for fast GCU calculations
+        self._build_volume_cache()
 
-    def set_object_bbox(self, obj_bboxes, env_ids):
+    def get_object_volume(self, env_idx, obj_idx):
         """
-        Set object bounding boxes for specified environments.
-
-        Args:
-            obj_bboxes: Tensor of object bounding boxes
-            env_ids: Environment IDs to update
-        """
-        self.obj_bboxes[env_ids] = obj_bboxes
-
-    def set_object_voxels(self, obj_voxels):
-        """
-        Set object voxel representations for specified environments.
+        Get object volume by looking up asset path.
 
         Args:
-            obj_voxels: List of voxel representations for each environment
-            env_ids: Environment IDs to update
+            env_idx: Environment index
+            obj_idx: Object index
+
+        Returns:
+            Object volume
         """
-        self.obj_voxels = obj_voxels
+        asset_path = self.obj_asset_paths[env_idx][obj_idx]
+        if asset_path is None or asset_path not in self.unique_object_properties:
+            return 0.0
+        return self.unique_object_properties[asset_path][0]
+
+    def get_object_bbox(self, env_idx, obj_idx):
+        """
+        Get object bounding box by looking up asset path.
+
+        Args:
+            env_idx: Environment index
+            obj_idx: Object index
+
+        Returns:
+            Object bounding box tensor
+        """
+        asset_path = self.obj_asset_paths[env_idx][obj_idx]
+        if asset_path is None or asset_path not in self.unique_object_properties:
+            return torch.zeros(3, device=self.device)
+        bbox = self.unique_object_properties[asset_path][1]
+        # Ensure bbox is on the correct device
+        if isinstance(bbox, torch.Tensor):
+            return bbox.to(self.device)
+        return bbox
+
+    def get_object_voxels(self, env_idx, obj_idx):
+        """
+        Get object voxels by looking up asset path.
+
+        Args:
+            env_idx: Environment index
+            obj_idx: Object index
+
+        Returns:
+            Object voxels tensor or None
+        """
+        asset_path = self.obj_asset_paths[env_idx][obj_idx]
+        if asset_path is None or asset_path not in self.unique_object_properties:
+            return None
+        voxels = self.unique_object_properties[asset_path][2]
+        # Ensure voxels are on the correct device
+        if isinstance(voxels, torch.Tensor):
+            return voxels.to(self.device)
+        return voxels
+
+    def get_object_latents(self, env_idx, obj_idx):
+        """
+        Get object latents by looking up asset path.
+
+        Args:
+            env_idx: Environment index
+            obj_idx: Object index
+
+        Returns:
+            Object latents tensor or None
+        """
+        asset_path = self.obj_asset_paths[env_idx][obj_idx]
+        if asset_path is None or asset_path not in self.unique_object_properties:
+            return None
+        if isinstance(self.unique_object_properties[asset_path][3], torch.Tensor):
+            return self.unique_object_properties[asset_path][3].to(self.device)
+        return self.unique_object_properties[asset_path][3]
+
+    def get_object_volumes_batch(self, env_ids, obj_indices):
+        """
+        Get object volumes for a batch of environments and objects.
+
+        Args:
+            env_ids: Environment indices
+            obj_indices: Object indices
+
+        Returns:
+            Tensor of object volumes
+        """
+        volumes = torch.zeros(len(env_ids), len(obj_indices), device=self.device)
+        for i, env_idx in enumerate(env_ids):
+            for j, obj_idx in enumerate(obj_indices):
+                volumes[i, j] = self.get_object_volume(env_idx, obj_idx)
+        return volumes
+
+    def get_object_bboxes_batch(self, env_ids, obj_indices):
+        """
+        Get object bounding boxes for a batch of environments and objects.
+
+        Args:
+            env_ids: Environment indices
+            obj_indices: Object indices
+
+        Returns:
+            Tensor of object bounding boxes
+        """
+        bboxes = torch.zeros(len(env_ids), len(obj_indices), 3, device=self.device)
+        for i, env_idx in enumerate(env_ids):
+            for j, obj_idx in enumerate(obj_indices):
+                bboxes[i, j] = self.get_object_bbox(env_idx, obj_idx)
+        return bboxes
+
+    def get_object_latents_batch(self, env_ids, obj_indices):
+        """
+        Get object latents for a batch of environments and objects.
+
+        Args:
+            env_ids: Environment indices
+            obj_indices: Object indices
+
+        Returns:
+            Tensor of object latents
+        """
+        latents = torch.zeros(len(env_ids), len(obj_indices), 512, 8, device=self.device)
+        for i, env_idx in enumerate(env_ids):
+            for j, obj_idx in enumerate(obj_indices):
+                latents[i, j] = self.get_object_latents(env_idx, obj_idx)
+        return latents
+
+    def _build_volume_cache(self):
+        """Build a cache for fast volume lookups."""
+        if self._volume_cache is not None:
+            return
+
+        self._volume_cache = torch.zeros(self.num_envs, self.num_objects, device=self.device, dtype=torch.float32)
+        for env_idx in range(self.num_envs):
+            for obj_idx in range(self.num_objects):
+                asset_path = self.obj_asset_paths[env_idx][obj_idx]
+                if asset_path is not None and asset_path in self.unique_object_properties:
+                    volume = self.unique_object_properties[asset_path][0]
+                    self._volume_cache[env_idx, obj_idx] = volume
+                    print("asset_path ", asset_path)
+                    print("bbox ", self.unique_object_properties[asset_path][1])
+                    print("volume ", volume)
 
     def put_objects_in_tote(self, object_ids, tote_ids, env_ids):
         """
@@ -151,8 +281,8 @@ class ToteManager:
         Raises:
             ValueError: If object volumes aren't set
         """
-        if self.obj_volumes[env_ids].numel() == 0:
-            raise ValueError("Object volumes not set.")
+        if not self.unique_object_properties:
+            raise ValueError("Object properties not set.")
 
         # Remove objects from their original tote
         self.tote_to_obj[env_ids, :, object_ids] = 0
@@ -171,8 +301,8 @@ class ToteManager:
         Raises:
             ValueError: If object volumes aren't set
         """
-        if self.obj_volumes[env_ids].numel() == 0:
-            raise ValueError("Object volumes not set.")
+        if not self.unique_object_properties:
+            raise ValueError("Object properties not set.")
 
         # Vectorized processing: flatten all valid (env, object, tote) indices
         # Build lists of valid env indices, object ids, and tote ids
@@ -320,7 +450,7 @@ class ToteManager:
                 asset_orientation = asset.data.root_state_w[:, 3:7]
 
                 # Get rotated bounding box
-                obj_bbox = self.env.tote_manager.obj_bboxes[:, obj_id]
+                obj_bbox = torch.stack([self.env.tote_manager.get_object_bbox(env_idx, obj_id) for env_idx in range(self.env.num_envs)])
                 rotated_dims = calculate_rotated_bounding_box(obj_bbox, asset_orientation, self.env.device)
                 margin = rotated_dims / 2.0
                 top_z_positions = asset_position[:, 2] + margin[:, 2]
@@ -366,22 +496,22 @@ class ToteManager:
             )
 
         # # Log destination tote ejections
-        # overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
-        # overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
-        # overfilled_totes = overfilled_totes[env_ids]
-        # outbound_gcus = self.get_gcu(env_ids)
-        # if self.log_stats:
-        #     if is_dest:
-        #         # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
-        #         #     print("logging dest tote for env_idx:", env_idx)
-        #         #     self.env.unwrapped.bpp.update_container_heightmap(
-        #         #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
-        #         #     )
-        #         #     self.stats.log_container(env_idx, problem.container)
-        #         self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
-        #     self.stats.log_tote_eject_gcus(
-        #         torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
-        #     )
+        overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
+        overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
+        overfilled_totes = overfilled_totes[env_ids]
+        outbound_gcus = self.get_gcu(env_ids)
+        if self.log_stats:
+            if is_dest:
+                # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
+                #     print("logging dest tote for env_idx:", env_idx)
+                #     self.env.unwrapped.bpp.update_container_heightmap(
+                #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
+                #     )
+                #     self.stats.log_container(env_idx, problem.container)
+                self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
+            self.stats.log_tote_eject_gcus(
+                torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
+            )
 
         assets_to_eject = []
         for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
@@ -436,12 +566,8 @@ class ToteManager:
 
             # Get the asset based on object identifier type
             if isinstance(obj_id, str):
-                if obj_id == "object-1":
-                    continue  # Skip invalid object
                 asset = env.scene[obj_id]
             else:
-                if obj_id.item() == -1:
-                    continue  # Skip invalid object
                 asset = env.scene[f"object{obj_id.item()}"]
 
             # Update prim path for the specific environment
@@ -518,7 +644,13 @@ class ToteManager:
             all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
 
             # Collect object bboxes
-            all_obj_bboxes = [self.obj_bboxes[cur_env, objects] for cur_env, objects in zip(env_ids, sampled_objects)]
+            all_obj_bboxes = []
+            for cur_env, objects in zip(env_ids, sampled_objects):
+                if objects.numel() > 0:
+                    bboxes = torch.stack([self.get_object_bbox(cur_env, obj.item()) for obj in objects])
+                    all_obj_bboxes.append(bboxes)
+                else:
+                    all_obj_bboxes.append(torch.empty(0, 3, device=self.device))
 
             # Collect environment origins
             all_env_origins = [env.scene.env_origins[cur_env] for cur_env in env_ids]
@@ -559,18 +691,29 @@ class ToteManager:
             GCU values for each tote in specified environments
 
         Raises:
-            ValueError: If object volumes aren't set
+            ValueError: If object properties aren't set
         """
-        if self.obj_volumes[env_ids].numel() == 0:
-            raise ValueError("Object volumes not set.")
+        if not self.unique_object_properties:
+            raise ValueError("Object properties not set.")
+
+        # Build volume cache if not already built
+        if self._volume_cache is None:
+            self._build_volume_cache()
+
         # Select the relevant totes for the given environments
         tote_selection = self.tote_to_obj[env_ids]  # Shape: [num_envs, num_totes, num_objects]
+
+        # Get volumes for the specified environments using pre-computed cache
+        obj_volumes = self._volume_cache[env_ids]  # Shape: [num_envs, num_objects]
+
+        # Expand volumes to match tote selection shape and multiply
+        obj_volumes_expanded = obj_volumes.unsqueeze(1).expand(-1, self.num_totes, -1)  # Shape: [num_envs, num_totes, num_objects]
+
         # Multiply object volumes with tote selection and sum over the object dimension
-        obj_volumes = torch.sum(
-            self.obj_volumes[env_ids].unsqueeze(1) * tote_selection, dim=2
-        )  # Shape: [num_envs, num_totes]
+        total_volumes = torch.sum(obj_volumes_expanded * tote_selection, dim=2)  # Shape: [num_envs, num_totes]
+
         # Compute GCUs as the ratio of used volume to total tote volume
-        gcus = obj_volumes / self.tote_volume
+        gcus = total_volumes / self.tote_volume
         return gcus
 
     def log_current_gcu(self, env_ids=None):
@@ -584,7 +727,7 @@ class ToteManager:
             return
 
         if env_ids is None:
-            env_ids = torch.arange(self.num_envs, device=self.obj_volumes.device)
+            env_ids = torch.arange(self.num_envs, device=self.device)
 
         gcu_values = self.get_gcu(env_ids)
         self.stats.log_gcu(gcu_values, env_ids)
