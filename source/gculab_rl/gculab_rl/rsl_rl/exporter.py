@@ -5,6 +5,7 @@
 
 import copy
 import os
+
 import torch
 
 
@@ -79,7 +80,7 @@ class _TorchPolicyExporter(torch.nn.Module):
         if normalizer:
             self.normalizer = copy.deepcopy(normalizer)
             # Check if this is a Conv2D network and normalizer has different input size
-            self.is_conv2d = hasattr(self.actor, 'image_input_shape')
+            self.is_conv2d = hasattr(self.actor, "image_input_shape")
             if self.is_conv2d:
                 # For Conv2D networks, the normalizer was trained with only proprioceptive obs
                 self.proprio_obs_size = normalizer._mean.shape[1]  # Get the size from normalizer
@@ -91,8 +92,8 @@ class _TorchPolicyExporter(torch.nn.Module):
     def forward_lstm(self, x):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x[:, :self.proprio_obs_size]
-            image_obs = x[:, self.proprio_obs_size:]
+            proprio_obs = x[:, : self.proprio_obs_size]
+            image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x = torch.cat([normalized_proprio, image_obs], dim=1)
         else:
@@ -106,8 +107,8 @@ class _TorchPolicyExporter(torch.nn.Module):
     def forward_gru(self, x):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x[:, :self.proprio_obs_size]
-            image_obs = x[:, self.proprio_obs_size:]
+            proprio_obs = x[:, : self.proprio_obs_size]
+            image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x = torch.cat([normalized_proprio, image_obs], dim=1)
         else:
@@ -120,8 +121,8 @@ class _TorchPolicyExporter(torch.nn.Module):
     def forward(self, x):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x[:, :self.proprio_obs_size]
-            image_obs = x[:, self.proprio_obs_size:]
+            proprio_obs = x[:, : self.proprio_obs_size]
+            image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x = torch.cat([normalized_proprio, image_obs], dim=1)
         else:
@@ -177,7 +178,7 @@ class _OnnxPolicyExporter(torch.nn.Module):
         if normalizer:
             self.normalizer = copy.deepcopy(normalizer)
             # Check if this is a Conv2D network and normalizer has different input size
-            self.is_conv2d = hasattr(self.actor, 'image_input_shape')
+            self.is_conv2d = hasattr(self.actor, "image_input_shape")
             if self.is_conv2d:
                 # For Conv2D networks, the normalizer was trained with only proprioceptive obs
                 self.proprio_obs_size = normalizer._mean.shape[1]  # Get the size from normalizer
@@ -189,8 +190,8 @@ class _OnnxPolicyExporter(torch.nn.Module):
     def forward_lstm(self, x_in, h_in, c_in):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x_in[:, :self.proprio_obs_size]
-            image_obs = x_in[:, self.proprio_obs_size:]
+            proprio_obs = x_in[:, : self.proprio_obs_size]
+            image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x_in = torch.cat([normalized_proprio, image_obs], dim=1)
         else:
@@ -202,8 +203,8 @@ class _OnnxPolicyExporter(torch.nn.Module):
     def forward_gru(self, x_in, h_in):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x_in[:, :self.proprio_obs_size]
-            image_obs = x_in[:, self.proprio_obs_size:]
+            proprio_obs = x_in[:, : self.proprio_obs_size]
+            image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x_in = torch.cat([normalized_proprio, image_obs], dim=1)
         else:
@@ -215,8 +216,8 @@ class _OnnxPolicyExporter(torch.nn.Module):
     def forward(self, x):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
-            proprio_obs = x[:, :self.proprio_obs_size]
-            image_obs = x[:, self.proprio_obs_size:]
+            proprio_obs = x[:, : self.proprio_obs_size]
+            image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
             x = torch.cat([normalized_proprio, image_obs], dim=1)
         else:

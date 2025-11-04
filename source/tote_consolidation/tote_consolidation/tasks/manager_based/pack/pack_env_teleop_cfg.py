@@ -191,15 +191,20 @@ class ObservationsCfg:
 
     policy: PolicyCfg = PolicyCfg()
 
+
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
+
     pass
+
 
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
+
     pass
+
 
 @configclass
 class TeleopEventCfg:

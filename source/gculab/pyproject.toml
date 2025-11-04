@@ -1,3 +1,11 @@
 [build-system]
 requires = ["setuptools", "wheel", "toml"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "gculab"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "pyserial",
+]
