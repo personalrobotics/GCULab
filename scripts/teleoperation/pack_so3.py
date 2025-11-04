@@ -47,30 +47,31 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
+import os
+
 import gymnasium as gym
-import isaaclab_tasks  # noqa: F401
 import isaaclab.utils.math as math_utils
-import torch
-
-import omni.log
-
-
+import isaaclab_tasks  # noqa: F401
 import numpy as np
+import omni.log
+import torch
 import tote_consolidation.tasks  # noqa: F401
-from isaaclab_tasks.utils import parse_env_cfg
-from isaacsim.core.api.objects import cuboid
 from gculab.devices import Se3Keyboard, Se3KeyboardCfg
+from gculab.envs.mdp.recorders.recorders_cfg import (
+    ActionStateSensorObservationsRecorderManagerCfg,
+)
 from isaaclab.devices import Se3SpaceMouse, Se3SpaceMouseCfg
 from isaaclab.devices.teleop_device_factory import create_teleop_device
+from isaaclab.managers import DatasetExportMode
 from isaaclab.utils.math import quat_mul
-from pack_helpers import snap_to_theta_continuous, get_z_position_from_depth
+from isaaclab_tasks.utils import parse_env_cfg
+from isaacsim.core.api.objects import cuboid
+from pack_helpers import get_z_position_from_depth, snap_to_theta_continuous
+from tensordict import TensorDict
 from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
-from gculab.envs.mdp.recorders.recorders_cfg import ActionStateSensorObservationsRecorderManagerCfg
-from isaaclab.managers import DatasetExportMode
-from tensordict import TensorDict
-import os
+
 
 def setup_output_directories() -> tuple[str, str]:
     """Set up output directories for saving demonstrations.
@@ -94,6 +95,7 @@ def setup_output_directories() -> tuple[str, str]:
 
     return output_dir, output_file_name
 
+
 def main():
     """Zero actions agent with Isaac Lab environment."""
     # parse configuration
@@ -103,7 +105,9 @@ def main():
 
     output_dir, output_file_name = setup_output_directories()
 
-    env_cfg.recorders: ActionStateSensorObservationsRecorderManagerCfg = ActionStateSensorObservationsRecorderManagerCfg()
+    env_cfg.recorders: ActionStateSensorObservationsRecorderManagerCfg = (
+        ActionStateSensorObservationsRecorderManagerCfg()
+    )
     env_cfg.recorders.dataset_export_dir_path = output_dir
     env_cfg.recorders.dataset_filename = output_file_name
     env_cfg.recorders.dataset_export_mode = DatasetExportMode.EXPORT_ALL
@@ -119,13 +123,12 @@ def main():
         orientation=np.array([0, 0, 0, 1]),
         color=np.array([1.0, 0, 0]),
         size=0.05,
-        visible=False
+        visible=False,
     )
 
     # print info (this is vectorized environment)
     print(f"[INFO]: Gym observation space: {env.observation_space}")
     print(f"[INFO]: Gym action space: {env.action_space}")
-
 
     past_pose = None
     target_pose = None
@@ -138,7 +141,6 @@ def main():
     image_obs = None
     img_h = env.unwrapped.observation_space["sensor"].shape[-3]
     img_w = env.unwrapped.observation_space["sensor"].shape[-2]
-
 
     # Flags for controlling teleoperation flow
     should_reset_recording_instance = False
@@ -203,29 +205,42 @@ def main():
         env.unwrapped.bpp.remove_selected_from_fifo(object_to_pack)
 
         for i in range(env.unwrapped.num_envs):
-            env.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()], device=env.unwrapped.device))
+            env.unwrapped.bpp.packed_obj_idx[i].append(
+                torch.tensor([object_to_pack[i].item()], device=env.unwrapped.device)
+            )
 
         tote_ids = torch.tensor([0], device=env.unwrapped.device).int()
         x_cube, y_cube, z_cube = cube_position[0].item(), cube_position[1].item(), cube_position[2].item()
 
         x_tote, y_tote, z_tote = env.unwrapped.tote_manager._tote_assets_state[0, tote_ids.item()][0:3]
 
-        x_tote_dim, y_tote_dim = env.unwrapped.tote_manager.true_tote_dim[0] / 100, env.unwrapped.tote_manager.true_tote_dim[1] / 100
-        
-        rotated_dim = (
-            calculate_rotated_bounding_box(
-                env.unwrapped.tote_manager.get_object_bbox(0, object_to_pack).unsqueeze(0), cube_orientation.unsqueeze(0), device=env.unwrapped.device
-            )
+        x_tote_dim, y_tote_dim = (
+            env.unwrapped.tote_manager.true_tote_dim[0] / 100,
+            env.unwrapped.tote_manager.true_tote_dim[1] / 100,
         )
 
-        x_diff = x_cube - x_tote + x_tote_dim / 2 - rotated_dim[0,0]/2
-        y_diff = y_cube - y_tote + y_tote_dim / 2 - rotated_dim[0,1]/2
+        rotated_dim = calculate_rotated_bounding_box(
+            env.unwrapped.tote_manager.get_object_bbox(0, object_to_pack).unsqueeze(0),
+            cube_orientation.unsqueeze(0),
+            device=env.unwrapped.device,
+        )
+
+        x_diff = x_cube - x_tote + x_tote_dim / 2 - rotated_dim[0, 0] / 2
+        y_diff = y_cube - y_tote + y_tote_dim / 2 - rotated_dim[0, 1] / 2
         z_diff = z_cube - z_tote
 
         if image_obs is None:
             raise ValueError("Depth image observation is None. Cannot compute z position.")
-        z_pos = get_z_position_from_depth(image_obs, [x_diff, y_diff], rotated_dim, img_h, img_w, env.unwrapped.tote_manager.true_tote_dim) + 0.01
-        actions = torch.tensor([x_diff, y_diff, z_pos, cube_orientation[0], cube_orientation[1], cube_orientation[2], cube_orientation[3]], device=env.unwrapped.device).unsqueeze(0)
+        z_pos = (
+            get_z_position_from_depth(
+                image_obs, [x_diff, y_diff], rotated_dim, img_h, img_w, env.unwrapped.tote_manager.true_tote_dim
+            )
+            + 0.01
+        )
+        actions = torch.tensor(
+            [x_diff, y_diff, z_pos, cube_orientation[0], cube_orientation[1], cube_orientation[2], cube_orientation[3]],
+            device=env.unwrapped.device,
+        ).unsqueeze(0)
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(env.unwrapped.device),  # Destination tote IDs
@@ -259,12 +274,8 @@ def main():
 
         get_new_obj = False
 
-
     def reset_target_cube() -> None:
-        target.set_world_pose(
-            np.array([0.5, -0.7, 0.2]),
-            np.array([0, 0, 0, 1])
-        )
+        target.set_world_pose(np.array([0.5, -0.7, 0.2]), np.array([0, 0, 0, 1]))
 
     # Create device config if not already in env_cfg
     teleoperation_callbacks: dict[str, Callable[[], None]] = {
@@ -275,7 +286,7 @@ def main():
         "ENTER": place_object,
         "NUMPAD_ENTER": place_object,
         "LEFT_SHIFT": undo_place,
-        "TAB": reset_target_cube
+        "TAB": reset_target_cube,
     }
 
     # Create teleop device from config if present, otherwise create manually
@@ -321,7 +332,7 @@ def main():
         env.close()
         simulation_app.close()
         return
-    
+
     print(f"Using teleop device: {teleop_interface}")
 
     # reset environment
@@ -333,14 +344,17 @@ def main():
 
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
     x_tote, y_tote, z_tote = env.unwrapped.tote_manager._tote_assets_state[tote_ids.item(), 0][0:3]
-    x_tote_dim, y_tote_dim = env.unwrapped.tote_manager.true_tote_dim[0] / 100, env.unwrapped.tote_manager.true_tote_dim[1] / 100
+    x_tote_dim, y_tote_dim = (
+        env.unwrapped.tote_manager.true_tote_dim[0] / 100,
+        env.unwrapped.tote_manager.true_tote_dim[1] / 100,
+    )
 
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
             # position and orientation of target virtual cube:
-            cmd  = teleop_interface.advance()
+            cmd = teleop_interface.advance()
 
             if get_new_obj:
                 tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
@@ -369,26 +383,36 @@ def main():
             # snap to increments of theta degrees
             cube_orientation = snap_to_theta_continuous(cube_orientation)
 
-
-            rotated_dim = (
-                calculate_rotated_bounding_box(
-                    env.unwrapped.tote_manager.get_object_bbox(0, object_to_pack).unsqueeze(0), cube_orientation.unsqueeze(0), device=env.unwrapped.device
-                )
+            rotated_dim = calculate_rotated_bounding_box(
+                env.unwrapped.tote_manager.get_object_bbox(0, object_to_pack).unsqueeze(0),
+                cube_orientation.unsqueeze(0),
+                device=env.unwrapped.device,
             )
 
-            cube_position[0] = max(x_tote - x_tote_dim / 2 + rotated_dim[0,0]/2, min(cube_position[0], x_tote + x_tote_dim / 2 - rotated_dim[0,0]/2))
-            cube_position[1] = max(y_tote - y_tote_dim / 2 + rotated_dim[0,1]/2, min(cube_position[1], y_tote + y_tote_dim / 2 - rotated_dim[0,1]/2))
+            cube_position[0] = max(
+                x_tote - x_tote_dim / 2 + rotated_dim[0, 0] / 2,
+                min(cube_position[0], x_tote + x_tote_dim / 2 - rotated_dim[0, 0] / 2),
+            )
+            cube_position[1] = max(
+                y_tote - y_tote_dim / 2 + rotated_dim[0, 1] / 2,
+                min(cube_position[1], y_tote + y_tote_dim / 2 - rotated_dim[0, 1] / 2),
+            )
 
             x_cube, y_cube, z_cube = cube_position[0].item(), cube_position[1].item(), cube_position[2].item()
 
-            x_diff = x_cube - x_tote + x_tote_dim / 2 - rotated_dim[0,0]/2
-            y_diff = y_cube - y_tote + y_tote_dim / 2 - rotated_dim[0,1]/2
+            x_diff = x_cube - x_tote + x_tote_dim / 2 - rotated_dim[0, 0] / 2
+            y_diff = y_cube - y_tote + y_tote_dim / 2 - rotated_dim[0, 1] / 2
 
             if image_obs is None:
                 raise ValueError("Depth image observation is None. Cannot compute z position.")
-            z_pos = get_z_position_from_depth(image_obs, [x_diff, y_diff], rotated_dim, img_h, img_w, env.unwrapped.tote_manager.true_tote_dim) + 0.01
-            
-            cube_position[2] = z_pos + rotated_dim[0,2] / 2
+            z_pos = (
+                get_z_position_from_depth(
+                    image_obs, [x_diff, y_diff], rotated_dim, img_h, img_w, env.unwrapped.tote_manager.true_tote_dim
+                )
+                + 0.01
+            )
+
+            cube_position[2] = z_pos + rotated_dim[0, 2] / 2
 
             target.set_world_pose(cube_position, cube_orientation)
 
@@ -397,9 +421,7 @@ def main():
             asset.write_root_link_pose_to_sim(
                 torch.cat([cube_position, cube_orientation], dim=0).unsqueeze(0),
             )
-            asset.write_root_com_velocity_to_sim(
-                torch.zeros(6, device=cube_position.device).unsqueeze(0)
-            )
+            asset.write_root_com_velocity_to_sim(torch.zeros(6, device=cube_position.device).unsqueeze(0))
 
             if past_pose is None:
                 past_pose = (cube_position, cube_orientation)

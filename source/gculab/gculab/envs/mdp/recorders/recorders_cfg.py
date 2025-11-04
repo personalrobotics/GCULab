@@ -2,10 +2,20 @@
 # All rights reserved.
 #
 # SPDX-License-Identifier: BSD-3-Clause
-from isaaclab.managers.recorder_manager import RecorderManagerBaseCfg, RecorderTerm, RecorderTermCfg
+from isaaclab.envs.mdp.recorders.recorders_cfg import (
+    InitialStateRecorderCfg,
+    PostStepProcessedActionsRecorderCfg,
+    PostStepStatesRecorderCfg,
+    PreStepActionsRecorderCfg,
+    PreStepFlatPolicyObservationsRecorderCfg,
+)
+from isaaclab.managers.recorder_manager import (
+    RecorderManagerBaseCfg,
+    RecorderTerm,
+    RecorderTermCfg,
+)
 from isaaclab.utils import configclass
 
-from isaaclab.envs.mdp.recorders.recorders_cfg import InitialStateRecorderCfg, PostStepStatesRecorderCfg, PreStepActionsRecorderCfg, PreStepFlatPolicyObservationsRecorderCfg, PostStepProcessedActionsRecorderCfg
 from . import recorders
 
 
@@ -14,6 +24,7 @@ class PreStepFlatSensorObservationsRecorderCfg(RecorderTermCfg):
     """Configuration for the step sensor observation recorder term."""
 
     class_type: type[RecorderTerm] = recorders.PreStepFlatSensorObservationsRecorder
+
 
 ##
 # Recorder manager configurations.

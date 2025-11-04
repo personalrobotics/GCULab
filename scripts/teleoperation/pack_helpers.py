@@ -1,6 +1,9 @@
 import torch
 
-def snap_to_theta_continuous(quat: torch.Tensor, q_prev: torch.Tensor | None = None, theta: float = 22.5) -> torch.Tensor:
+
+def snap_to_theta_continuous(
+    quat: torch.Tensor, q_prev: torch.Tensor | None = None, theta: float = 22.5
+) -> torch.Tensor:
     """Snap a quaternion to nearest multiple of theta degrees while preserving sign continuity."""
     quat = quat / quat.norm()
 
@@ -10,16 +13,20 @@ def snap_to_theta_continuous(quat: torch.Tensor, q_prev: torch.Tensor | None = N
 
     # Convert to rotation matrix
     w, x, y, z = quat
-    R = torch.tensor([
-        [1 - 2*(y*y + z*z), 2*(x*y - z*w),     2*(x*z + y*w)],
-        [2*(x*y + z*w),     1 - 2*(x*x + z*z), 2*(y*z - x*w)],
-        [2*(x*z - y*w),     2*(y*z + x*w),     1 - 2*(x*x + y*y)]
-    ], device=quat.device, dtype=quat.dtype)
+    R = torch.tensor(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ],
+        device=quat.device,
+        dtype=quat.dtype,
+    )
 
     # Convert to Euler
-    yaw = torch.atan2(R[1,0], R[0,0])
-    pitch = torch.asin(-R[2,0].clamp(-1,1))
-    roll = torch.atan2(R[2,1], R[2,2])
+    yaw = torch.atan2(R[1, 0], R[0, 0])
+    pitch = torch.asin(-R[2, 0].clamp(-1, 1))
+    roll = torch.atan2(R[2, 1], R[2, 2])
 
     step = theta * torch.pi / 180.0
     roll = torch.round(roll / step) * step
@@ -27,9 +34,9 @@ def snap_to_theta_continuous(quat: torch.Tensor, q_prev: torch.Tensor | None = N
     yaw = torch.round(yaw / step) * step
 
     # Convert back to quaternion
-    cr, sr = torch.cos(roll/2), torch.sin(roll/2)
-    cp, sp = torch.cos(pitch/2), torch.sin(pitch/2)
-    cy, sy = torch.cos(yaw/2), torch.sin(yaw/2)
+    cr, sr = torch.cos(roll / 2), torch.sin(roll / 2)
+    cp, sp = torch.cos(pitch / 2), torch.sin(pitch / 2)
+    cy, sy = torch.cos(yaw / 2), torch.sin(yaw / 2)
 
     w = cr * cp * cy + sr * sp * sy
     x = sr * cp * cy - cr * sp * sy
@@ -43,8 +50,14 @@ def snap_to_theta_continuous(quat: torch.Tensor, q_prev: torch.Tensor | None = N
 
     return q_snapped / q_snapped.norm()
 
+
 def get_z_position_from_depth(
-    image_obs: torch.Tensor, xy_pos: torch.Tensor, rotated_dim: torch.Tensor, img_h: int, img_w: int, true_tote_dim: list[float]
+    image_obs: torch.Tensor,
+    xy_pos: torch.Tensor,
+    rotated_dim: torch.Tensor,
+    img_h: int,
+    img_w: int,
+    true_tote_dim: list[float],
 ) -> torch.Tensor:
     """Get the z position from the depth image."""
     depth_img = image_obs.reshape(-1, img_h, img_w)

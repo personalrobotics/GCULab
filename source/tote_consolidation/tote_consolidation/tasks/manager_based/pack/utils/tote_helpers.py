@@ -167,6 +167,7 @@ def calculate_tote_bounds(tote_assets, true_tote_dim, env):
         tote_bounds.append(bounds)
     return tote_bounds
 
+
 def generate_orientations(objects, device=None):
     """
     Generate default orientations for objects.

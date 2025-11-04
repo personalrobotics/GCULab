@@ -58,10 +58,10 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import contextlib
-import gymnasium as gym
 import os
-import torch
 
+import gymnasium as gym
+import torch
 from isaaclab.devices import Se3Keyboard, Se3KeyboardCfg
 from isaaclab.utils.datasets import EpisodeData, HDF5DatasetFileHandler
 
@@ -83,6 +83,7 @@ def play_cb():
 def pause_cb():
     global is_paused
     is_paused = True
+
 
 def compare_states(state_from_dataset, runtime_state, runtime_env_index) -> (bool, str):
     """Compare states from dataset and runtime.
@@ -220,7 +221,7 @@ def main():
                     while is_paused:
                         env.sim.render()
                         continue
-                
+
                 env.step(actions)
 
                 if state_validation_enabled:
