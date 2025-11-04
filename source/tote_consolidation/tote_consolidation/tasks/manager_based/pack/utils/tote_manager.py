@@ -436,8 +436,12 @@ class ToteManager:
 
             # Get the asset based on object identifier type
             if isinstance(obj_id, str):
+                if obj_id == "object-1":
+                    continue  # Skip invalid object
                 asset = env.scene[obj_id]
             else:
+                if obj_id.item() == -1:
+                    continue  # Skip invalid object
                 asset = env.scene[f"object{obj_id.item()}"]
 
             # Update prim path for the specific environment
