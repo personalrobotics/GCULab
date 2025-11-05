@@ -10,9 +10,6 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import isaaclab.utils.math as math_utils
 import matplotlib
-
-from collections import deque
-
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -36,10 +33,11 @@ def create_items_worker(args):
     items = []
     for j in objects:
         if j < len(obj_voxels) and obj_voxels[j] is not None:
-            items.append(Item(
-                np.array(obj_voxels[j], dtype=np.float32),
-                obj_asset_paths[j] if j < len(obj_asset_paths) else None
-            ))
+            items.append(
+                Item(
+                    np.array(obj_voxels[j], dtype=np.float32), obj_asset_paths[j] if j < len(obj_asset_paths) else None
+                )
+            )
     return env_idx, items
 
 
@@ -138,13 +136,13 @@ class BPP:
             try:
                 with open(cache_file, "rb") as f:
                     cached_data = pickle.load(f)
-                    self.tote_dims = cached_data['tote_dims']
-                    self.problems = cached_data['problems']
-                    self.unique_obj_dims = cached_data['unique_obj_dims']
-                    self.unique_obj_voxels = cached_data['unique_obj_voxels']
-                    self.unique_obj_latents = cached_data['unique_obj_latents']
-                    self.asset_path_to_id = cached_data['asset_path_to_id']
-                    self.id_to_asset_path = cached_data['id_to_asset_path']
+                    self.tote_dims = cached_data["tote_dims"]
+                    self.problems = cached_data["problems"]
+                    self.unique_obj_dims = cached_data["unique_obj_dims"]
+                    self.unique_obj_voxels = cached_data["unique_obj_voxels"]
+                    self.unique_obj_latents = cached_data["unique_obj_latents"]
+                    self.asset_path_to_id = cached_data["asset_path_to_id"]
+                    self.id_to_asset_path = cached_data["id_to_asset_path"]
                     # Build cache after loading
                     self._build_obj_to_asset_id_cache()
                 print(f"Successfully loaded cached data in {time.time() - start_time:.3f}s")
@@ -184,8 +182,7 @@ class BPP:
         item_args = []
         for i in range(self.num_envs):
             # Ensure objects list is CPU-based
-            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item()
-                          for obj in self.objects]
+            objects_cpu = [obj if not isinstance(obj, torch.Tensor) else obj.cpu().item() for obj in self.objects]
             item_args.append((i, cpu_obj_voxels[i], cpu_asset_paths[i], objects_cpu))
         print(f"Time to prepare item arguments: {time.time() - start_time:.3f}s")
 
@@ -197,10 +194,7 @@ class BPP:
         print(f"Time to create items: {time.time() - start_time:.3f}s")
 
         # Prepare arguments for problem creation (tote_dims is already CPU/NumPy from _get_packing_variables)
-        problem_args = [
-            (i, self.tote_dims, all_items[i])
-            for i in range(self.num_envs)
-        ]
+        problem_args = [(i, self.tote_dims, all_items[i]) for i in range(self.num_envs)]
 
         # Create problems using multiprocessing with limited workers
         self.problems = [None] * self.num_envs
@@ -212,13 +206,13 @@ class BPP:
         # Save the components to cache for future use
         try:
             cache_data = {
-                'tote_dims': self.tote_dims,
-                'problems': self.problems,
-                'unique_obj_dims': self.unique_obj_dims,
-                'unique_obj_voxels': self.unique_obj_voxels,
-                'unique_obj_latents': self.unique_obj_latents,
-                'asset_path_to_id': self.asset_path_to_id,
-                'id_to_asset_path': self.id_to_asset_path
+                "tote_dims": self.tote_dims,
+                "problems": self.problems,
+                "unique_obj_dims": self.unique_obj_dims,
+                "unique_obj_voxels": self.unique_obj_voxels,
+                "unique_obj_latents": self.unique_obj_latents,
+                "asset_path_to_id": self.asset_path_to_id,
+                "id_to_asset_path": self.id_to_asset_path,
             }
             with open(cache_file, "wb") as f:
                 pickle.dump(cache_data, f)
@@ -271,11 +265,7 @@ class BPP:
         """
         # Convert tote dimensions from xyz to zxy format and scale
         tote_dims = self.tote_manager.true_tote_dim.tolist()
-        tote_dims = [
-            int(tote_dims[2] * self.scale),
-            int(tote_dims[0] * self.scale),
-            int(tote_dims[1] * self.scale)
-        ]
+        tote_dims = [int(tote_dims[2] * self.scale), int(tote_dims[0] * self.scale), int(tote_dims[1] * self.scale)]
 
         # Get unique object dimensions and voxels by asset path ID
         self.unique_obj_dims = {}
@@ -746,7 +736,9 @@ class BPP:
         dest_tote_ids: torch.Tensor = None,
     ) -> tuple:
         """Prepare arguments for worker job submission."""
-        obj_volumes = torch.tensor([self.tote_manager.get_object_volume(env_idx, obj_idx) for obj_idx in range(self.tote_manager.num_objects)]).cpu()
+        obj_volumes = torch.tensor(
+            [self.tote_manager.get_object_volume(env_idx, obj_idx) for obj_idx in range(self.tote_manager.num_objects)]
+        ).cpu()
 
         # Get GCU and ensure it's a scalar value - need to index by destination tote
         if dest_tote_ids is not None:
@@ -1014,6 +1006,7 @@ class BPP:
             Tensor of selected object indices (-1 for environments with no packable objects)
         """
         import torch
+
         num_envs = len(packable_objects)
         selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
 
@@ -1049,6 +1042,7 @@ class BPP:
 
             # Remove stale objects from FIFO that are no longer packable
             from collections import deque
+
             self.fifo_queues[env_idx] = deque([obj for obj in fifo_queue if obj.item() in packable_values])
 
             # Append new objects that aren't already in FIFO
@@ -1069,5 +1063,9 @@ class BPP:
             selected_objects: Tensor of selected object indices
         """
         for env_idx, selected_obj in enumerate(selected_objects):
-            if selected_obj != -1 and self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() == selected_obj.item():
+            if (
+                selected_obj != -1
+                and self.fifo_queues[env_idx]
+                and self.fifo_queues[env_idx][0].item() == selected_obj.item()
+            ):
                 self.fifo_queues[env_idx].popleft()

@@ -111,9 +111,7 @@ class PackingAction(ActionTerm):
                 [self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device
             ).repeat(self.num_envs, 1)
 
-            bbox_offset = self._env.tote_manager.obj_bboxes[
-                torch.arange(self.num_envs, device=self.device), actions[:, 1].long()
-            ]
+            bbox_offset = self._env.tote_manager.get_object_bbox(batch_indices, actions[:, 1].long()).unsqueeze(0)
             rotated_half_dim = (
                 calculate_rotated_bounding_box(
                     bbox_offset, self._processed_actions[:, 5:9].squeeze(1), device=self.device
