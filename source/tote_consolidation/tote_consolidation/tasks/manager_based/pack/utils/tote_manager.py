@@ -450,7 +450,9 @@ class ToteManager:
                 asset_orientation = asset.data.root_state_w[:, 3:7]
 
                 # Get rotated bounding box
-                obj_bbox = torch.stack([self.env.tote_manager.get_object_bbox(env_idx, obj_id) for env_idx in range(self.env.num_envs)])
+                obj_bbox = torch.stack(
+                    [self.env.tote_manager.get_object_bbox(env_idx, obj_id) for env_idx in range(self.env.num_envs)]
+                )
                 rotated_dims = calculate_rotated_bounding_box(obj_bbox, asset_orientation, self.env.device)
                 margin = rotated_dims / 2.0
                 top_z_positions = asset_position[:, 2] + margin[:, 2]
@@ -707,7 +709,9 @@ class ToteManager:
         obj_volumes = self._volume_cache[env_ids]  # Shape: [num_envs, num_objects]
 
         # Expand volumes to match tote selection shape and multiply
-        obj_volumes_expanded = obj_volumes.unsqueeze(1).expand(-1, self.num_totes, -1)  # Shape: [num_envs, num_totes, num_objects]
+        obj_volumes_expanded = obj_volumes.unsqueeze(1).expand(
+            -1, self.num_totes, -1
+        )  # Shape: [num_envs, num_totes, num_objects]
 
         # Multiply object volumes with tote selection and sum over the object dimension
         total_volumes = torch.sum(obj_volumes_expanded * tote_selection, dim=2)  # Shape: [num_envs, num_totes]

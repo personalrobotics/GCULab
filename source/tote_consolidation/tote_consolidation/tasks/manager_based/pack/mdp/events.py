@@ -60,7 +60,7 @@ def object_props(
 
         Args:
             mesh: UsdGeom.Mesh with GetPointsAttr and GetFaceVertexIndicesAttr methods
-            bbox_size: Target bounding box (X, Y, Z) 
+            bbox_size: Target bounding box (X, Y, Z)
             voxel_size: Voxel size (default: 1.0)
             padding_factor: Bbox padding factor (default: 1.15)
             scale: Vertex scale factor (default: 1.0)
@@ -70,51 +70,50 @@ def object_props(
         # Calculate fallback grid size
         grid_size = np.ceil(np.array(bbox_size) * padding_factor / voxel_size).astype(int)
         fallback_grid = torch.zeros(tuple(grid_size[::-1]), dtype=torch.float32)  # (Z, Y, X)
-        
+
         try:
             # Extract USD mesh data
             if not (hasattr(mesh, "GetPointsAttr") and hasattr(mesh, "GetFaceVertexIndicesAttr")):
                 return fallback_grid
-                
+
             points = np.array(mesh.GetPointsAttr().Get(), dtype=np.float32) * scale
             face_counts = mesh.GetFaceVertexCountsAttr().Get()
             face_indices = mesh.GetFaceVertexIndicesAttr().Get()
-            
+
             # Convert to triangular faces (fan triangulation for polygons)
             faces = []
             idx = 0
             for count in face_counts:
                 if count >= 3:
-                    face = face_indices[idx:idx + count]
+                    face = face_indices[idx : idx + count]
                     # Fan triangulation: connect first vertex to all consecutive pairs
                     for i in range(1, count - 1):
                         faces.append([face[0], face[i], face[i + 1]])
                 idx += count
-            
+
             if not faces:
                 return fallback_grid
-            
+
             # Create and voxelize trimesh
             mesh_obj = trimesh.Trimesh(vertices=points, faces=np.array(faces))
             voxel_grid = mesh_obj.voxelized(pitch=voxel_size)
-            
+
             # Convert to torch tensor
             result = torch.from_numpy(voxel_grid.matrix.astype(np.float32))
-            
-            # Uncomment to visualize: 
+
+            # Uncomment to visualize:
             # plot_voxel_grid(result, f"Voxels - Scale: {scale}")
-            
+
             return result
-            
+
         except Exception as e:
             print(f"Voxelization failed: {e}")
             return fallback_grid
 
-
     def plot_voxel_grid(voxel_grid, title="Voxel Grid", save_path=None, bbox_size=None):
         """
         Plot a 3D voxel grid visualization.
-        
+
         Args:
             voxel_grid: torch.Tensor or numpy array of shape (Z, Y, X) with 1 = solid, 0 = empty
             title: Title for the plot
@@ -124,38 +123,38 @@ def object_props(
         try:
             import matplotlib.pyplot as plt
             from mpl_toolkits.mplot3d import Axes3D
-            
+
             # Convert to numpy if it's a torch tensor
             if isinstance(voxel_grid, torch.Tensor):
                 voxel_data = voxel_grid.cpu().numpy()
             else:
                 voxel_data = voxel_grid
-            
+
             # Get indices of non-zero voxels
             z, y, x = np.nonzero(voxel_data)
-            
+
             if len(x) == 0:
                 print("Warning: Voxel grid is empty, nothing to plot")
                 return
-            
+
             # Create 3D plot
             fig = plt.figure(figsize=(10, 8))
-            ax = fig.add_subplot(111, projection='3d')
-            
+            ax = fig.add_subplot(111, projection="3d")
+
             # Plot voxels as scatter points
-            ax.scatter(x, y, z, c='red', marker='s', s=20, alpha=0.8)
-            
+            ax.scatter(x, y, z, c="red", marker="s", s=20, alpha=0.8)
+
             # Set labels and title
-            ax.set_xlabel('X')
-            ax.set_ylabel('Y')
-            ax.set_zlabel('Z')
+            ax.set_xlabel("X")
+            ax.set_ylabel("Y")
+            ax.set_zlabel("Z")
             ax.set_title(title)
-            
+
             # Set axis limits based on bbox_size if provided, otherwise use voxel grid shape
             if bbox_size is not None:
-                # bbox_size is (X, Y, Z), but voxel_data is (Z, Y, X)  
+                # bbox_size is (X, Y, Z), but voxel_data is (Z, Y, X)
                 ax.set_xlim([0, bbox_size[0]])
-                ax.set_ylim([0, bbox_size[1]]) 
+                ax.set_ylim([0, bbox_size[1]])
                 ax.set_zlim([0, bbox_size[2]])
                 print("Setting axis limits based on provided bounding box size ", bbox_size)
             else:
@@ -164,23 +163,22 @@ def object_props(
                 ax.set_xlim([0, max_range])
                 ax.set_ylim([0, max_range])
                 ax.set_zlim([0, max_range])
-            
+
             # Add grid info to title
             shape_str = f"Shape: {voxel_data.shape}, Filled: {len(x)} voxels"
             ax.set_title(f"{title}\n{shape_str}")
-            
+
             if save_path:
-                plt.savefig(save_path, dpi=300, bbox_inches='tight')
+                plt.savefig(save_path, dpi=300, bbox_inches="tight")
                 print(f"Voxel plot saved to: {save_path}")
             else:
                 plt.show()
-                
+
         except ImportError:
             print("Warning: matplotlib not available, cannot plot voxel grid")
         except Exception as e:
             print(f"Warning: Failed to plot voxel grid: {e}")
 
-        
     def mesh_volume(mesh: UsdGeom.Mesh) -> float:
         points = np.array(mesh.GetPointsAttr().Get())
         faces = np.array(mesh.GetFaceVertexIndicesAttr().Get())
@@ -190,16 +188,16 @@ def object_props(
         tris = []
         i = 0
         for c in counts:
-            for j in range(1, c-1):
-                tris.append([faces[i], faces[i+j], faces[i+j+1]])
+            for j in range(1, c - 1):
+                tris.append([faces[i], faces[i + j], faces[i + j + 1]])
             i += c
         tris = np.array(tris)
 
         # compute signed volume from triangles
-        v0 = points[tris[:,0]]
-        v1 = points[tris[:,1]]
-        v2 = points[tris[:,2]]
-        signed_vol = np.sum(np.einsum('ij,ij->i', v0, np.cross(v1, v2))) / 6.0
+        v0 = points[tris[:, 0]]
+        v1 = points[tris[:, 1]]
+        v2 = points[tris[:, 2]]
+        signed_vol = np.sum(np.einsum("ij,ij->i", v0, np.cross(v1, v2))) / 6.0
         return abs(signed_vol)
 
     def load_latents(asset_path):
@@ -248,13 +246,15 @@ def object_props(
                 if asset_path not in mesh_properties_cache:
                     print("asset_path", asset_path)
                     bbox = compute_mesh_bbox(mesh) * scale
+                    print("bbox: ", bbox)
                     vox = compute_voxelized_geometry_usd(mesh, bbox, scale=scale)
-                    volume = mesh_volume(mesh) * (scale ** 3)
+                    volume = mesh_volume(mesh) * (scale**3)
                     latents = load_latents(asset_path)
                     mesh_properties_cache[asset_path] = (volume, bbox, vox, latents)
     # Store only the unique properties and asset paths in tote_manager
     env.tote_manager.set_object_asset_paths(obj_asset_paths, torch.arange(env.num_envs, device=env.device))
     env.tote_manager.set_unique_object_properties(mesh_properties_cache)
+
 
 def refill_source_totes(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor):
     """Refills the source totes with objects from the reserve."""
@@ -514,17 +514,23 @@ def obs_dims(env: ManagerBasedRLGCUEnv):
 
     # Update FIFO queues and peek at the first object in each queue
     env.unwrapped.bpp.update_fifo_queues(packable_objects)
-    objs = torch.tensor([
-        env.unwrapped.bpp.fifo_queues[env_idx][0].item()
-        if env.unwrapped.bpp.fifo_queues[env_idx]
-        else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
-        for env_idx in range(env.unwrapped.num_envs)
-    ], device=env.unwrapped.device)
-    obj_dims = torch.stack([env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)])
+    objs = torch.tensor(
+        [
+            (
+                env.unwrapped.bpp.fifo_queues[env_idx][0].item()
+                if env.unwrapped.bpp.fifo_queues[env_idx]
+                else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
+            )
+            for env_idx in range(env.unwrapped.num_envs)
+        ],
+        device=env.unwrapped.device,
+    )
+    obj_dims = torch.stack([
+        env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item())
+        for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)
+    ])
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     return obj_dims
-
-
 
 
 def obs_lookahead(env: ManagerBasedRLGCUEnv, max_objects: int = 20):
@@ -563,30 +569,50 @@ def obs_lookahead(env: ManagerBasedRLGCUEnv, max_objects: int = 20):
     obj_dims = obj_dims.reshape(env.unwrapped.num_envs, max_objects * 3)
     return obj_dims
 
+
 def obs_latents(env: ManagerBasedRLGCUEnv):
     """Returns the latents of the object to pack."""
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, 512, 8), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+        env.unwrapped.tote_manager.num_objects,
+        env.unwrapped.tote_manager,
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
+        tote_ids,
+    )[0]
     # Update FIFO queues and peek at the first object in each queue
     env.unwrapped.bpp.update_fifo_queues(packable_objects)
-    objs = torch.tensor([
-        env.unwrapped.bpp.fifo_queues[env_idx][0].item()
-        if env.unwrapped.bpp.fifo_queues[env_idx]
-        else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
-        for env_idx in range(env.unwrapped.num_envs)
-    ], device=env.unwrapped.device)
-    obj_latents = torch.stack([env.unwrapped.tote_manager.get_object_latents(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)]).reshape(env.unwrapped.num_envs, -1)
+    objs = torch.tensor(
+        [
+            (
+                env.unwrapped.bpp.fifo_queues[env_idx][0].item()
+                if env.unwrapped.bpp.fifo_queues[env_idx]
+                else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
+            )
+            for env_idx in range(env.unwrapped.num_envs)
+        ],
+        device=env.unwrapped.device,
+    )
+    obj_latents = torch.stack([
+        env.unwrapped.tote_manager.get_object_latents(env_idx, obj.item())
+        for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)
+    ]).reshape(env.unwrapped.num_envs, -1)
     return obj_latents
+
 
 def obj_ids(env: ManagerBasedRLGCUEnv):
     """Returns the asset IDs of the objects to pack."""
     if not hasattr(env, "bpp"):
-        return torch.zeros((env.unwrapped.num_envs,1), device=env.unwrapped.device)
+        return torch.zeros((env.unwrapped.num_envs, 1), device=env.unwrapped.device)
 
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+        env.unwrapped.tote_manager.num_objects,
+        env.unwrapped.tote_manager,
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
+        tote_ids,
+    )[0]
 
     # Efficient lookup using pre-computed cache
     bpp = env.unwrapped.bpp
@@ -604,6 +630,7 @@ def obj_ids(env: ManagerBasedRLGCUEnv):
     # Use efficient batch lookup
     asset_ids = bpp.get_asset_ids_batch(env_indices, obj_indices)
     return asset_ids.unsqueeze(1)
+
 
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.
@@ -659,9 +686,17 @@ def gcu_reward_step(env: ManagerBasedRLGCUEnv):
                         or 0 if the environment is being reset.
     """
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(env.unwrapped.tote_manager.num_objects, env.unwrapped.tote_manager, torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), tote_ids)[0]
+    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+        env.unwrapped.tote_manager.num_objects,
+        env.unwrapped.tote_manager,
+        torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
+        tote_ids,
+    )[0]
     objs = torch.tensor([row[0] for row in packable_objects], device=env.unwrapped.device)
-    obj_dims = torch.stack([env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item()) for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)])
+    obj_dims = torch.stack([
+        env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item())
+        for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)
+    ])
     obj_dims = obj_dims / 100.0  # Convert from cm to m
     tote_dims = env.tote_manager.true_tote_dim / 100.0
     next_box_vol = obj_dims[:, 0] * obj_dims[:, 1] * obj_dims[:, 2]
@@ -675,7 +710,8 @@ def gcu_reward_step(env: ManagerBasedRLGCUEnv):
     gcu_values[reset_envs] = 0.0
     return gcu_values
 
-def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma = 0.99):
+
+def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
     1 - (% top down volume - GCU of objects).
@@ -688,15 +724,14 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma = 0.99):
     top_down_volumes = torch.sum(top_down_volumes_, dim=(1, 2))  # Sum over heightmap dimensions
 
     top_down_volumes = (top_down_volumes / total_volume).squeeze(1)
-    objects_volume = (
-        env.tote_manager.stats.recent_gcu_values[
-            torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
-        ]
-    )
+    objects_volume = env.tote_manager.stats.recent_gcu_values[
+        torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
+    ]
     inverse_wasted_volume = objects_volume / top_down_volumes
     return inverse_wasted_volume
 
-def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma = 0.99):
+
+def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma=0.99):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
     1 - (% top down volume - GCU of objects).
@@ -715,11 +750,9 @@ def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma = 0.99):
     top_down_volumes = torch.sum(top_down_volumes_, dim=(1, 2))  # Sum over heightmap dimensions
 
     top_down_volumes = (top_down_volumes / total_volume).squeeze(1)
-    objects_volume = (
-        env.tote_manager.stats.recent_gcu_values[
-            torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
-        ]
-    )
+    objects_volume = env.tote_manager.stats.recent_gcu_values[
+        torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
+    ]
     inverse_wasted_volume = objects_volume / (top_down_volumes + 1e-6)
     pbrs = gamma * inverse_wasted_volume - last_pbrs
     env.tote_manager.last_pbrs = inverse_wasted_volume
