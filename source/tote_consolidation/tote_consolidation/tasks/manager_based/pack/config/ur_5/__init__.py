@@ -11,7 +11,7 @@ import gymnasium as gym
 
 gym.register(
     id="Isaac-Pack-UR5-v0",
-    entry_point="gculab.envs:ManagerBasedRLGCUEnv",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.joint_pos_env_cfg:UR5PackEnvCfg",

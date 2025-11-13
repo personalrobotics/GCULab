@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 import gymnasium as gym
+import os
 
 from . import agents
 
@@ -28,5 +29,6 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.joint_pos_camera_env_cfg:NoArmPackCameraEnvCfg",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_camera_cfg:NoArmPackPPOCameraRunnerCfg",
+        "robomimic_bc_cfg_entry_point": os.path.join(agents.__path__[0], "robomimic/bc_rnn_image_84.json"),
     },
 )

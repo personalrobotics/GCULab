@@ -50,21 +50,21 @@ class UR5PackEnvTeleopCfg(TeleopPackEnvCfg):
             ),
         )
 
-        # self.scene.left_robot = UR5_ROBOTIQ_CFG.replace(
-        #     prim_path="{ENV_REGEX_NS}/LeftRobot",
-        #     init_state=ArticulationCfg.InitialStateCfg(
-        #         pos=(0.9, -0.33, 0.75),
-        #         rot=(0, -0.7071068, 0, 0.7071068),
-        #         joint_pos={
-        #             "shoulder_pan_joint": 0.0,
-        #             "shoulder_lift_joint": -2.2,
-        #             "elbow_joint": 1.9,
-        #             "wrist_1_joint": 1.383,
-        #             "wrist_2_joint": 1.57,
-        #             "wrist_3_joint": 0.00,
-        #         },
-        #     ),
-        # )
+        self.scene.left_robot = UR5_ROBOTIQ_CFG.replace(
+            prim_path="{ENV_REGEX_NS}/LeftRobot",
+            init_state=ArticulationCfg.InitialStateCfg(
+                pos=(0.9, -0.33, 0.75),
+                rot=(0, -0.7071068, 0, 0.7071068),
+                joint_pos={
+                    "shoulder_pan_joint": 0.0,
+                    "shoulder_lift_joint": -2.2,
+                    "elbow_joint": 1.9,
+                    "wrist_1_joint": 1.383,
+                    "wrist_2_joint": 1.57,
+                    "wrist_3_joint": 0.00,
+                },
+            ),
+        )
 
         # override events
         # self.events.reset_robot_joints = EventTerm(
