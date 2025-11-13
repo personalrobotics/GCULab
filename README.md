@@ -26,7 +26,7 @@ Demo for Amazon Packing Task, places all candidate objects in top right corner
 
 **Command:**
 ```bash
-python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
+python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
 ```
 
 
@@ -49,7 +49,7 @@ Requires **curobo** ([Installation Instructions](https://curobo.org/get_started/
 
 **Command:**
 ```bash
-python scripts/ik_reachability_agent.py --task=Isaac-Pack-UR5-v0 --num_envs 1
+python scripts/ik_reachability_agent.py --task=Isaac-Pack-UR5-Teleop-v0 --num_envs 1
 ```
 
 ---
@@ -67,7 +67,7 @@ Ensure this project/repository is separate from the Isaac Lab installation (i.e.
 Using a Python interpreter with Isaac Lab installed, run:
 ```bash
 # Use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python -m pip install -e source/tote_consolidation
+python -m pip install -e source/geodude
 python -m pip install -e source/gculab
 python -m pip install -e source/gculab_assets
 python -m pip install -e source/gculab_rl
@@ -102,7 +102,7 @@ python scripts/random_agent.py --task=<TASK_NAME>
 **Command:**
 ```bash
 # Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python scripts/test_placement_agent.py --task=Isaac-Pack-NoArm-v0 --num_envs 5
+python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
 ```
 
 ---

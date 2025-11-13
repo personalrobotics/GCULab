@@ -22,7 +22,7 @@ from packing3d import (
     Position,
     Transform,
 )
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+from geodude.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box_np,
 )
 

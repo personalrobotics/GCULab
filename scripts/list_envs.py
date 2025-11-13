@@ -14,7 +14,7 @@ Script to print all the available environments in Isaac Lab.
 The script iterates over all registered environments and stores the details in a table.
 It prints the name of the environment, the entry point and the config file.
 
-All the environments are registered in the `tote_consolidation` extension. They start
+All the environments are registered in the `geodude` extension. They start
 with `Isaac` in their name.
 """
 
@@ -30,12 +30,12 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
-import tote_consolidation.tasks  # noqa: F401
+import geodude.tasks  # noqa: F401
 from prettytable import PrettyTable
 
 
 def main():
-    """Print all environments registered in `tote_consolidation` extension."""
+    """Print all environments registered in `geodude` extension."""
     # print all the available environments
     table = PrettyTable(["S. No.", "Task Name", "Entry Point", "Config"])
     table.title = "Available Environments in Isaac Lab"

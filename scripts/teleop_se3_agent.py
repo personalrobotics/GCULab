@@ -66,7 +66,7 @@ if args_cli.enable_pinocchio:
     import isaaclab_tasks.manager_based.manipulation.pick_place  # noqa: F401
 
 import isaaclab_tasks  # noqa: F401
-import tote_consolidation.tasks  # noqa: F401
+import geodude.tasks  # noqa: F401
 from isaaclab.devices.openxr.retargeters.manipulator import (
     GripperRetargeter,
     Se3AbsRetargeter,

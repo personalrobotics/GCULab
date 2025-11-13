@@ -58,7 +58,7 @@ import time
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-import tote_consolidation.tasks  # noqa: F401
+import geodude.tasks  # noqa: F401
 from gculab_rl.rsl_rl import (
     RslRlGCUVecEnvWrapper,
     export_policy_as_jit,

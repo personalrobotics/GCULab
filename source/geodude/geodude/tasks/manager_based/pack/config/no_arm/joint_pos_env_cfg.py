@@ -3,11 +3,9 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-import tote_consolidation.tasks.manager_based.pack.mdp as mdp
+import geodude.tasks.manager_based.pack.mdp as mdp
 from isaaclab.utils import configclass
-from tote_consolidation.tasks.manager_based.pack.pack_camera_env_cfg import (
-    PackDepthCameraEnvCfg,
-)
+from geodude.tasks.manager_based.pack.pack_env_cfg import PackEnvCfg
 
 ##
 # Environment configuration
@@ -15,7 +13,7 @@ from tote_consolidation.tasks.manager_based.pack.pack_camera_env_cfg import (
 
 
 @configclass
-class NoArmPackCameraEnvCfg(PackDepthCameraEnvCfg):
+class NoArmPackEnvCfg(PackEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
@@ -27,7 +25,7 @@ class NoArmPackCameraEnvCfg(PackDepthCameraEnvCfg):
 
 
 @configclass
-class NoArmPackCameraEnvCfg_PLAY(NoArmPackCameraEnvCfg):
+class NoArmPackEnvCfg_PLAY(NoArmPackEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()
