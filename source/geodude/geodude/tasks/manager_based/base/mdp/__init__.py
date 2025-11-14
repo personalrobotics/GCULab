@@ -5,5 +5,4 @@
 
 """This sub-module contains the functions that are specific to the gcu environments."""
 
-from gculab.envs.mdp import *  # noqa: F401, F403
 from isaaclab.envs.mdp import *  # noqa: F401, F403
