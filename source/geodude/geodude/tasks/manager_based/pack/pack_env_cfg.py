@@ -24,6 +24,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils import configclass
+from geodude.tasks.manager_based.base.base_env_cfg import BaseSceneCfg
 
 from . import mdp
 
@@ -55,24 +56,24 @@ for obj_id, obj_name in sorted(available_objects.items()):
 # Define which object IDs to include
 ycb_include_ids = [
     "003",  # cracker_box
-    "004",  # sugar_box
-    "006",  # mustard_bottle
-    "007",  # tuna_fish_can
-    # "008",  # pudding_box
-    # "009",  # gelatin_box
-    # "010", # potted_meat_can
-    "011",  # banana
-    # "024", # bowl
-    # "025", # mug
-    "036",  # wood_block
-    # "051", # large_clamp
-    # "052", # extra_large_clamp
-    # "061",  # foam_brick
+    # "004",  # sugar_box
+    # "006",  # mustard_bottle
+    # "007",  # tuna_fish_can
+    # # "008",  # pudding_box
+    # # "009",  # gelatin_box
+    # # "010", # potted_meat_can
+    # "011",  # banana
+    # # "024", # bowl
+    # # "025", # mug
+    # "036",  # wood_block
+    # # "051", # large_clamp
+    # # "052", # extra_large_clamp
+    # # "061",  # foam_brick
 ]
 
 lw_include_names = [
     # "cracker_box",
-    "bowl",
+    # "bowl",
 ]
 
 # Filter USD files based on ID prefixes
@@ -89,31 +90,15 @@ for usd_file in lw_usd_files:
     if base_name in lw_include_names:
         usd_paths.append(usd_file)
 
-num_object_per_env = 70
+num_object_per_env = 20
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
 
 
 @configclass
-class PackSceneCfg(InteractiveSceneCfg):
-    """Configuration for the scene with a robotic arm."""
-
-    # world
-    ground = AssetBaseCfg(
-        prim_path="/World/ground",
-        spawn=sim_utils.GroundPlaneCfg(),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -0.76)),
-    )
-
-    table = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Table",
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=vention_table_usd_path,
-        ),
-        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 0.0, -0.0), rot=(0.70711, 0.0, 0.0, 0.70711)),
-    )
-
+class PackSceneCfg(BaseSceneCfg):
+    """Configuration for the scene with totes."""
     tote1 = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/Tote1",
         spawn=sim_utils.UsdFileCfg(
@@ -150,17 +135,9 @@ class PackSceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
     )
 
-    # robots
-    right_robot: ArticulationCfg | None = None
-    # left_robot: ArticulationCfg | None = None
-
-    # lights
-    light = AssetBaseCfg(
-        prim_path="/World/light",
-        spawn=sim_utils.DomeLightCfg(color=(0.75, 0.75, 0.75), intensity=2500.0),
-    )
-
     def __post_init__(self):
+        super().__post_init__()
+
         for i in range(num_object_per_env):
             setattr(
                 self,

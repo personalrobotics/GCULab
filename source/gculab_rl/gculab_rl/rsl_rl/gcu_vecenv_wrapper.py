@@ -12,7 +12,7 @@ import torch
 from isaaclab.envs import DirectRLEnv, ManagerBasedRLEnv
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 from packing3d import Attitude, Position, Transform
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+from geodude.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
 
@@ -125,10 +125,14 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         x = actions[:, 0]
         y = actions[:, 1]
 
-        bbox_offset = self.env.unwrapped.tote_manager.obj_bboxes[
-            torch.arange(actions.shape[0], device=self.env.unwrapped.device),
-            torch.tensor(object_to_pack, device=self.env.unwrapped.device),
-        ]
+        bbox_offset = torch.stack([
+            self.env.unwrapped.tote_manager.get_object_bbox(env_idx, obj_idx)
+            for env_idx, obj_idx in zip(
+                torch.arange(actions.shape[0], device=self.env.unwrapped.device),
+                object_to_pack,
+            )
+        ])
+        
         rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]

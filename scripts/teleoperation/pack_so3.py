@@ -55,7 +55,7 @@ import isaaclab_tasks  # noqa: F401
 import numpy as np
 import omni.log
 import torch
-import tote_consolidation.tasks  # noqa: F401
+import geodude.tasks  # noqa: F401
 from gculab.devices import Se3Keyboard, Se3KeyboardCfg
 from gculab.envs.mdp.recorders.recorders_cfg import (
     ActionStateSensorObservationsRecorderManagerCfg,
@@ -68,7 +68,7 @@ from isaaclab_tasks.utils import parse_env_cfg
 from isaacsim.core.api.objects import cuboid
 from pack_helpers import get_z_position_from_depth, snap_to_theta_continuous
 from tensordict import TensorDict
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+from geodude.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
 
@@ -254,9 +254,20 @@ def main():
         env.unwrapped.step(actions)
         get_new_obj = True
 
+        env.unwrapped.scene.write_data_to_sim()
+        env.unwrapped.scene.update(dt=env.unwrapped.physics_dt)
+        env.unwrapped.sim.forward()
+        env.unwrapped.sim.render()
+        obs = env.unwrapped.observation_manager.compute()
+        if "sensor" in obs:
+            image_obs = obs["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
+
+
     def undo_place() -> None:
         nonlocal last_objects_positions
         nonlocal get_new_obj
+        nonlocal image_obs
+        nonlocal last_placed_object
 
         print("Undoing last object placement...")
         if last_objects_positions == {}:
@@ -273,6 +284,20 @@ def main():
         print("Last object placement undone.")
 
         get_new_obj = False
+
+        # Turn asset invisble
+        asset = env.unwrapped.scene[f"object{last_placed_object.item()}"]
+        asset.set_visibility(False, env_ids=torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device))
+
+        env.unwrapped.scene.write_data_to_sim()
+        env.unwrapped.scene.update(dt=env.unwrapped.physics_dt)
+        env.unwrapped.sim.forward()
+        env.unwrapped.sim.render()
+        obs = env.unwrapped.observation_manager.compute()
+        if "sensor" in obs:
+            image_obs = obs["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
+
+        asset.set_visibility(True, env_ids=torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device))
 
     def reset_target_cube() -> None:
         target.set_world_pose(np.array([0.5, -0.7, 0.2]), np.array([0, 0, 0, 1]))
@@ -350,6 +375,7 @@ def main():
     )
 
     # simulate environment
+    iteration = 0
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
@@ -372,7 +398,7 @@ def main():
                 asset = env.unwrapped.scene[f"object{object_to_pack.item()}"]
                 asset.set_visibility(True, env_ids=torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device))
             elif last_placed_object is not None:
-                object_to_pack = torch.tensor(last_placed_object, device=env.unwrapped.device)
+                object_to_pack = last_placed_object
                 last_placed_object = None
 
             cube_position, cube_orientation = target.get_world_pose()
@@ -433,9 +459,6 @@ def main():
             env.unwrapped.scene.write_data_to_sim()
             env.unwrapped.sim.forward()
             env.unwrapped.sim.render()
-            obs = env.unwrapped.observation_manager.compute()
-            if "sensor" in obs:
-                image_obs = obs["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
 
     # close the simulator
     env.close()

@@ -15,7 +15,7 @@ from isaaclab.managers.action_manager import ActionTerm
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
 from isaacsim.core.prims import XFormPrim
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (
+from geodude.tasks.manager_based.pack.utils.tote_helpers import (
     calculate_rotated_bounding_box,
 )
 
@@ -111,7 +111,11 @@ class PackingAction(ActionTerm):
                 [self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device
             ).repeat(self.num_envs, 1)
 
-            bbox_offset = self._env.tote_manager.get_object_bbox(batch_indices, actions[:, 1].long()).unsqueeze(0)
+            bbox_offset = torch.stack([
+                self._env.tote_manager.get_object_bbox(env_idx, obj_idx.item())
+                for env_idx, obj_idx in zip(batch_indices, actions[:, 1].long())
+            ])
+
             rotated_half_dim = (
                 calculate_rotated_bounding_box(
                     bbox_offset, self._processed_actions[:, 5:9].squeeze(1), device=self.device

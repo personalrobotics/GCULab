@@ -11,7 +11,7 @@ import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
-from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (  # Multiprocessing versions
+from geodude.tasks.manager_based.pack.utils.tote_helpers import (  # Multiprocessing versions
     calculate_rotated_bounding_box,
     calculate_tote_bounds,
     generate_orientations_batched,
@@ -19,7 +19,7 @@ from tote_consolidation.tasks.manager_based.pack.utils.tote_helpers import (  # 
     reappear_tote_animation,
     update_object_positions_in_sim_batched,
 )
-from tote_consolidation.tasks.manager_based.pack.utils.tote_statistics import (
+from geodude.tasks.manager_based.pack.utils.tote_statistics import (
     ToteStatistics,
 )
 
@@ -65,10 +65,6 @@ class ToteManager:
         self.tote_volume = torch.prod(self.true_tote_dim).item()
         self.num_envs = env.num_envs
         self.num_objects = cfg.num_object_per_env  # in cm
-        self.obj_volumes = torch.zeros(self.num_envs, self.num_objects, device=env.device)
-        self.obj_bboxes = torch.zeros(self.num_envs, self.num_objects, 3, device=env.device)
-        self.obj_latents = torch.zeros(self.num_envs, self.num_objects, 512, 8, device=env.device)
-        self.obj_voxels = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         self.obj_asset_paths = [[None for _ in range(self.num_objects)] for _ in range(self.num_envs)]
         # Store unique object properties by asset path (volume, bbox, voxels)
         self.unique_object_properties = {}
@@ -107,6 +103,7 @@ class ToteManager:
 
         self.animate = cfg.animate_vis
         self.obj_settle_wait_steps = cfg.obj_settle_wait_steps
+        self.last_action_pos_quat = torch.zeros(self.num_envs, 7, device=env.device)
 
         self.env = env
         self.device = env.device

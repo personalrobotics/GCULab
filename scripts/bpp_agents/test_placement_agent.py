@@ -37,7 +37,7 @@ from datetime import datetime
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-import tote_consolidation.tasks  # noqa: F401
+import geodude.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
 
 

@@ -17,8 +17,8 @@ from isaaclab.managers import EventManager
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
-from tote_consolidation.tasks.manager_based.pack.utils import bpp_utils
-from tote_consolidation.tasks.manager_based.pack.utils.tote_manager import ToteManager
+from geodude.tasks.manager_based.pack.utils import bpp_utils
+from geodude.tasks.manager_based.pack.utils.tote_manager import ToteManager
 
 
 class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
@@ -115,7 +115,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             self.event_manager.apply(mode="prestartup")
 
         # Initialize the ToteManager
-        self.tote_manager = ToteManager(cfg.tote_manager, self)
+        self.tote_manager = ToteManager(self.cfg.tote_manager, self)
 
         # play the simulator to activate physics handles
         # note: this activates the physics simulation view that exposes TensorAPIs
