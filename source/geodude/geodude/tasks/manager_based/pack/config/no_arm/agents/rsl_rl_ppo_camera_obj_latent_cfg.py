@@ -22,7 +22,6 @@ class NoArmPackPPOCameraObjLatentRunnerCfg(RslRlOnPolicyRunnerCfg):
         activation="elu",
         conv_layers_params=[
             {"out_channels": 4, "kernel_size": 3, "stride": 2, "padding": 1},
-            # {"out_channels": 8, "kernel_size": 3, "stride": 2},
             {"out_channels": 16, "kernel_size": 3, "stride": 2},
         ],
         conv_linear_output_size=128,  # Project 128×13×10 into 256-dim

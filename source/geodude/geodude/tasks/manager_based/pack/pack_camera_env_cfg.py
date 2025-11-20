@@ -74,9 +74,7 @@ class DepthObservationsCfg:
     @configclass
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
-
         # observation terms (order preserved)
-        # last_action = ObsTerm(func=mdp.last_action)
         obs_lookahead = ObsTerm(func=mdp.obs_lookahead, params={"max_objects": 1})
 
     class SensorCfg(ObsGroup):
