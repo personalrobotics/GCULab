@@ -136,8 +136,8 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
-        x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
-        y = torch.sigmoid(y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
+        x = torch.sigmoid(5 * x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
+        y = torch.sigmoid(5 * y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
 
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)

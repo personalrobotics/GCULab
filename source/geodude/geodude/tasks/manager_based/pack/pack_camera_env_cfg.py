@@ -76,12 +76,31 @@ class DepthObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        # actions = ObsTerm(func=mdp.last_action)
-        obs_dims = ObsTerm(func=mdp.obs_dims)
+        # last_action = ObsTerm(func=mdp.last_action)
+        obs_lookahead = ObsTerm(func=mdp.obs_lookahead, params={"max_objects": 1})
 
-        # def __post_init__(self):
-        #     self.enable_corruption = True
-        #     self.concatenate_terms = True
+    class SensorCfg(ObsGroup):
+        """Observations for sensor group."""
+
+        image = ObsTerm(
+            func=mdp.image, params={"sensor_cfg": SceneEntityCfg("tiled_camera"), "data_type": "distance_to_camera"}
+        )
+
+    # observation groups
+    policy: PolicyCfg = PolicyCfg()
+    sensor: SensorCfg = SensorCfg()
+
+
+@configclass
+class DepthObservationsObjLatentCfg:
+    """Observation specifications for the MDP."""
+
+    @configclass
+    class PolicyCfg(ObsGroup):
+        """Observations for policy group."""
+
+        # observation terms (order preserved)
+        obs_latents = ObsTerm(func=mdp.obs_latents)
 
     class SensorCfg(ObsGroup):
         """Observations for sensor group."""
@@ -148,6 +167,17 @@ class PackDepthCameraEnvCfg(PackEnvCfg):
         super().__post_init__()
         # remove ground as it obstructs the camera
         # self.scene.ground = None
+
+class PackDepthCameraObjLatentEnvCfg(PackEnvCfg):
+    """Configuration for the packing environment with depth camera and object latents."""
+
+    scene: PackDepthCameraSceneCfg = PackDepthCameraSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
+    observations: DepthObservationsObjLatentCfg = DepthObservationsObjLatentCfg()
+
+    def __post_init__(self):
+        super().__post_init__()
+        # remove ground as it obstructs the camera
+        self.scene.ground = None
 
 
 @configclass
