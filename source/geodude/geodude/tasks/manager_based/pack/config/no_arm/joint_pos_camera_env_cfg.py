@@ -7,6 +7,7 @@ import geodude.tasks.manager_based.pack.mdp as mdp
 from isaaclab.utils import configclass
 from geodude.tasks.manager_based.pack.pack_camera_env_cfg import (
     PackDepthCameraEnvCfg,
+    PackDepthCameraObjLatentEnvCfg,
 )
 
 ##
@@ -16,6 +17,18 @@ from geodude.tasks.manager_based.pack.pack_camera_env_cfg import (
 
 @configclass
 class NoArmPackCameraEnvCfg(PackDepthCameraEnvCfg):
+    def __post_init__(self):
+        # post init of parent
+        super().__post_init__()
+
+        self.scene.robot = None
+        self.actions.packing_action = mdp.PackingActionCfg(
+            asset_name="tote1", place_obj_bottomLeft=True
+        )  # asset name is not used in this env
+
+
+@configclass
+class NoArmPackCameraObjLatentEnvCfg(PackDepthCameraObjLatentEnvCfg):
     def __post_init__(self):
         # post init of parent
         super().__post_init__()

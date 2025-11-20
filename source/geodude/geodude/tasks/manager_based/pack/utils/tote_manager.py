@@ -233,7 +233,18 @@ class ToteManager:
                 bboxes[i, j] = self.get_object_bbox(env_idx, obj_idx)
         return bboxes
 
-    def get_object_latents_batch(self, env_ids, obj_indices):
+    def set_object_latents(self, obj_latents, env_ids):
+        """
+        Set object latents for specified environments.
+
+        Args:
+            obj_latents: Tensor of object latents
+            env_ids: Environment IDs to update
+        """
+        self.obj_latents[env_ids] = obj_latents
+
+
+    def set_object_voxels(self, obj_voxels):
         """
         Get object latents for a batch of environments and objects.
 
@@ -494,23 +505,23 @@ class ToteManager:
                 self.tote_keys,
             )
 
-        # # Log destination tote ejections
-        overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
-        overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
-        overfilled_totes = overfilled_totes[env_ids]
-        outbound_gcus = self.get_gcu(env_ids)
-        if self.log_stats:
-            if is_dest:
-                # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
-                #     print("logging dest tote for env_idx:", env_idx)
-                #     self.env.unwrapped.bpp.update_container_heightmap(
-                #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
-                #     )
-                #     self.stats.log_container(env_idx, problem.container)
-                self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
-            self.stats.log_tote_eject_gcus(
-                torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
-            )
+        # Log destination tote ejections
+        # overfilled_totes = torch.zeros((self.num_envs, self.num_totes), dtype=torch.bool, device=self.env.device)
+        # overfilled_totes[env_ids[overfilled_envs], tote_ids[overfilled_envs]] = True
+        # overfilled_totes = overfilled_totes[env_ids]
+        # outbound_gcus = self.get_gcu(env_ids)
+        # if self.log_stats:
+        #     if is_dest:
+        #         # for env_idx, problem in zip(env_ids[overfilled_envs].tolist(), [self.env.unwrapped.bpp.problems[i.item()] for i in env_ids[overfilled_envs]]):
+        #         #     print("logging dest tote for env_idx:", env_idx)
+        #         #     self.env.unwrapped.bpp.update_container_heightmap(
+        #         #         self.env, torch.tensor([env_idx], device=self.env.device), torch.zeros((self.num_envs), device=self.env.device).int()
+        #         #     )
+        #         #     self.stats.log_container(env_idx, problem.container)
+        #         self.stats.log_dest_tote_ejection(tote_ids[overfilled_envs], env_ids[overfilled_envs])
+        #     self.stats.log_tote_eject_gcus(
+        #         torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
+        #     )
 
         assets_to_eject = []
         for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):

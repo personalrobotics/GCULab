@@ -61,17 +61,15 @@ import torch
 import geodude.tasks  # noqa: F401
 from gculab_rl.rsl_rl import (
     RslRlGCUVecEnvWrapper,
-    export_policy_as_jit,
-    export_policy_as_onnx,
 )
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
 from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
-from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
+from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner, GCUOnPolicyConv2dPointNetRunner
 from rsl_rl.utils import normalize_and_flatten_image_obs
 
 
@@ -122,7 +120,7 @@ def main():
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     # wrap around environment for rsl-rl
-    if agent_cfg.policy.class_name == "ActorCriticConv2d":
+    if agent_cfg.policy.class_name == "ActorCriticConv2d" or agent_cfg.policy.class_name == "ActorCriticConv2dPointNet":
         env = RslRlGCUVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
     else:
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
@@ -131,6 +129,8 @@ def main():
     # load previously trained model
     if agent_cfg.policy.class_name == "ActorCriticConv2d":
         ppo_runner = GCUOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    elif agent_cfg.policy.class_name == "ActorCriticConv2dPointNet":
+        ppo_runner = GCUOnPolicyConv2dPointNetRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     else:
         ppo_runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     ppo_runner.load(resume_path)
@@ -191,13 +191,13 @@ def main():
             print(
                 "GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device))
             )
-            # print("\n===== Ejection Summary =====")
-            # print(f"Total steps: {stats['total_steps']}")
-            # if ejection_summary != {}:
-            #     for i in range(len(ejection_summary.keys())):
-            #         env_id = list(ejection_summary.keys())[i]
-            #         print(ejection_summary[env_id])
-            #     print("==========================\n")
+            print("\n===== Ejection Summary =====")
+            print(f"Total steps: {stats['total_steps']}")
+            if ejection_summary != {}:
+                for i in range(len(ejection_summary.keys())):
+                    env_id = list(ejection_summary.keys())[i]
+                    print(ejection_summary[env_id])
+                print("==========================\n")
             # env.unwrapped.bpp.update_container_heightmap(env, torch.arange(args_cli.num_envs).to(env.unwrapped.device), torch.zeros(args_cli.num_envs, device=env.unwrapped.device).int())
             # env stepping
             obs, _, _, infos = env.step(actions, image_obs=image_obs)

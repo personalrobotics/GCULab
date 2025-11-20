@@ -95,7 +95,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
-from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
+from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner, GCUOnPolicyConv2dPointNetRunner
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -164,7 +164,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         env = gym.wrappers.RecordVideo(env, **video_kwargs)
 
     # wrap around environment for rsl-rl
-    if agent_cfg.policy.class_name == "ActorCriticConv2d":
+    if agent_cfg.policy.class_name == "ActorCriticConv2d" or agent_cfg.policy.class_name == "ActorCriticConv2dPointNet":
         env = RslRlGCUVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
     else:
         env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
@@ -172,6 +172,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # create runner from rsl-rl
     if agent_cfg.policy.class_name == "ActorCriticConv2d":
         runner = GCUOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+    elif agent_cfg.policy.class_name == "ActorCriticConv2dPointNet":
+        runner = GCUOnPolicyConv2dPointNetRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     else:
         runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
     # write git state to logs

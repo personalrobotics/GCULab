@@ -3,30 +3,34 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-from gculab_rl.rsl_rl import RslRlPpoActorCriticConv2dCfg
+from gculab_rl.rsl_rl import RslRlPpoActorCriticConv2dPointNetCfg
 from isaaclab.utils import configclass
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg
+from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
 from gculab_rl.rsl_rl import RslRlGCUPpoAlgorithmCfg
 
-
 @configclass
-class NoArmPackPPOCameraRunnerCfg(RslRlOnPolicyRunnerCfg):
+class NoArmPackPPOCameraObjLatentRunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 4
     max_iterations = 3000
     save_interval = 10
     experiment_name = "no_arm_pack"
-    empirical_normalization = False
-    policy = RslRlPpoActorCriticConv2dCfg(
+    empirical_normalization = True
+    policy = RslRlPpoActorCriticConv2dPointNetCfg(
         init_noise_std=1.5,
         actor_hidden_dims=[128, 128],
         critic_hidden_dims=[128, 128],
         activation="elu",
         conv_layers_params=[
             {"out_channels": 4, "kernel_size": 3, "stride": 2, "padding": 1},
-            # {"out_channels": 8, "kernel_size": 3, "stride": 2},
             {"out_channels": 16, "kernel_size": 3, "stride": 2},
         ],
-        conv_linear_output_size=128,  # Project 128×13×10 into 128-dim
+        conv_linear_output_size=128,  # Project 128×13×10 into 256-dim
+        pointnet_layers_params=[
+            {"out_channels": 64},
+            {"out_channels": 256},
+        ],
+        pointnet_in_dim=8,
+        pointnet_num_points=512,
     )
     algorithm = RslRlGCUPpoAlgorithmCfg(
         value_loss_coef=0.5,
