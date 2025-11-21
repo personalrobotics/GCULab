@@ -249,7 +249,8 @@ def object_props(
                     print("bbox: ", bbox)
                     vox = compute_voxelized_geometry_usd(mesh, bbox, scale=scale)
                     volume = mesh_volume(mesh) * (scale**3)
-                    latents = load_latents(asset_path)
+                    # latents = load_latents(asset_path)
+                    latents = None
                     mesh_properties_cache[asset_path] = (volume, bbox, vox, latents)
     # Store only the unique properties and asset paths in tote_manager
     env.tote_manager.set_object_asset_paths(obj_asset_paths, torch.arange(env.num_envs, device=env.device))
