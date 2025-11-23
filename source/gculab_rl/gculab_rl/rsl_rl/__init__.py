@@ -17,3 +17,4 @@ The following example shows how to wrap an environment for RSL-RL:
 
 from .gcu_vecenv_wrapper import RslRlGCUVecEnvWrapper
 from .rl_cfg import RslRlPpoActorCriticConv2dCfg, RslRlGCUPpoAlgorithmCfg, RslRlPpoActorCriticConv2dPointNetCfg
+from .exporter import export_policy_as_jit, export_policy_as_onnx
