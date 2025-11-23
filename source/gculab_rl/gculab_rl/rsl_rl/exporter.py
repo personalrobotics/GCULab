@@ -95,14 +95,23 @@ class _TorchPolicyExporter(torch.nn.Module):
             proprio_obs = x[:, : self.proprio_obs_size]
             image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            x = torch.cat([normalized_proprio, image_obs], dim=1)
+            # RNN processes full observations (proprio + image)
+            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (self.hidden_state, self.cell_state))
+            self.hidden_state[:] = h
+            self.cell_state[:] = c
+            rnn_output = rnn_output.squeeze(0)
+            # For Conv2D networks, actor expects [rnn_output, image_obs]
+            actor_input = torch.cat([rnn_output, image_obs], dim=1)
         else:
-            x = self.normalizer(x)
-        x, (h, c) = self.rnn(x.unsqueeze(0), (self.hidden_state, self.cell_state))
-        self.hidden_state[:] = h
-        self.cell_state[:] = c
-        x = x.squeeze(0)
-        return self.actor(x)
+            rnn_input = self.normalizer(x)
+            rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (self.hidden_state, self.cell_state))
+            self.hidden_state[:] = h
+            self.cell_state[:] = c
+            rnn_output = rnn_output.squeeze(0)
+            actor_input = rnn_output
+        
+        return self.actor(actor_input)
 
     def forward_gru(self, x):
         if self.is_conv2d:
@@ -110,13 +119,21 @@ class _TorchPolicyExporter(torch.nn.Module):
             proprio_obs = x[:, : self.proprio_obs_size]
             image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            x = torch.cat([normalized_proprio, image_obs], dim=1)
+            # RNN processes full observations (proprio + image)
+            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            rnn_output, h = self.rnn(rnn_input.unsqueeze(0), self.hidden_state)
+            self.hidden_state[:] = h
+            rnn_output = rnn_output.squeeze(0)
+            # For Conv2D networks, actor expects [rnn_output, image_obs]
+            actor_input = torch.cat([rnn_output, image_obs], dim=1)
         else:
-            x = self.normalizer(x)
-        x, h = self.rnn(x.unsqueeze(0), self.hidden_state)
-        self.hidden_state[:] = h
-        x = x.squeeze(0)
-        return self.actor(x)
+            rnn_input = self.normalizer(x)
+            rnn_output, h = self.rnn(rnn_input.unsqueeze(0), self.hidden_state)
+            self.hidden_state[:] = h
+            rnn_output = rnn_output.squeeze(0)
+            actor_input = rnn_output
+        
+        return self.actor(actor_input)
 
     def forward(self, x):
         if self.is_conv2d:
@@ -193,12 +210,19 @@ class _OnnxPolicyExporter(torch.nn.Module):
             proprio_obs = x_in[:, : self.proprio_obs_size]
             image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            x_in = torch.cat([normalized_proprio, image_obs], dim=1)
+            # RNN processes full observations (proprio + image)
+            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (h_in, c_in))
+            rnn_output = rnn_output.squeeze(0)
+            # For Conv2D networks, actor expects [rnn_output, image_obs]
+            actor_input = torch.cat([rnn_output, image_obs], dim=1)
         else:
-            x_in = self.normalizer(x_in)
-        x, (h, c) = self.rnn(x_in.unsqueeze(0), (h_in, c_in))
-        x = x.squeeze(0)
-        return self.actor(x), h, c
+            rnn_input = self.normalizer(x_in)
+            rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (h_in, c_in))
+            rnn_output = rnn_output.squeeze(0)
+            actor_input = rnn_output
+        
+        return self.actor(actor_input), h, c
 
     def forward_gru(self, x_in, h_in):
         if self.is_conv2d:
@@ -206,12 +230,19 @@ class _OnnxPolicyExporter(torch.nn.Module):
             proprio_obs = x_in[:, : self.proprio_obs_size]
             image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            x_in = torch.cat([normalized_proprio, image_obs], dim=1)
+            # RNN processes full observations (proprio + image)
+            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            rnn_output, h = self.rnn(rnn_input.unsqueeze(0), h_in)
+            rnn_output = rnn_output.squeeze(0)
+            # For Conv2D networks, actor expects [rnn_output, image_obs]
+            actor_input = torch.cat([rnn_output, image_obs], dim=1)
         else:
-            x_in = self.normalizer(x_in)
-        x, h = self.rnn(x_in.unsqueeze(0), h_in)
-        x = x.squeeze(0)
-        return self.actor(x), h
+            rnn_input = self.normalizer(x_in)
+            rnn_output, h = self.rnn(rnn_input.unsqueeze(0), h_in)
+            rnn_output = rnn_output.squeeze(0)
+            actor_input = rnn_output
+        
+        return self.actor(actor_input), h
 
     def forward(self, x):
         if self.is_conv2d:
