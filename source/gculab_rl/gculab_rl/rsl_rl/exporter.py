@@ -89,20 +89,42 @@ class _TorchPolicyExporter(torch.nn.Module):
             self.normalizer = torch.nn.Identity()
             self.is_conv2d = False
 
+    def extract_conv_features(self, image_obs):
+        """Extract Conv2D features from raw image observations."""
+        batch_size = image_obs.shape[0]
+        if batch_size == 0:
+            return torch.empty(0, self.conv_feature_size, device=image_obs.device, dtype=image_obs.dtype)
+        
+        # Reshape to image format
+        image = image_obs.view(batch_size, *self.actor.image_input_shape)  # [batch, C, H, W]
+        
+        # Extract Conv2D features
+        conv_features = self.actor.conv_net(image)  # [batch, out_channels, H', W']
+        flattened_conv_features = conv_features.view(conv_features.shape[0], -1)  # [batch, image_feature_size]
+        normalized_conv_features = self.actor.layernorm(self.actor.conv_linear(flattened_conv_features))  # [batch, conv_feature_size]
+        
+        return normalized_conv_features
+
     def forward_lstm(self, x):
         if self.is_conv2d:
             # For Conv2D networks, only normalize the proprioceptive part
             proprio_obs = x[:, : self.proprio_obs_size]
             image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            # RNN processes full observations (proprio + image)
-            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            
+            # Extract Conv2D features from images first
+            conv_features = self.extract_conv_features(image_obs)  # [batch, conv_feature_size]
+            
+            # RNN processes [proprio + Conv2D_features] (not raw pixels)
+            rnn_input = torch.cat([normalized_proprio, conv_features], dim=1)
             rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (self.hidden_state, self.cell_state))
             self.hidden_state[:] = h
             self.cell_state[:] = c
             rnn_output = rnn_output.squeeze(0)
-            # For Conv2D networks, actor expects [rnn_output, image_obs]
-            actor_input = torch.cat([rnn_output, image_obs], dim=1)
+            
+            # RNN output already contains temporal information about both proprio and Conv2D features
+            # No need to add Conv2D features again
+            actor_input = rnn_output
         else:
             rnn_input = self.normalizer(x)
             rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (self.hidden_state, self.cell_state))
@@ -119,13 +141,19 @@ class _TorchPolicyExporter(torch.nn.Module):
             proprio_obs = x[:, : self.proprio_obs_size]
             image_obs = x[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            # RNN processes full observations (proprio + image)
-            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            
+            # Extract Conv2D features from images first
+            conv_features = self.extract_conv_features(image_obs)  # [batch, conv_feature_size]
+            
+            # RNN processes [proprio + Conv2D_features] (not raw pixels)
+            rnn_input = torch.cat([normalized_proprio, conv_features], dim=1)
             rnn_output, h = self.rnn(rnn_input.unsqueeze(0), self.hidden_state)
             self.hidden_state[:] = h
             rnn_output = rnn_output.squeeze(0)
-            # For Conv2D networks, actor expects [rnn_output, image_obs]
-            actor_input = torch.cat([rnn_output, image_obs], dim=1)
+            
+            # RNN output already contains temporal information about both proprio and Conv2D features
+            # No need to add Conv2D features again
+            actor_input = rnn_output
         else:
             rnn_input = self.normalizer(x)
             rnn_output, h = self.rnn(rnn_input.unsqueeze(0), self.hidden_state)
@@ -200,9 +228,27 @@ class _OnnxPolicyExporter(torch.nn.Module):
                 # For Conv2D networks, the normalizer was trained with only proprioceptive obs
                 self.proprio_obs_size = normalizer._mean.shape[1]  # Get the size from normalizer
                 self.image_obs_size = torch.prod(torch.tensor(self.actor.image_input_shape)).item()
+                # Get Conv2D feature size (after conv_linear and layernorm)
+                self.conv_feature_size = self.actor.conv_linear_output_size
         else:
             self.normalizer = torch.nn.Identity()
             self.is_conv2d = False
+
+    def extract_conv_features(self, image_obs):
+        """Extract Conv2D features from raw image observations."""
+        batch_size = image_obs.shape[0]
+        if batch_size == 0:
+            return torch.empty(0, self.conv_feature_size, device=image_obs.device, dtype=image_obs.dtype)
+        
+        # Reshape to image format
+        image = image_obs.view(batch_size, *self.actor.image_input_shape)  # [batch, C, H, W]
+        
+        # Extract Conv2D features
+        conv_features = self.actor.conv_net(image)  # [batch, out_channels, H', W']
+        flattened_conv_features = conv_features.view(conv_features.shape[0], -1)  # [batch, image_feature_size]
+        normalized_conv_features = self.actor.layernorm(self.actor.conv_linear(flattened_conv_features))  # [batch, conv_feature_size]
+        
+        return normalized_conv_features
 
     def forward_lstm(self, x_in, h_in, c_in):
         if self.is_conv2d:
@@ -210,12 +256,18 @@ class _OnnxPolicyExporter(torch.nn.Module):
             proprio_obs = x_in[:, : self.proprio_obs_size]
             image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            # RNN processes full observations (proprio + image)
-            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            
+            # Extract Conv2D features from images first
+            conv_features = self.extract_conv_features(image_obs)  # [batch, conv_feature_size]
+            
+            # RNN processes [proprio + Conv2D_features] (not raw pixels)
+            rnn_input = torch.cat([normalized_proprio, conv_features], dim=1)
             rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (h_in, c_in))
             rnn_output = rnn_output.squeeze(0)
-            # For Conv2D networks, actor expects [rnn_output, image_obs]
-            actor_input = torch.cat([rnn_output, image_obs], dim=1)
+            
+            # RNN output already contains temporal information about both proprio and Conv2D features
+            # No need to add Conv2D features again
+            actor_input = rnn_output
         else:
             rnn_input = self.normalizer(x_in)
             rnn_output, (h, c) = self.rnn(rnn_input.unsqueeze(0), (h_in, c_in))
@@ -230,12 +282,18 @@ class _OnnxPolicyExporter(torch.nn.Module):
             proprio_obs = x_in[:, : self.proprio_obs_size]
             image_obs = x_in[:, self.proprio_obs_size :]
             normalized_proprio = self.normalizer(proprio_obs)
-            # RNN processes full observations (proprio + image)
-            rnn_input = torch.cat([normalized_proprio, image_obs], dim=1)
+            
+            # Extract Conv2D features from images first
+            conv_features = self.extract_conv_features(image_obs)  # [batch, conv_feature_size]
+            
+            # RNN processes [proprio + Conv2D_features] (not raw pixels)
+            rnn_input = torch.cat([normalized_proprio, conv_features], dim=1)
             rnn_output, h = self.rnn(rnn_input.unsqueeze(0), h_in)
             rnn_output = rnn_output.squeeze(0)
-            # For Conv2D networks, actor expects [rnn_output, image_obs]
-            actor_input = torch.cat([rnn_output, image_obs], dim=1)
+            
+            # RNN output already contains temporal information about both proprio and Conv2D features
+            # No need to add Conv2D features again
+            actor_input = rnn_output
         else:
             rnn_input = self.normalizer(x_in)
             rnn_output, h = self.rnn(rnn_input.unsqueeze(0), h_in)
