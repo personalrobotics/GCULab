@@ -20,6 +20,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewardTerm
+from isaaclab.managers import CurriculumTermCfg as CurriculumTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
@@ -55,7 +56,7 @@ for obj_id, obj_name in sorted(available_objects.items()):
 
 # Define which object IDs to include
 ycb_include_ids = [
-    "003",  # cracker_box
+    # "003",  # cracker_box
     # "004",  # sugar_box
     # "006",  # mustard_bottle
     # "007",  # tuna_fish_can
@@ -72,8 +73,24 @@ ycb_include_ids = [
 ]
 
 lw_include_names = [
-    # "cracker_box",
-    # "bowl",
+    "cracker_box",
+    "banana",
+    "bowl",
+    "sugar_box",
+    "mustard_bottle",
+    "tuna_fish_can",
+    "wood_block",
+    "tomato_soup_can",
+    "tennis_ball",
+    "rubiks_cube",
+    # "Rope"
+    "pudding_box",
+    "potted_meat_can",
+    # "plate",
+    "mug",
+    # "mini_soccer_ball",
+    "master_chef_can",
+    "chips_can_berkeley_meshes",
 ]
 
 # Filter USD files based on ID prefixes
@@ -90,7 +107,7 @@ for usd_file in lw_usd_files:
     if base_name in lw_include_names:
         usd_paths.append(usd_file)
 
-num_object_per_env = 20
+num_object_per_env = 80
 
 # Spacing between totes
 tote_spacing = 0.43  # width of tote + gap between totes
@@ -152,8 +169,8 @@ class PackSceneCfg(BaseSceneCfg):
                             kinematic_enabled=False,
                             disable_gravity=False,
                             # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=4,
-                            solver_velocity_iteration_count=0,
+                            # solver_position_iteration_count=10,
+                            # solver_velocity_iteration_count=0,
                             sleep_threshold=0.005,
                             stabilization_threshold=0.0025,
                             # max_depenetration_velocity=1000.0,
@@ -196,6 +213,7 @@ class ObservationsCfg:
         # observation terms (order preserved)
         # actions = ObsTerm(func=mdp.last_action)
         obs_dims = ObsTerm(func=mdp.obs_dims)
+        # obs_lookahead = ObsTerm(func=mdp.obs_lookahead)
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -239,15 +257,15 @@ class EventCfg:
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
+    gcu_reward = RewardTerm(
+        func=mdp.gcu_reward, weight=500.0
+    )
 
-    # gcu_reward = RewardTerm(
-    #     func=mdp.gcu_reward_step, weight=1000.0
-    # )
+    # object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
 
-    object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
-
-    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
-
+    episode_bonus = RewardTerm(func=mdp.episode_bonus, weight=10.0)
+    unused_phi_s = RewardTerm(func=mdp.inverse_wasted_volume, weight=0.0)  # For logging only
+    potential_function_F = RewardTerm(func=mdp.wasted_volume_pbrs, weight=10.0)
 
 @configclass
 class TerminationsCfg:
@@ -261,11 +279,7 @@ class TerminationsCfg:
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
-
     pass
-    # object_shift = CurriculumTerm(
-    #     func=mdp.modify_reward_weight, params={"term_name": "object_shift", "weight": 50.0, "num_steps": 10000}
-    # )
 
 
 @configclass
@@ -286,7 +300,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the reach end-effector pose tracking environment."""
 
     # Scene settings
-    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False)
+    scene: PackSceneCfg = PackSceneCfg(num_envs=512, env_spacing=2.5, replicate_physics=False, clone_in_fabric=True)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -306,7 +320,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 10.0
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
-        self.sim.dt = 1.0 / 90.0
+        self.sim.dt = 1.0 / 60.0
         self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
         self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
         self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20

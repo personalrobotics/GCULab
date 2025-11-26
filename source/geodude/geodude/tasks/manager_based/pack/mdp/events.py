@@ -244,9 +244,7 @@ def object_props(
 
                 # Compute properties only once per unique asset path
                 if asset_path not in mesh_properties_cache:
-                    print("asset_path", asset_path)
                     bbox = compute_mesh_bbox(mesh) * scale
-                    print("bbox: ", bbox)
                     vox = compute_voxelized_geometry_usd(mesh, bbox, scale=scale)
                     volume = mesh_volume(mesh) * (scale**3)
                     latents = load_latents(asset_path)
@@ -731,7 +729,7 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
     return inverse_wasted_volume
 
 
-def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma=0.99):
+def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma = 0.99):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
     1 - (% top down volume - GCU of objects).
@@ -750,17 +748,18 @@ def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma=0.99):
     top_down_volumes = torch.sum(top_down_volumes_, dim=(1, 2))  # Sum over heightmap dimensions
 
     top_down_volumes = (top_down_volumes / total_volume).squeeze(1)
-    objects_volume = env.tote_manager.stats.recent_gcu_values[
-        torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
-    ]
-    inverse_wasted_volume = objects_volume / (top_down_volumes + 1e-6)
+    objects_volume = (
+        env.tote_manager.stats.recent_gcu_values[
+            torch.arange(env.num_envs, device=env.device), env.tote_manager.dest_totes
+        ]
+    )
+    inverse_wasted_volume = objects_volume / (top_down_volumes + 1e-9)
+    if env.tote_manager.reset_pbrs.any():
+        inverse_wasted_volume[env.tote_manager.reset_pbrs] = 0
+        env.tote_manager.reset_pbrs[env.tote_manager.reset_pbrs] = False
     pbrs = gamma * inverse_wasted_volume - last_pbrs
     env.tote_manager.last_pbrs = inverse_wasted_volume
-    if env.tote_manager.reset_pbrs.any():
-        env.tote_manager.last_pbrs[env.tote_manager.reset_pbrs] = 0
-        env.tote_manager.reset_pbrs[env.tote_manager.reset_pbrs] = False
     return pbrs
-
 
 def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     """Checks if any object is overfilled the tote.

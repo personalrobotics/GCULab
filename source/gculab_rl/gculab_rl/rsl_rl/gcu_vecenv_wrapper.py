@@ -129,15 +129,18 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
             self.env.unwrapped.tote_manager.get_object_bbox(env_idx, obj_idx)
             for env_idx, obj_idx in zip(
                 torch.arange(actions.shape[0], device=self.env.unwrapped.device),
-                object_to_pack,
+                object_to_pack
             )
         ])
-        
-        rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
+        rotated_dim = (
+            calculate_rotated_bounding_box(
+                bbox_offset, quats, device=self.env.unwrapped.device
+            )
+        )
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]
         y_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1]
-        x = torch.sigmoid(x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
-        y = torch.sigmoid(y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
+        x = torch.sigmoid(5 * x) * (self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0])
+        y = torch.sigmoid(5 * y) * (self.env.unwrapped.tote_manager.true_tote_dim[1] / 100 - rotated_dim[:, 1])
 
         # Compute z analytically for each sample in the batch using multiprocessing
         z = torch.zeros_like(x)
@@ -206,9 +209,17 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
             torch.arange(self.env.unwrapped.num_envs, device=self.env.unwrapped.device),
             tote_ids,
         )[0]
-        object_to_pack = [row[0] for row in packable_objects]
+
+        # Update FIFO queues with new packable objects
+        self.env.unwrapped.bpp.update_fifo_queues(packable_objects)
+
+        # Select objects using FIFO (First In, First Out) ordering
+        object_to_pack = self.env.unwrapped.bpp.select_fifo_packable_objects(packable_objects, self.env.unwrapped.device)
+        # Remove the selected object from the front of the queue
+        self.env.unwrapped.bpp.remove_selected_from_fifo(object_to_pack)
+
         for i in range(self.env.unwrapped.num_envs):
-            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()]))
+            self.unwrapped.bpp.packed_obj_idx[i].append(torch.tensor([object_to_pack[i].item()], device=self.env.unwrapped.device))
 
         actions, xy_pos_range, rotated_dim = self._convert_to_pos_quat(actions, object_to_pack)
 
@@ -217,7 +228,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         actions = torch.cat(
             [
                 tote_ids.unsqueeze(1).to(self.env.unwrapped.device),  # Destination tote IDs
-                torch.tensor(object_to_pack, device=self.env.unwrapped.device).unsqueeze(1),  # Object indices
+                object_to_pack.unsqueeze(1),  # Object indices
                 actions,
             ],
             dim=1,
