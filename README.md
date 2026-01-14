@@ -18,7 +18,7 @@ This will be adapted to use depth camera (#13)
 # For training
 python scripts/rsl_rl/train.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 2 --enable_cameras --headless
 # For inference
-python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-Camera-v0  --num_envs 2 --enable_camera --headless
+python scripts/rsl_rl/play.py --task=Isaac-Pack-NoArm-Camera-v0  --num_envs 2 --enable_cameras --headless
 ```
 
 #### Pack Task
