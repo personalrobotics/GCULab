@@ -87,6 +87,9 @@ cd Packing-3D-RL
 pip install -e .
 ```
 
+### Step 6: Fixing Dependency Issues with IsaacLab
+You may run into some dependency issues if you are running certain versions of IsaacLab. I was personally able to fix my issues by replacing a file in IsaacLab (IsaacLab/source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py)with an older version found here: https://github.com/isaac-sim/IsaacLab/blob/931679641ee84e1b4175c15b48f9286d44ba9b04/source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py
+
 ---
 ## Running Tasks with RL Agents
 

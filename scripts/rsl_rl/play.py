@@ -55,10 +55,10 @@ simulation_app = app_launcher.app
 import os
 import time
 
+import geodude.tasks  # noqa: F401
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
-import geodude.tasks  # noqa: F401
 from gculab_rl.rsl_rl import (
     RslRlGCUVecEnvWrapper,
     export_policy_as_jit,
@@ -67,8 +67,8 @@ from gculab_rl.rsl_rl import (
 from isaaclab.envs import DirectMARLEnv, multi_agent_to_single_agent
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.dict import print_dict
-from isaaclab.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+from isaaclab_rl.utils.pretrained_checkpoint import get_published_pretrained_checkpoint
 from isaaclab_tasks.utils import get_checkpoint_path, parse_env_cfg
 
 from rsl_rl.runners import GCUOnPolicyRunner, OnPolicyRunner
@@ -172,7 +172,7 @@ def main():
             # agent stepping
             if args_cli.random:
                 # Get action shape from environment
-                action_shape = env.action_space.shape
+                # action_shape = env.action_space.shape
                 action_dim = 74
                 # Generate random actions in [-1, 1] 2 dimensions for placement and 3 dimensions for orientation
                 actions = torch.rand(args_cli.num_envs, action_dim, device=env.unwrapped.device) * 2 - 1
@@ -186,8 +186,8 @@ def main():
             else:
                 actions = policy(obs)
 
-            stats = env.unwrapped.tote_manager.get_stats_summary()
-            ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
+            # stats = env.unwrapped.tote_manager.get_stats_summary()
+            # ejection_summary = env.unwrapped.tote_manager.stats.get_ejection_summary()
             print(
                 "GCU ", env.unwrapped.tote_manager.get_gcu(torch.arange(args_cli.num_envs, device=env.unwrapped.device))
             )
