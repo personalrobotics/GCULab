@@ -51,17 +51,17 @@ repos:
   #   rev: v1.1.315
   #   hooks:
   #   - id: pyright
-  - repo: https://github.com/Lucas-C/pre-commit-hooks
-    rev: v1.5.1
-    hooks:
-      - id: insert-license
-        files: \.py$
-        args:
-          # - --remove-header    # Remove existing license headers. Useful when updating license.
-          - --license-filepath
-          - .github/LICENSE_HEADER.txt
-          - --use-current-year
-        exclude: "source/isaaclab_mimic/|scripts/imitation_learning/isaaclab_mimic/"
+  # - repo: https://github.com/Lucas-C/pre-commit-hooks
+  #   rev: v1.5.1
+  #   hooks:
+  #     - id: insert-license
+  #       files: \.py$
+  #       args:
+  #         # - --remove-header    # Remove existing license headers. Useful when updating license.
+  #         - --license-filepath
+  #         - .github/LICENSE_HEADER.txt
+  #         - --use-current-year
+  #       exclude: "source/isaaclab_mimic/|scripts/imitation_learning/isaaclab_mimic/"
   # Apache 2.0 license for mimic files
   - repo: https://github.com/Lucas-C/pre-commit-hooks
     rev: v1.5.1
