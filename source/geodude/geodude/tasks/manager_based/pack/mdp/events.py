@@ -210,8 +210,12 @@ def object_props(
         asset_filename = os.path.basename(asset_path).replace(".usd", "")
         # Construct path to latents subfolder
         latents_path = os.path.join(asset_dir, "latents", f"{asset_filename}_latent.pt")
-        latents = torch.load(latents_path)
-        return latents
+        try:
+            latents = torch.load(latents_path)
+            return latents
+        except Exception as e:
+            print(f"Error loading latents: {e}")
+            return None
 
     # Cache for storing volumes of already computed objects
     obj_asset_paths = [[None for _ in range(num_objects)] for _ in range(env.num_envs)]
