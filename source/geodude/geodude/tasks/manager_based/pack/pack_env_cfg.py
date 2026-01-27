@@ -139,13 +139,14 @@ class PackSceneCfg(BaseSceneCfg):
         super().__post_init__()
 
         for i in range(num_object_per_env):
+            usd_path_for_obj = usd_paths[i % len(usd_paths)]
             setattr(
                 self,
                 f"object{i}",
                 RigidObjectCfg(
                     prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
                     spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
-                        usd_path=usd_paths,
+                        usd_path=usd_path_for_obj,
                         random_choice=True,
                         distribution=None,  # None for uniform distribution
                         rigid_props=sim_utils.RigidBodyPropertiesCfg(

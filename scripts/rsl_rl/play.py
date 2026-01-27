@@ -57,6 +57,7 @@ import time
 
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
+import omni.replicator.core as rep
 import torch
 import geodude.tasks  # noqa: F401
 from gculab_rl.rsl_rl import (
@@ -109,17 +110,32 @@ def main():
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
 
-    # wrap for video recording
+    # set up Omni Replicator for video recording
+    video_writer = None
     if args_cli.video:
-        video_kwargs = {
-            "video_folder": os.path.join(log_dir, "videos", "play"),
-            "step_trigger": lambda step: step == 0,
-            "video_length": args_cli.video_length,
-            "disable_logger": True,
-        }
-        print("[INFO] Recording videos during training.")
-        print_dict(video_kwargs, nesting=4)
-        env = gym.wrappers.RecordVideo(env, **video_kwargs)
+        video_folder = os.path.join(log_dir, "videos", "play")
+        os.makedirs(video_folder, exist_ok=True)
+        
+        print("[INFO] Setting up Omni Replicator for video recording.")
+        print(f"[INFO] Video output directory: {video_folder}")
+        
+        with rep.new_layer():
+            # Create a camera for recording
+            # Position it to view the scene (adjust position as needed for your setup)
+            # You can also use an existing camera from the environment if available
+            camera = rep.create.camera(position=(0, 0.1, 5.5))
+            render_product = rep.create.render_product(camera, (1920, 1080))
+            
+            # Set up the writer
+            writer = rep.WriterRegistry.get("BasicWriter")
+            writer.initialize(output_dir=video_folder, rgb=True)
+            writer.attach([render_product])
+            
+            video_writer = writer
+        
+        # Start the orchestrator to begin recording
+        rep.orchestrator.run(num_frames=300)
+        print("[INFO] Omni Replicator video recording initialized and started.")
 
     # wrap around environment for rsl-rl
     if agent_cfg.policy.class_name == "ActorCriticConv2d":
@@ -204,6 +220,11 @@ def main():
             if "sensor" in infos["observations"]:
                 image_obs = infos["observations"]["sensor"].permute(0, 3, 1, 2).flatten(start_dim=1)
                 obs = torch.cat([obs, normalize_and_flatten_image_obs(infos["observations"]["sensor"])], dim=1)
+            
+            # # Trigger replicator to record frame
+            # if args_cli.video:
+            #     rep.orchestrator.step()
+        
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
@@ -220,6 +241,11 @@ def main():
         print("Saved stats to file.")
 
     # close the simulator
+    if args_cli.video:
+        # Stop the orchestrator and clean up replicator resources
+        if rep.orchestrator.is_running():
+            rep.orchestrator.stop()
+        print("[INFO] Video recording stopped. Videos saved to:", os.path.join(log_dir, "videos", "play"))
     env.close()
 
 
