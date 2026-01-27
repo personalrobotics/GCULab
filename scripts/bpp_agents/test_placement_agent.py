@@ -39,6 +39,8 @@ import isaaclab_tasks  # noqa: F401
 import torch
 import geodude.tasks  # noqa: F401
 from isaaclab_tasks.utils import parse_env_cfg
+from gculab_rl.rsl_rl.gcu_vecenv_wrapper import make_quaternion_prototypes
+from geodude.tasks.manager_based.pack.utils.tote_helpers import calculate_rotated_bounding_box
 
 
 # PLACEHOLDER: Extension template (do not remove this comment)
@@ -165,10 +167,43 @@ def main():
             )
             print("obj_idx", obj_idx)
 
+            # Generate random orientations by sampling from quaternion prototypes
+            prototypes = make_quaternion_prototypes(device=env.unwrapped.device, n_side=1)
+            num_prototypes = prototypes.shape[0]
+            random_indices = torch.randint(0, num_prototypes, (args_cli.num_envs,), device=env.unwrapped.device)
+            random_quaternions = prototypes[random_indices]  # Shape: (num_envs, 4)
+            
+            # Get object bounding boxes and calculate rotated dimensions
+            bbox_offset = torch.stack([
+                tote_manager.get_object_bbox(env_idx, obj_idx.item())
+                for env_idx, obj_idx in zip(
+                    torch.arange(args_cli.num_envs, device=env.unwrapped.device),
+                    obj_idx,
+                )
+            ])
+            
+            # Calculate rotated bounding box dimensions for each object
+            rotated_dim = calculate_rotated_bounding_box(bbox_offset, random_quaternions, device=env.unwrapped.device)
+            
+            # Generate random positions within the tote bounding box, accounting for object size
+            # Positions are in range [0, tote_dim - rotated_dim] to ensure objects fit
+            tote_dim = tote_manager.true_tote_dim / 100.0  # Convert cm to meters
+            x_pos_range = tote_dim[0] - rotated_dim[:, 0]
+            y_pos_range = tote_dim[1] - rotated_dim[:, 1]
+            
+            # Generate random x, y positions within valid range
+            random_x = torch.rand(args_cli.num_envs, device=env.unwrapped.device) * x_pos_range
+            random_y = torch.rand(args_cli.num_envs, device=env.unwrapped.device) * y_pos_range
+            random_z = torch.zeros(args_cli.num_envs, device=env.unwrapped.device)  # z will be set from depth or drop height
+            
+            random_positions = torch.stack([random_x, random_y, random_z], dim=1)
+            
+            # Concatenate: [obj_idx, x, y, z, qw, qx, qy, qz]
             actions[:, 1:9] = torch.cat(
                 [
                     obj_idx.unsqueeze(1),
-                    torch.tensor([0, 0, 0, 1, 0, 0, 0], device=env.unwrapped.device).repeat(args_cli.num_envs, 1),
+                    random_positions,  # x, y, z
+                    random_quaternions,  # qw, qx, qy, qz (prototypes are in [w, x, y, z] format)
                 ],
                 dim=1,
             )

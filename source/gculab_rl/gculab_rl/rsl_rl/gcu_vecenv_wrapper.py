@@ -228,7 +228,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         if self.clip_actions is not None:
             actions = torch.clamp(actions, -self.clip_actions, self.clip_actions)
         # record step information
-        obs_dict, rew, terminated, truncated, extras = self.env.unwrapped.step(actions)
+        obs_dict, rew, terminated, truncated, extras = self.env.step(actions)
 
         # compute dones for compatibility with RSL-RL
         dones = (terminated | truncated).to(dtype=torch.long)
