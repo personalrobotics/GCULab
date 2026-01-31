@@ -235,19 +235,30 @@ class EventCfg:
         mode="post_reset",
     )
 
+    log_gcu_dest_tote = EventTerm(
+        func=mdp.log_gcu_dest_tote,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+    )
+
+    log_gcu_max = EventTerm(
+        func=mdp.log_gcu_max,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+    )
+
 
 @configclass
 class RewardsCfg:
     """Reward terms for the MDP."""
 
-    # gcu_reward = RewardTerm(
-    #     func=mdp.gcu_reward_step, weight=1000.0
-    # )
+    gcu_reward = RewardTerm(
+        func=mdp.gcu_reward_step, weight=1000.0
+    )
 
     object_shift = RewardTerm(func=mdp.object_shift, weight=10.0)
 
-    wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
-
+    wasted_volume = RewardTerm(func=mdp.wasted_volume_pbrs, weight=40.0)
 
 @configclass
 class TerminationsCfg:
