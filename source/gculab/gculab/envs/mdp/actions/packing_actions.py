@@ -90,6 +90,7 @@ class PackingAction(ActionTerm):
     Operations.
     """
 
+    @profile
     def process_actions(self, actions: torch.Tensor):
         # store the raw actions
         self._raw_actions[:] = actions
@@ -137,6 +138,7 @@ class PackingAction(ActionTerm):
         else:
             self._raw_actions[env_ids] = torch.zeros_like(self._raw_actions[env_ids])
 
+    @profile
     def apply_actions(self):
         # first index is tote id
         tote_ids = self._processed_actions[:, 0].long()

@@ -715,6 +715,7 @@ def gcu_reward_step(env: ManagerBasedRLGCUEnv):
     return gcu_values
 
 
+#@profile
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).
@@ -723,7 +724,9 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
         env (ManagerBasedRLGCUEnv): The environment object.
     """
     total_volume = env.tote_manager.tote_volume
-    heightmaps = 19.99 - env.observation_manager.compute()["sensor"]  # subtract distance from camera to tote
+
+    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
+    heightmaps = 19.99 - (env.observation_manager._obs_buffer["sensor"] if use_new_optimizations else env.observation_manager.compute()["sensor"]) # subtract distance from camera to tote
     top_down_volumes_ = torch.clamp(heightmaps * 100, min=0)  # Ensure no negative values
     top_down_volumes = torch.sum(top_down_volumes_, dim=(1, 2))  # Sum over heightmap dimensions
 
@@ -766,13 +769,17 @@ def wasted_volume_pbrs(env: ManagerBasedRLGCUEnv, gamma=0.99):
     return pbrs
 
 
+@profile
 def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     """Checks if any object is overfilled the tote.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    env.observation_manager.compute()
+    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
+    if not use_new_optimizations:
+        # Redundant -- this is already called every step
+        env.observation_manager.compute()
     envs_overfilled = env.tote_manager.eject_totes(
         env.tote_manager.dest_totes,
         torch.arange(env.num_envs, device=env.device),
@@ -785,24 +792,32 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
         env.tote_manager.reset_pbrs[env_ids[envs_overfilled]] = True
     return envs_overfilled
 
-
+#@profile
 def object_shift(env: ManagerBasedRLGCUEnv):
     """Checks if any object has shifted from place pose.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
     """
     prev_action = env.tote_manager.last_action_pos_quat
-    obj_ids = prev_action[:, 0].long()  # [num_envs]
-    place_action_pos_quat = prev_action[:, -7:]  # [num_envs, 7]
 
-    # Get the settled pos quat of the objects for all envs in batch
-    scene_state = env.scene.get_state(is_relative=False)
-    # scene_state["rigid_object"] is a dict: { "object0": {...}, "object1": {...}, ... }
-    # For each env, get the correct object key and extract its root_pose
+    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
+    if use_new_optimizations:
+        obj_ids = prev_action[:, 0].to(torch.uint32).tolist()  # [num_envs]
+    else:
+        obj_ids = prev_action[:, 0].long()
+
+    place_action_pos_quat = prev_action[:, -7:]  # [num_envs, 7]
     settled_pos_quat = torch.zeros(env.num_envs, 7, device=env.device)
-    for i in range(env.num_envs):
-        obj_key = f"object{int(obj_ids[i].item())}"
-        settled_pos_quat[i] = scene_state["rigid_object"][obj_key]["root_pose"][i]
+
+    if use_new_optimizations:
+        rigid_objects = list(env.scene._rigid_objects.values())
+        for i in range(env.num_envs):
+            settled_pos_quat[i] = rigid_objects[obj_ids[i]].data.root_pose_w[i]
+    else:
+        scene_state = env.scene.get_state(is_relative=False)
+        for i in range(env.num_envs):
+            obj_key = f"object{int(obj_ids[i].item())}"
+            settled_pos_quat[i] = scene_state["rigid_object"][obj_key]["root_pose"][i]
 
     pos_distance = torch.norm(place_action_pos_quat[:, :3] - settled_pos_quat[:, :3], dim=1)
     rot_distance = math_utils.quat_error_magnitude(place_action_pos_quat[:, 3:], settled_pos_quat[:, 3:])

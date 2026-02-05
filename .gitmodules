@@ -1,6 +1,6 @@
 [submodule "gcu_objects"]
 	path = gcu_objects
-	url = https://github.com/personalrobotics/gcu_objects.git
+	url = git@github.com:personalrobotics/gcu_objects.git
 [submodule "rsl_rl"]
 	path = rsl_rl
-	url = https://github.com/kaikwan/rsl_rl.git
+	url = git@github.com:kaikwan/rsl_rl.git

@@ -196,6 +196,7 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
 
         return z_pos
 
+    @profile
     def step(
         self, actions: torch.Tensor, image_obs: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, dict]:
