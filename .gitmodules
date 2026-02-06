@@ -4,3 +4,6 @@
 [submodule "rsl_rl"]
 	path = rsl_rl
 	url = https://github.com/kaikwan/rsl_rl.git
+[submodule "Packing-3D-RL"]
+	path = Packing-3D-RL
+	url = https://github.com/kaikwan/Packing-3D-RL.git

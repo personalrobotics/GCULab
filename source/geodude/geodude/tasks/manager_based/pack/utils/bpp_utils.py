@@ -105,6 +105,10 @@ class BPP:
         # Setup packing problem components
         self._initialize_packing_components()
 
+    def _get_items_worker(self):
+        """Get the worker function for creating items. Can be overridden by subclasses."""
+        return create_items_worker
+
     def _get_cache_key(self):
         """Generate a unique cache key based on environment configuration"""
         # Get seed from environment if available
@@ -188,8 +192,9 @@ class BPP:
 
         # Create items using multiprocessing with limited workers to avoid memory issues
         all_items = [None] * self.num_envs
+        items_worker = self._get_items_worker()
         with ProcessPoolExecutor(max_workers=min(self.MAX_WORKERS, 4)) as executor:
-            for env_idx, items in executor.map(create_items_worker, item_args):
+            for env_idx, items in executor.map(items_worker, item_args):
                 all_items[env_idx] = items
         print(f"Time to create items: {time.time() - start_time:.3f}s")
 

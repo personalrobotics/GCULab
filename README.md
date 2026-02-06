@@ -76,15 +76,7 @@ python -m pip install -e source/geodude
 python -m pip install -e source/gculab
 python -m pip install -e source/gculab_assets
 python -m pip install -e source/gculab_rl
-```
-
-### Step 5: Install Packing-3D-RL
-Using the same Python environment as above, run:
-```bash
-cd ..
-git clone https://github.com/kaikwan/Packing-3D-RL.git
-cd Packing-3D-RL
-pip install -e .
+python -m pip install -e Packing-3D-RL
 ```
 
 ### Step 6: Fixing Dependency Issues with IsaacLab

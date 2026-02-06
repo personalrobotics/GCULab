@@ -18,6 +18,7 @@ from isaaclab.scene import InteractiveScene
 from isaaclab.sim import SimulationContext
 from isaaclab.utils.timer import Timer
 from geodude.tasks.manager_based.pack.utils import bpp_utils
+from geodude.tasks.manager_based.pack.utils import heuristic_utils
 from geodude.tasks.manager_based.pack.utils.tote_manager import ToteManager
 
 
@@ -142,7 +143,9 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.bpp = bpp_utils.BPP(
             self.tote_manager, self.num_envs, torch.arange(self.num_obj_per_env, device=self.device), **args
         )
-
+        self.heuristic = heuristic_utils.Heuristic(
+            self.tote_manager, self.num_envs, torch.arange(self.num_obj_per_env, device=self.device), **args
+        )
         # extend UI elements
         # we need to do this here after all the managers are initialized
         # this is because they dictate the sensors and commands right now
