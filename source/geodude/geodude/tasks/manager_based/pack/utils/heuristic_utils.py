@@ -6,6 +6,7 @@ from copy import deepcopy
 
 import numpy as np
 import torch
+from scipy import ndimage
 from packing3d import Attitude, Container, Item, PackingProblem, Position, Transform
 
 from geodude.tasks.manager_based.pack.utils import bpp_utils
@@ -106,39 +107,46 @@ class Heuristic(bpp_utils.BPP):
     ) -> List[Tuple[int, int, float]]:
         """Find candidate positions for stacking based on semantic mask.
         
-        Returns list of (x, y, height) tuples where stacking is possible.
+        Returns list of (centroid_x, centroid_y, avg_height) tuples for each
+        contiguous region matching the same YCB ID as the object being placed.
         """
         candidates = []
         semantic_mask = container.semantic_mask
         heightmap = container.heightmap
         
-        # For each position in the mask
-        for x in range(semantic_mask.shape[0]):
-            for y in range(semantic_mask.shape[1]):
-                existing_obj_id = semantic_mask[x, y]
-                
-                # Skip empty positions
-                if existing_obj_id < 0:
-                    continue
-                    
-                # Check if existing object is similar type (for stacking)
-                # existing_obj_id in semantic mask is now a YCB ID
-                existing_obj_type = self.classify_object_by_ycb_id(existing_obj_id)
-                
-                # Determine if stacking is suitable
-                can_stack = False
-                if obj_type == ObjectType.CUBOIDAL and existing_obj_type == ObjectType.CUBOIDAL:
-                    can_stack = True
-                elif obj_type == ObjectType.CYLINDRICAL and existing_obj_type == ObjectType.CYLINDRICAL:
-                    can_stack = True
-                elif obj_type == ObjectType.BOWL and existing_obj_type == ObjectType.BOWL:
-                    can_stack = True  # Nesting
-                elif obj_type == ObjectType.MUG and existing_obj_type == ObjectType.MUG:
-                    can_stack = True
-                    
-                if can_stack:
-                    height = heightmap[x, y]
-                    candidates.append((x, y, height))
+        # Get the YCB ID of the object being placed
+        item = self.problems[env_idx].items[obj_idx]
+        target_ycb_id = item.obj_id
+        
+        if target_ycb_id is None:
+            return candidates
+        
+        # Create binary mask for regions matching this YCB ID
+        binary_mask = (semantic_mask == target_ycb_id).astype(np.int32)
+        # print(f"target ycb id: {target_ycb_id}")
+        # print(f"semantic mask: {np.count_nonzero(semantic_mask + 1)}")
+        # print(f"binary mask: {binary_mask}")
+        
+        # Label connected regions
+        labeled_array, num_features = ndimage.label(binary_mask)
+        # print(f"labeled array: {labeled_array}")
+        # print(f"num features: {num_features}")
+        # Find centroid of each region
+        for region_id in range(1, num_features + 1):
+            region_mask = labeled_array == region_id
+            region_coords = np.argwhere(region_mask)
+            
+            if len(region_coords) == 0:
+                continue
+            
+            # Compute centroid
+            centroid_x = int(np.mean(region_coords[:, 0]))
+            centroid_y = int(np.mean(region_coords[:, 1]))
+            
+            # Compute average height over the region
+            avg_height = np.mean(heightmap[region_mask])
+            
+            candidates.append((centroid_x, centroid_y, avg_height))
         
         # Sort by height (prefer stacking on taller objects for stability)
         candidates.sort(key=lambda c: c[2], reverse=True)
@@ -173,7 +181,7 @@ class Heuristic(bpp_utils.BPP):
             
         elif obj_type == ObjectType.BOWL:
             # Bowls: face up for nesting
-            orientations.append(Attitude(roll=0, pitch=0, yaw=0))
+            orientations.append(Attitude(roll=-90, pitch=0, yaw=0))
             
         elif obj_type == ObjectType.MUG:
             # Mugs: face down for stacking
@@ -227,31 +235,22 @@ class Heuristic(bpp_utils.BPP):
                 item.rotate(attitude)
                 item.calc_heightmap()
 
-                # x = problem.container.geometry.x_size - 1
-                # y = problem.container.geometry.y_size - 1   
-                # while (not problem.container.add_item_topdown(item, x, y)):
-                #     x -= 1
-                #     y -= 1
-                #     print(f"trying to add object to {x}, {y}")
-                # if x < 0 or y < 0:
-                #     print(f"failed to add object to bottom left?")
-                #     return (env_idx, None, None)
-
-                item.position = Position(num_placed_objects*8, 0, 0)
+                # item.position = Position(num_placed_objects*8, 0, 0)
                 
                     
-                transform = Transform(item.position, attitude)
-                print(f" object {obj_idx} in environment {env_idx} got transform: {transform}")
-                print(f"container heightmap: {problem.container.heightmap}")
-                print(f"container semantic mask: {problem.container.semantic_mask}")
-                num_placed_objects += 1
-                return (env_idx, obj_idx, transform)
+                # transform = Transform(item.position, attitude)
+                # print(f" object {obj_idx} in environment {env_idx} got transform: {transform}")
+                # print(f"container heightmap: {problem.container.heightmap}")
+                # print(f"container semantic mask: {problem.container.semantic_mask}")
+                # num_placed_objects += 1
+                # return (env_idx, obj_idx, transform)
                 
-                # # Priority 1: Try stacking on similar objects
-                # for sx, sy, _ in stacking_cands:
-                #     if problem.container.add_item_topdown(item, sx, sy):
-                #         transform = Transform(item.position, attitude)
-                #         return (env_idx, obj_idx, transform)
+                # Priority 1: Try stacking on similar objects
+                for sx, sy, _ in stacking_cands:
+                    print(f"trying to stack object {obj_idx} in environment {env_idx} at position {sx}, {sy}")
+                    if problem.container.add_item_topdown(item, sx, sy):
+                        transform = Transform(item.position, attitude)
+                        return (env_idx, obj_idx, transform)
                 
                 # Priority 2: Try target zone with type-specific heuristic
                 # zone_x_min, zone_x_max = target_zone
@@ -283,11 +282,12 @@ class Heuristic(bpp_utils.BPP):
                 #     return (env_idx, obj_idx, best_position)
                 
                 # # Priority 3: Try anywhere in container
-                # for x in range(problem.container.geometry.x_size):
-                #     for y in range(problem.container.geometry.y_size):
-                #         if problem.container.add_item_topdown(item, x, y):
-                #             transform = Transform(item.position, attitude)
-                #             return (env_idx, obj_idx, transform)
+                print(f"grid serach. trying to place object {obj_idx} in environment {env_idx}")
+                for x in range(problem.container.geometry.x_size):
+                    for y in range(problem.container.geometry.y_size):
+                        if problem.container.add_item_topdown(item, x, y):
+                            transform = Transform(item.position, attitude)
+                            return (env_idx, obj_idx, transform)
         
         # No valid placement found
         return (env_idx, None, None)
@@ -344,6 +344,7 @@ class Heuristic(bpp_utils.BPP):
         
         # Collect results
         for env_idx, obj_idx, transform in results:
+            print(f"[get_action START] env={env_idx_val}, container id={id(self.problems[env_idx_val].container)}, mask count={np.count_nonzero(self.problems[env_idx_val].container.semantic_mask + 1)}")
             if obj_idx is not None and transform is not None:
                 transforms_list.append(transform)
                 obj_idx_list.append(torch.tensor([obj_idx], dtype=torch.int32))
@@ -353,6 +354,7 @@ class Heuristic(bpp_utils.BPP):
                 item.transform(transform)
                 print(f"Adding item {obj_idx} to container {env_idx} at position {item.position} with attitude {item.attitude}")
                 self.problems[env_idx].container.add_item(item, update_semantic_mask=True)
+                print(f"After add_item, semantic_mask non-empty count: {np.count_nonzero(self.problems[env_idx].container.semantic_mask + 1)}")
                 self.packed_obj_idx[env_idx].append(torch.tensor(obj_idx))
             else:
                 # Mark as unpackable
