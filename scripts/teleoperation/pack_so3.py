@@ -195,9 +195,9 @@ def main():
         nonlocal image_obs
         nonlocal img_h, img_w
 
+        collection = env.unwrapped.scene["objects"]
         for i in range(env.unwrapped.tote_manager.num_objects):
-            asset = env.unwrapped.scene[f"object{i}"]
-            pose = asset.data.root_pose_w.squeeze(0)
+            pose = collection.data.object_link_pose_w[0, i]
             last_objects_positions[i] = pose
 
         last_placed_object = object_to_pack
@@ -274,20 +274,28 @@ def main():
             print("No last object placement to undo.")
             return
 
+        collection = env.unwrapped.scene["objects"]
         for i in range(env.unwrapped.tote_manager.num_objects):
             if i in last_objects_positions:
-                asset = env.unwrapped.scene[f"object{i}"]
                 pose = last_objects_positions[i]
-                asset.write_root_pose_to_sim(pose.unsqueeze(0))
+                env.unwrapped.tote_manager._write_poses_to_sim(
+                    torch.tensor([0], device=env.unwrapped.device),
+                    torch.tensor([i], device=env.unwrapped.device),
+                    pose.unsqueeze(0),
+                )
 
         last_objects_positions.clear()
         print("Last object placement undone.")
 
         get_new_obj = False
 
-        # Turn asset invisble
-        asset = env.unwrapped.scene[f"object{last_placed_object.item()}"]
-        asset.set_visibility(False, env_ids=torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device))
+        # Turn asset invisible
+        obj_id = last_placed_object.item()
+        env.unwrapped.tote_manager.set_object_visibility(
+            False,
+            list(range(env.unwrapped.num_envs)),
+            [obj_id],
+        )
 
         env.unwrapped.scene.write_data_to_sim()
         env.unwrapped.scene.update(dt=env.unwrapped.physics_dt)
@@ -395,8 +403,11 @@ def main():
 
                 # Select objects using FIFO (First In, First Out) ordering
                 object_to_pack = env.unwrapped.bpp.select_fifo_packable_objects(packable_objects, env.unwrapped.device)
-                asset = env.unwrapped.scene[f"object{object_to_pack.item()}"]
-                asset.set_visibility(True, env_ids=torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device))
+                env.unwrapped.tote_manager.set_object_visibility(
+                    True,
+                    list(range(env.unwrapped.num_envs)),
+                    [object_to_pack.item()],
+                )
             elif last_placed_object is not None:
                 object_to_pack = last_placed_object
                 last_placed_object = None
@@ -443,11 +454,11 @@ def main():
             target.set_world_pose(cube_position, cube_orientation)
 
             target_pose = (cube_position, cube_orientation)
-            asset = env.unwrapped.scene[f"object{object_to_pack.item()}"]
-            asset.write_root_link_pose_to_sim(
+            env.unwrapped.tote_manager._write_poses_to_sim(
+                torch.tensor([0], device=env.unwrapped.device),
+                torch.tensor([object_to_pack.item()], device=env.unwrapped.device),
                 torch.cat([cube_position, cube_orientation], dim=0).unsqueeze(0),
             )
-            asset.write_root_com_velocity_to_sim(torch.zeros(6, device=cube_position.device).unsqueeze(0))
 
             if past_pose is None:
                 past_pose = (cube_position, cube_orientation)

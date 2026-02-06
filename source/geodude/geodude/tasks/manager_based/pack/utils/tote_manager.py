@@ -7,10 +7,12 @@ import itertools
 import os
 from datetime import datetime
 
+import isaaclab.sim as sim_utils
 import isaaclab.utils.math as math_utils
 import torch
 from isaaclab.sim import schemas
 from isaaclab.sim.schemas import schemas_cfg
+from pxr import Sdf, UsdGeom
 from geodude.tasks.manager_based.pack.utils.tote_helpers import (  # Multiprocessing versions
     calculate_rotated_bounding_box,
     calculate_tote_bounds,
@@ -107,6 +109,92 @@ class ToteManager:
 
         self.env = env
         self.device = env.device
+        self._visibility_prims = None
+
+    @property
+    def collection(self):
+        """The RigidObjectCollection managing all objects."""
+        return self.env.scene["objects"]
+
+    def _init_visibility_prims(self):
+        """Cache prims for per-object visibility control (lazy init)."""
+        if self._visibility_prims is not None:
+            return
+        collection = self.collection
+        self._visibility_prims = []
+        for prim_path_expr in collection._prim_paths:
+            prims = sim_utils.find_matching_prims(prim_path_expr)
+            self._visibility_prims.append(prims)
+
+    @profile
+    def set_object_visibility(self, visible, env_ids, object_ids):
+        """Set visibility for specific objects in specific environments.
+
+        Args:
+            visible: Whether to make objects visible.
+            env_ids: Environment indices (list or tensor).
+            object_ids: Object indices (list or tensor).
+        """
+        self._init_visibility_prims()
+        if isinstance(env_ids, torch.Tensor):
+            env_ids = env_ids.detach().cpu().tolist()
+        if isinstance(object_ids, torch.Tensor):
+            object_ids = object_ids.detach().cpu().tolist()
+        token = "inherited" if visible else "invisible"
+        with Sdf.ChangeBlock():
+            for obj_id in object_ids:
+                prims = self._visibility_prims[obj_id]
+                for env_id in env_ids:
+                    UsdGeom.Imageable(prims[env_id]).GetVisibilityAttr().Set(token)
+
+    def _write_poses_to_sim(self, env_ids, obj_ids, poses, velocities=None):
+        """Batch-write poses and velocities to simulation via direct PhysX view.
+
+        Args:
+            env_ids: Environment indices tensor (N,).
+            obj_ids: Object indices tensor (N,), paired with env_ids.
+            poses: Pose tensor (N, 7) in wxyz quaternion convention.
+            velocities: Optional velocity tensor (N, 6). Defaults to zeros.
+        """
+        collection = self.collection
+        device = env_ids.device
+        n = env_ids.shape[0]
+        if n == 0:
+            return
+
+        env_ids_long = env_ids.long()
+        obj_ids_long = obj_ids.long()
+
+        # Compute flat PhysX view indices (object-major layout)
+        flat_view_ids = obj_ids_long * collection.num_instances + env_ids_long
+
+        # Convert quaternion wxyz -> xyzw for PhysX
+        poses_xyzw = poses.clone()
+        poses_xyzw[..., 3:] = math_utils.convert_quat(poses_xyzw[..., 3:], to="xyzw")
+
+        if velocities is None:
+            velocities = torch.zeros(n, 6, device=device)
+
+        # PhysX requires full-view-sized tensors; indices select which rows to write
+        total_bodies = collection.num_objects * collection.num_instances
+        full_transforms = torch.zeros(total_bodies, 7, device=device)
+        full_transforms[flat_view_ids] = poses_xyzw
+        full_velocities = torch.zeros(total_bodies, 6, device=device)
+        full_velocities[flat_view_ids] = velocities
+        collection.root_physx_view.set_transforms(full_transforms, indices=flat_view_ids)
+        collection.root_physx_view.set_velocities(full_velocities, indices=flat_view_ids)
+
+        # Keep internal data buffers in sync
+        if collection._data._object_link_pose_w.data is not None:
+            collection._data._object_link_pose_w.data[env_ids_long, obj_ids_long] = poses
+            collection._data._object_link_pose_w.timestamp = collection._data._sim_timestamp
+        if collection._data._object_com_vel_w.data is not None:
+            collection._data._object_com_vel_w.data[env_ids_long, obj_ids_long] = velocities
+            collection._data._object_com_vel_w.timestamp = collection._data._sim_timestamp
+        # Invalidate cached combined state tensors
+        collection._data._object_state_w.timestamp = -1
+        collection._data._object_link_state_w.timestamp = -1
+        collection._data._object_com_state_w.timestamp = -1
 
     def set_object_asset_paths(self, obj_asset_paths, env_ids):
         """
@@ -354,6 +442,7 @@ class ToteManager:
 
         return dest_totes_mask
 
+    @profile
     def refill_source_totes(self, env_ids):
         """
         Refill empty source totes with objects from reserve.
@@ -430,25 +519,27 @@ class ToteManager:
             min_height = 20 - torch.amin(heightmaps[env_ids], dim=(1, 2, 3))  # shape: (num_envs,)
             return min_height
         else:
-            # Get asset configurations for the specified environments
-            assets = [self.env.scene[f"object{obj_id}"] for obj_id in range(self.num_objects)]
+            collection = self.collection
+            # Bulk read all object poses: (num_envs, num_objects, 7)
+            all_poses = collection.data.object_link_pose_w
+            all_positions = all_poses[:, :, :3] - self.env.scene.env_origins[:, :3].unsqueeze(1)
+            all_orientations = all_poses[:, :, 3:7]
+
             max_z_positions = torch.zeros(self.env.num_envs, device=self.env.device)
 
-            for asset in assets:
-                obj_id = int(asset.cfg.prim_path.split("Object")[-1])
-
+            for obj_id in range(self.num_objects):
                 # First check if object is in destination tote of any self.env to avoid unnecessary calculations
                 object_in_dest_tote = self.tote_to_obj[torch.arange(self.env.num_envs), tote_ids, obj_id] == 1
                 if not object_in_dest_tote.any():
                     continue
 
-                # Get positions for all environments
-                asset_position = asset.data.root_state_w[:, :3] - self.env.scene.env_origins[:, :3]
-                asset_orientation = asset.data.root_state_w[:, 3:7]
+                # Get positions/orientations for this object across all envs
+                asset_position = all_positions[:, obj_id]  # (num_envs, 3)
+                asset_orientation = all_orientations[:, obj_id]  # (num_envs, 4)
 
                 # Get rotated bounding box
                 obj_bbox = torch.stack(
-                    [self.env.tote_manager.get_object_bbox(env_idx, obj_id) for env_idx in range(self.env.num_envs)]
+                    [self.get_object_bbox(env_idx, obj_id) for env_idx in range(self.env.num_envs)]
                 )
                 rotated_dims = calculate_rotated_bounding_box(obj_bbox, asset_orientation, self.env.device)
                 margin = rotated_dims / 2.0
@@ -461,6 +552,7 @@ class ToteManager:
 
             return max_z_positions[env_ids]
 
+    @profile
     def eject_totes(self, tote_ids, env_ids, is_dest=True, overfill_check=True, heightmaps=None):
         """
         Reset overfilled destination totes by returning objects to reserve.
@@ -512,39 +604,43 @@ class ToteManager:
                 torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
             )
 
-        assets_to_eject = []
+        # Collect all (env_id, obj_id) pairs to eject
+        eject_env_ids = []
+        eject_obj_ids = []
         for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
-            # Get all objects in the overfilled tote
             objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
             if objects_in_tote.numel() > 0:
-                # Add to the list of assets to eject
-                assets_to_eject.append([f"object{obj_id.item()}" for obj_id in objects_in_tote])
+                for obj_id in objects_in_tote:
+                    eject_env_ids.append(env_id.item())
+                    eject_obj_ids.append(obj_id.item())
 
-        for env_id, asset_names in zip(env_ids[overfilled_envs], assets_to_eject):
-            # Reset the asset to reserve
-            for asset_name in asset_names:
-                asset = self.env.scene[asset_name]
-                default_root_state = asset.data.default_root_state[env_id]
-                default_root_state[:3] += self.env.scene.env_origins[env_id, :3]
-                asset.write_root_link_pose_to_sim(
-                    default_root_state[:7], env_ids=torch.tensor([env_id], device=self.env.device)
-                )
-                asset.write_root_com_velocity_to_sim(
-                    default_root_state[7:], env_ids=torch.tensor([env_id], device=self.env.device)
-                )
-                asset.set_visibility(False, env_ids=torch.tensor([env_id], device=self.env.device))
+        if eject_env_ids:
+            collection = self.collection
+            eject_env_tensor = torch.tensor(eject_env_ids, device=self.env.device)
+            eject_obj_tensor = torch.tensor(eject_obj_ids, device=self.env.device)
+
+            # Get default states for all objects being ejected
+            default_states = collection.data.default_object_state[eject_env_tensor.long(), eject_obj_tensor.long()].clone()
+            default_states[:, :3] += self.env.scene.env_origins[eject_env_tensor.long(), :3]
+
+            # Batch write poses and velocities
+            self._write_poses_to_sim(eject_env_tensor, eject_obj_tensor, default_states[:, :7], default_states[:, 7:])
+
+            # Set visibility off
+            self.set_object_visibility(False, eject_env_ids, eject_obj_ids)
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
         return overfilled_envs
 
+    @profile
     def update_object_positions_in_sim(self, env, objects, positions, orientations, cur_env):
         """
-        Update object poses in the simulation.
+        Update object poses in the simulation using batched PhysX writes.
 
         Args:
             env: Simulation environment
-            objects: Object IDs/names to update
+            objects: Object IDs (tensor of ints, list of ints, or list of strings like "object5")
             positions: New positions [N, 3]
             orientations: New orientations [N, 4]
             cur_env: Environment ID(s)
@@ -553,47 +649,43 @@ class ToteManager:
 
         is_multi_env = hasattr(cur_env, "numel") and cur_env.numel() > 1
 
-        # Update the object positions in the simulation
-        for j, obj_id in enumerate(objects):
+        # Build env_ids and obj_ids tensors
+        n = len(objects) if not isinstance(objects, torch.Tensor) else objects.shape[0]
+        env_ids_list = []
+        obj_ids_list = []
+
+        for j in range(n):
+            obj_id = objects[j]
             # Get environment ID for this object
             if is_multi_env:
                 env_id = cur_env[j].item()
             else:
                 env_id = cur_env.item() if hasattr(cur_env, "item") else cur_env
 
-            env_id_tensor = torch.tensor([env_id], device=device)
-
-            # Get the asset based on object identifier type
+            # Parse object ID
             if isinstance(obj_id, str):
-                asset = env.scene[obj_id]
+                obj_idx = int(obj_id.replace("object", ""))
+            elif isinstance(obj_id, torch.Tensor):
+                obj_idx = obj_id.item()
             else:
-                asset = env.scene[f"object{obj_id.item()}"]
+                obj_idx = int(obj_id)
 
-            # Update prim path for the specific environment
-            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
+            env_ids_list.append(env_id)
+            obj_ids_list.append(obj_idx)
 
-            # Modify physics properties and apply pose and velocity
-            # schemas.modify_rigid_body_properties(
-            #     prim_path,
-            #     schemas_cfg.RigidBodyPropertiesCfg(
-            #         kinematic_enabled=False,
-            #         disable_gravity=False,
-            #     ),
-            # )
+        env_ids_tensor = torch.tensor(env_ids_list, device=device, dtype=torch.long)
+        obj_ids_tensor = torch.tensor(obj_ids_list, device=device, dtype=torch.long)
 
-            # Apply position and orientation
-            asset.write_root_link_pose_to_sim(
-                torch.cat([positions[j], orientations[j]]),
-                env_ids=env_id_tensor,
-            )
+        # Build poses tensor (N, 7)
+        poses = torch.cat([positions[:n], orientations[:n]], dim=-1)
 
-            # Reset velocity
-            asset.write_root_com_velocity_to_sim(
-                torch.zeros(6, device=device),
-                env_ids=env_id_tensor,
-            )
-            asset.set_visibility(True, env_ids=env_id_tensor)
+        # Batch write to simulation
+        self._write_poses_to_sim(env_ids_tensor, obj_ids_tensor, poses)
 
+        # Set visibility
+        self.set_object_visibility(True, env_ids_list, obj_ids_list)
+
+    @profile
     def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None, min_separation=0.3):
         """
         Sample objects from reserve and place them in specified totes.
@@ -608,11 +700,7 @@ class ToteManager:
         Returns:
             True if objects were placed, False if no available objects
         """
-        reserve_objects = self.get_reserved_objs_idx(env_ids)
-        reserve_objects_idx = torch.stack(torch.where(reserve_objects), dim=1)
-        reserve_objects_grouped = [
-            reserve_objects_idx[reserve_objects_idx[:, 0] == idx, 1].tolist() for idx in range(len(env_ids))
-        ]
+        reserve_objects = self.get_reserved_objs_idx(env_ids)  # (num_envs, num_objects) bool
 
         max_available = reserve_objects.sum(dim=1).max().item()
         if max_available <= 0:
@@ -624,24 +712,32 @@ class ToteManager:
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
         tote_ids = tote_ids.unsqueeze(0) if tote_ids.ndim == 0 else tote_ids
 
-        num_objects_to_teleport = (
-            torch.randint(1, max_available + 1, (len(env_ids),), device=env_ids.device)
-            if max_objects_per_tote is None
-            else torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
-        )
+        K = min(max_objects_per_tote, max_available) if max_objects_per_tote is not None else max_available
 
-        sampled_objects = [
-            (
-                torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[
-                    torch.randperm(len(reserve_objects_grouped[i]), device=env_ids.device)[:num]
-                ]
-                if num > 0 and reserve_objects_grouped[i]
-                else torch.tensor([], device=env_ids.device)
-            )
-            for i, num in enumerate(num_objects_to_teleport)
-        ]
+        # --- Vectorized random sampling (replaces per-env loops) ---
+        # Assign random keys to reserve objects, -1 to non-reserve
+        rand_keys = torch.rand(len(env_ids), self.num_objects, device=self.device)
+        rand_keys[~reserve_objects] = -1.0
+        # topk picks K highest-random-key objects per env
+        _, sampled_indices = rand_keys.topk(K, dim=1)  # (num_envs, K)
+
+        # Per-env number of objects to teleport
+        available_per_env = reserve_objects.sum(dim=1)  # (num_envs,)
+        if max_objects_per_tote is None:
+            # Original behavior: random count per env
+            num_objects_to_teleport = torch.randint(1, max_available + 1, (len(env_ids),), device=self.device)
+            num_objects_to_teleport = torch.min(num_objects_to_teleport, available_per_env)
+        else:
+            num_objects_to_teleport = available_per_env.clamp(max=K)
+
+        valid_mask = torch.arange(K, device=self.device).unsqueeze(0) < num_objects_to_teleport.unsqueeze(1)
 
         if self.animate:
+            # --- Animate path: convert to per-env lists for existing helpers ---
+            sampled_objects = [
+                sampled_indices[i, :valid_mask[i].sum()] for i in range(len(env_ids))
+            ]
+
             # Collect tote bounds
             all_tote_bounds = [self.tote_bounds[tote_id.item()] for tote_id in tote_ids]
 
@@ -673,12 +769,22 @@ class ToteManager:
             # Update object positions in simulation
             update_object_positions_in_sim_batched(env, sampled_objects, all_positions, all_orientations, env_ids)
 
-        # Update tote tracking
-        # Prepare tote IDs for each environment
-        all_tote_ids = [torch.full_like(objects, tote_id.item()) for objects, tote_id in zip(sampled_objects, tote_ids)]
+            # Update tote tracking via per-env lists
+            all_tote_ids = [
+                torch.full((obj.shape[0],), tid.item(), device=self.device) for obj, tid in zip(sampled_objects, tote_ids)
+            ]
+            self.put_objects_in_tote_batched(sampled_objects, all_tote_ids, env_ids)
+        else:
+            # --- Fast path: direct tensor update (no animation) ---
+            env_broadcast = env_ids.unsqueeze(1).expand_as(sampled_indices)
+            tote_broadcast = tote_ids.unsqueeze(1).expand_as(sampled_indices)
 
-        # Update tote tracking in batch
-        self.put_objects_in_tote_batched(sampled_objects, all_tote_ids, env_ids)
+            flat_env = env_broadcast[valid_mask]
+            flat_obj = sampled_indices[valid_mask]
+            flat_tote = tote_broadcast[valid_mask]
+
+            self.tote_to_obj[flat_env, :, flat_obj] = 0
+            self.tote_to_obj[flat_env, flat_tote, flat_obj] = 1
 
         return True
 

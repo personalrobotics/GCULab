@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 def object_props(
     env: ManagerBasedRLGCUEnv,
     env_ids: torch.Tensor,
-    asset_cfgs: list[SceneEntityCfg] = [SceneEntityCfg("object1")],
+    collection_name: str = "objects",
     num_objects: int = 1,
 ) -> torch.Tensor:
     """The volume of the object."""
@@ -224,9 +224,9 @@ def object_props(
     mesh_properties_cache = {}
 
     # Get mesh from the asset and populate asset paths
-    for asset_cfg in asset_cfgs:
-        object: RigidObject = env.scene[asset_cfg.name]
-        prim_path_expr = object.cfg.prim_path  # fix prim path is regex
+    collection = env.scene[collection_name]
+    for obj_name, obj_cfg in collection.cfg.rigid_objects.items():
+        prim_path_expr = obj_cfg.prim_path
         for prim_path in sim_utils.find_matching_prim_paths(prim_path_expr):
             prim = env.scene.stage.GetPrimAtPath(prim_path)
             items = prim.GetMetadata("references").GetAddedOrExplicitItems()
@@ -374,7 +374,7 @@ def randomize_object_pose_with_invalid_ranges(
         # Randomize pose for each object
         for i in range(len(asset_cfgs)):
             asset_cfg = asset_cfgs[i]
-            asset = env.scene[asset_cfg.name]
+            obj_idx = int(asset_cfg.name.replace("object", ""))
 
             # Prepare poses
             pose_tensor = torch.tensor(
@@ -393,7 +393,7 @@ def randomize_object_pose_with_invalid_ranges(
 
             env.tote_manager.update_object_positions_in_sim(
                 env,
-                objects=[asset_cfg.name],
+                objects=[obj_idx],
                 positions=positions,
                 orientations=orientations,
                 cur_env=cur_env,
@@ -420,17 +420,14 @@ def set_objects_to_invisible(
     for obj_id in range(env.tote_manager.num_objects):
         envs_obj_in_reserve = torch.nonzero(visibility_mask[:, obj_id], as_tuple=True)[0].tolist()
         if envs_obj_in_reserve:
-            asset_cfg = SceneEntityCfg(f"object{obj_id}")
-            asset = env.scene[asset_cfg.name]
-            asset.set_visibility(False, env_ids=envs_obj_in_reserve)
+            env.tote_manager.set_object_visibility(False, envs_obj_in_reserve, [obj_id])
 
 
 def check_obj_out_of_bounds(
     env: ManagerBasedRLGCUEnv,
     env_ids: torch.Tensor,
-    asset_cfgs: list[SceneEntityCfg],
+    asset_cfgs: list[SceneEntityCfg] = [],
 ):
-    asset_cfgs = asset_cfgs or []
     """Check if any object is out of bounds and reset the environment if so.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
@@ -439,13 +436,16 @@ def check_obj_out_of_bounds(
     Returns:
         bool: True if any object is out of bounds, False otherwise.
     """
+    asset_cfgs = asset_cfgs or []
     if env_ids is None:
         return False
-    # Check if any object is out of bounds using asset_cfgs
+    collection = env.scene["objects"]
+    # all_positions: (num_envs, num_objects, 3)
+    all_positions = collection.data.object_link_pos_w - env.scene.env_origins.unsqueeze(1)
     bounds = [(0.2, 0.65), (-0.8, 0.8), (0.0, 0.3)]
     for asset_cfg in asset_cfgs:
-        asset = env.scene[asset_cfg.name]  # Access asset using asset_cfg
-        asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+        obj_idx = int(asset_cfg.name.replace("object", ""))
+        asset_pose = all_positions[:, obj_idx]  # (num_envs, 3)
         if not all(
             bounds[i][0] <= asset_pose[:, i].min() <= bounds[i][1]
             and bounds[i][0] <= asset_pose[:, i].max() <= bounds[i][1]
@@ -461,7 +461,7 @@ def check_obj_out_of_bounds(
                         f"Expected bounds: {bounds[i]}, "
                         f"Found min: {asset_pose[:, i].min()}, max: {asset_pose[:, i].max()}"
                     )
-            env._reset_idx(env_ids)  # Reset the environment if any object is out of bounds
+            env._reset_idx(env_ids)
 
 
 def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, asset_cfgs: list[SceneEntityCfg] = []):
@@ -474,9 +474,12 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
     if env_ids is None:
         return
 
+    collection = env.scene["objects"]
+    all_positions = collection.data.object_link_pos_w - env.scene.env_origins.unsqueeze(1)
+
     for asset_cfg in asset_cfgs:
-        asset = env.scene[asset_cfg.name]
-        asset_pose = asset.data.root_state_w[:, :3] - env.scene.env_origins[:, :3]
+        obj_idx = int(asset_cfg.name.replace("object", ""))
+        asset_pose = all_positions[:, obj_idx]  # (num_envs, 3)
         envs_in_tote = []
 
         for i, tote_bound in enumerate(env.tote_manager.tote_bounds):
@@ -492,7 +495,7 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
             if len(in_tote_envs) > 0:
                 envs_in_tote.extend(in_tote_envs.tolist())
                 env.tote_manager.put_objects_in_tote(
-                    torch.tensor([int(asset_cfg.name.split("object")[-1])], device=env.device),
+                    torch.tensor([obj_idx], device=env.device),
                     torch.tensor([i], device=env.device),
                     in_tote_envs,
                 )
@@ -788,7 +791,6 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
     if envs_overfilled.any():
         env_ids = torch.arange(env.num_envs, device=env.device)
         env.scene.write_data_to_sim()
-        env.sim.render()
         env.tote_manager.reset_pbrs[env_ids[envs_overfilled]] = True
     return envs_overfilled
 
@@ -800,24 +802,13 @@ def object_shift(env: ManagerBasedRLGCUEnv):
     """
     prev_action = env.tote_manager.last_action_pos_quat
 
-    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
-    if use_new_optimizations:
-        obj_ids = prev_action[:, 0].to(torch.uint32).tolist()  # [num_envs]
-    else:
-        obj_ids = prev_action[:, 0].long()
-
+    obj_ids = prev_action[:, 0].long()  # [num_envs]
     place_action_pos_quat = prev_action[:, -7:]  # [num_envs, 7]
-    settled_pos_quat = torch.zeros(env.num_envs, 7, device=env.device)
 
-    if use_new_optimizations:
-        rigid_objects = list(env.scene._rigid_objects.values())
-        for i in range(env.num_envs):
-            settled_pos_quat[i] = rigid_objects[obj_ids[i]].data.root_pose_w[i]
-    else:
-        scene_state = env.scene.get_state(is_relative=False)
-        for i in range(env.num_envs):
-            obj_key = f"object{int(obj_ids[i].item())}"
-            settled_pos_quat[i] = scene_state["rigid_object"][obj_key]["root_pose"][i]
+    # Vectorized: single advanced-indexed tensor read, no loop
+    collection = env.scene["objects"]
+    env_indices = torch.arange(env.num_envs, device=env.device)
+    settled_pos_quat = collection.data.object_link_pose_w[env_indices, obj_ids]
 
     pos_distance = torch.norm(place_action_pos_quat[:, :3] - settled_pos_quat[:, :3], dim=1)
     rot_distance = math_utils.quat_error_magnitude(place_action_pos_quat[:, 3:], settled_pos_quat[:, 3:])

@@ -385,15 +385,15 @@ class BPP:
             List of dictionaries containing object data
         """
         data = []
+        collection = env.unwrapped.scene["objects"]
         for obj_idx in self.packed_obj_idx[env_idx]:
             obj_idx_val = int(obj_idx.item())
-            asset_name = f"object{obj_idx_val}"
-            asset = env.unwrapped.scene[asset_name]
+            state = collection.data.object_state_w[env_idx, obj_idx_val]
 
             data.append({
                 "obj_idx": obj_idx_val,
-                "asset_pos": asset.data.root_state_w[env_idx, :3].detach().cpu().numpy(),
-                "asset_quat": asset.data.root_state_w[env_idx, 3:7].detach().cpu().numpy(),
+                "asset_pos": state[:3].detach().cpu().numpy(),
+                "asset_quat": state[3:7].detach().cpu().numpy(),
                 "bbox_offset": self.tote_manager.get_object_bbox(env_idx, obj_idx_val).detach().cpu().numpy(),
                 "true_tote_dim": self.tote_manager.true_tote_dim.detach().cpu().numpy(),
                 "tote_assets_state": (

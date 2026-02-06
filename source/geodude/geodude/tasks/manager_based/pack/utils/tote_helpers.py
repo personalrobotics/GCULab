@@ -401,7 +401,7 @@ def generate_positions_batched(
 
 def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_orientations, env_ids):
     """
-    Update object positions and orientations in the simulation in a fully vectorized manner.
+    Update object positions and orientations in the simulation using batched PhysX writes.
 
     Args:
         env: Simulation environment object.
@@ -414,52 +414,42 @@ def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_
         None
     """
     device = env_ids.device
+    tote_manager = env.tote_manager
 
-    # Process all environments in parallel
+    # Collect all (env_id, obj_id, pose) tuples across all environments
+    batch_env_ids = []
+    batch_obj_ids = []
+    batch_poses = []
+
     for env_idx, (objects, positions, orientations) in enumerate(zip(all_objects, all_positions, all_orientations)):
         if objects.numel() == 0:
             continue
 
-        cur_env = env_ids[env_idx]
+        cur_env = env_ids[env_idx].item()
         positions = positions.to(env.device)
         orientations = orientations.to(env.device)
 
-        # Update the object positions in the simulation
         for j, obj_id in enumerate(objects):
-            env_id = cur_env.item()
-
-            env_id_tensor = torch.tensor([env_id], device=device)
-
-            # Get the asset based on object identifier type
             if isinstance(obj_id, str):
-                asset = env.scene[obj_id]
+                obj_idx = int(obj_id.replace("object", ""))
             else:
-                asset = env.scene[f"object{obj_id.item()}"]
+                obj_idx = obj_id.item()
+            batch_env_ids.append(cur_env)
+            batch_obj_ids.append(obj_idx)
+            batch_poses.append(torch.cat([positions[j], orientations[j]]))
 
-            # Update prim path for the specific environment
-            prim_path = asset.cfg.prim_path.replace("env_.*", f"env_{env_id}")
+    if not batch_env_ids:
+        return
 
-            # Modify physics properties and apply pose and velocity
-            # schemas.modify_rigid_body_properties(
-            #     prim_path,
-            #     schemas_cfg.RigidBodyPropertiesCfg(
-            #         kinematic_enabled=False,
-            #         disable_gravity=False,
-            #     ),
-            # )
+    env_ids_tensor = torch.tensor(batch_env_ids, device=device, dtype=torch.long)
+    obj_ids_tensor = torch.tensor(batch_obj_ids, device=device, dtype=torch.long)
+    poses_tensor = torch.stack(batch_poses)  # (N, 7)
 
-            # Apply position and orientation
-            asset.write_root_link_pose_to_sim(
-                torch.cat([positions[j], orientations[j]]),
-                env_ids=env_id_tensor,
-            )
+    # Batch write to simulation
+    tote_manager._write_poses_to_sim(env_ids_tensor, obj_ids_tensor, poses_tensor)
 
-            # Reset velocity
-            asset.write_root_com_velocity_to_sim(
-                torch.zeros(6, device=device),
-                env_ids=env_id_tensor,
-            )
-            asset.set_visibility(True, env_ids=env_id_tensor)
+    # Set visibility
+    tote_manager.set_object_visibility(True, batch_env_ids, batch_obj_ids)
 
 
 def generate_positions_batched_multiprocess_cuda(

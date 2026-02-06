@@ -151,12 +151,9 @@ class PackingAction(ActionTerm):
 
         self._env.tote_manager.last_action_pos_quat = self._processed_actions[:, 1:9]
 
-        # Convert to list of objects
-        objects = [f"object{obj_id.item()}" for obj_id in object_ids]
-
         # Update object positions using tote manager's method
         self._env.tote_manager.update_object_positions_in_sim(
-            self._env, objects, position, orientation, cur_env=torch.arange(self.num_envs, device=self.device)
+            self._env, object_ids, position, orientation, cur_env=torch.arange(self.num_envs, device=self.device)
         )
 
         self._env.tote_manager.put_objects_in_tote(

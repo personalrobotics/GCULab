@@ -13,7 +13,7 @@ from dataclasses import MISSING
 
 import gculab.sim as gcu_sim_utils
 import isaaclab.sim as sim_utils
-from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
+from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg, RigidObjectCollectionCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import ActionTermCfg as ActionTerm
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -135,33 +135,28 @@ class PackSceneCfg(BaseSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.45, 1.5 * tote_spacing, 0.0)),
     )
 
-    def __post_init__(self):
-        super().__post_init__()
-
-        for i in range(num_object_per_env):
-            setattr(
-                self,
-                f"object{i}",
-                RigidObjectCfg(
-                    prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
-                    spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
-                        usd_path=usd_paths,
-                        random_choice=True,
-                        distribution=None,  # None for uniform distribution
-                        rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                            kinematic_enabled=False,
-                            disable_gravity=False,
-                            # enable_gyroscopic_forces=True,
-                            solver_position_iteration_count=4,
-                            solver_velocity_iteration_count=0,
-                            sleep_threshold=0.005,
-                            stabilization_threshold=0.0025,
-                            # max_depenetration_velocity=1000.0,
-                        ),
+    objects: RigidObjectCollectionCfg = RigidObjectCollectionCfg(
+        rigid_objects={
+            f"object{i}": RigidObjectCfg(
+                prim_path=f"{{ENV_REGEX_NS}}/Object{i}",
+                spawn=gcu_sim_utils.MultiUsdFromDistFileCfg(
+                    usd_path=usd_paths,
+                    random_choice=True,
+                    distribution=None,  # None for uniform distribution
+                    rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                        kinematic_enabled=False,
+                        disable_gravity=False,
+                        solver_position_iteration_count=4,
+                        solver_velocity_iteration_count=0,
+                        sleep_threshold=0.005,
+                        stabilization_threshold=0.0025,
                     ),
-                    init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
                 ),
+                init_state=RigidObjectCfg.InitialStateCfg(pos=(i / 5.0, 1.2, -0.7)),
             )
+            for i in range(num_object_per_env)
+        }
+    )
 
 
 ##
@@ -219,7 +214,7 @@ class EventCfg:
     obj_volume = EventTerm(
         func=mdp.object_props,
         params={
-            "asset_cfgs": [SceneEntityCfg(f"object{i}") for i in range(num_object_per_env)],
+            "collection_name": "objects",
             "num_objects": num_object_per_env,
         },
         mode="startup",
@@ -307,7 +302,7 @@ class PackEnvCfg(ManagerBasedRLEnvCfg):
         self.viewer.eye = (0, 0.1, 5.5)
         # simulation settings
         self.sim.dt = 1.0 / 90.0
-        self.sim.physx.gpu_max_rigid_patch_count = 4096 * 4096
-        self.sim.physx.gpu_collision_stack_size = 4096 * 4096 * 20
-        self.sim.physx.gpu_found_lost_pairs_capacity = 4096 * 4096 * 20
-        self.sim.physx.gpu_max_rigid_contact_count = 2**26
+        self.sim.physx.gpu_max_rigid_patch_count = 2 * (5 * 2**15)  # 327K (2x default)
+        self.sim.physx.gpu_collision_stack_size = 2**26  # 67M (= default)
+        self.sim.physx.gpu_found_lost_pairs_capacity = 2**24  # 16M (8x default)
+        self.sim.physx.gpu_max_rigid_contact_count = 2**23  # 8M (= default)
