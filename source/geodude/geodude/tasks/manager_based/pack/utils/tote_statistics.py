@@ -219,13 +219,15 @@ class ToteStatistics:
         # Save data to file if path is provided
         if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
-            for i, env_id in enumerate(env_ids.cpu().numpy()):
+            gcu_np = gcu_values.cpu().numpy()
+            env_ids_cpu = env_ids.cpu().numpy()
+            for i, env_id in enumerate(env_ids_cpu):
                 self._append_to_file(
                     env_id,
                     "gcu_values",
                     {
                         "step": self.step_count,
-                        "values": gcu_values[i].cpu().numpy().tolist(),
+                        "values": gcu_np[i].tolist(),
                         "timestamp": current_time,
                     },
                 )
@@ -244,14 +246,16 @@ class ToteStatistics:
         # Save data to file if path is provided
         if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
-            for env_id in env_ids.cpu().numpy():
+            env_ids_cpu = env_ids.cpu().tolist()
+            totals = self.obj_transfers[env_ids].cpu().tolist()
+            for i, env_id in enumerate(env_ids_cpu):
                 self._append_to_file(
                     env_id,
                     "transfers",
                     {
                         "step": self.step_count,
                         "count": num_objects,
-                        "total": self.obj_transfers[env_id].item(),
+                        "total": totals[i],
                         "timestamp": current_time,
                     },
                 )
@@ -265,22 +269,38 @@ class ToteStatistics:
             totes_ejected: Boolean tensor indicating which totes were ejected [num_envs, num_totes]
         """
         ejected_indices = totes_ejected.nonzero(as_tuple=False)  # Shape: [N, 2]
+        if ejected_indices.numel() == 0:
+            return
 
-        for env, tote in ejected_indices:
-            self.inbound_gcus[env][tote].append(inbound_gcus[env, tote].item())
-            self.outbound_gcus[env][tote].append(outbound_gcus[env, tote].item())
+        envs = ejected_indices[:, 0]
+        totes = ejected_indices[:, 1]
 
-            # Save to file
-            if self.save_path and not self.disable_logging:
+        # Batch extract values (single GPU read)
+        inbound_vals = inbound_gcus[envs, totes]
+        outbound_vals = outbound_gcus[envs, totes]
+
+        # Single CPU transfer
+        envs_cpu = envs.cpu().tolist()
+        totes_cpu = totes.cpu().tolist()
+        inbound_cpu = inbound_vals.cpu().tolist()
+        outbound_cpu = outbound_vals.cpu().tolist()
+
+        for env, tote, inv, outv in zip(envs_cpu, totes_cpu, inbound_cpu, outbound_cpu):
+            self.inbound_gcus[env][tote].append(inv)
+            self.outbound_gcus[env][tote].append(outv)
+
+        if self.save_path and not self.disable_logging:
+            current_time = time.time() - self.start_time
+            for env, tote, inv, outv in zip(envs_cpu, totes_cpu, inbound_cpu, outbound_cpu):
                 self._append_to_file(
-                    env.item(),
+                    env,
                     "tote_gcu_changes",
                     {
                         "step": self.step_count,
-                        "tote_id": tote.item(),
-                        "inbound_gcu": inbound_gcus[env, tote].item(),
-                        "outbound_gcu": outbound_gcus[env, tote].item(),
-                        "timestamp": time.time() - self.start_time,
+                        "tote_id": tote,
+                        "inbound_gcu": inv,
+                        "outbound_gcu": outv,
+                        "timestamp": current_time,
                     },
                 )
 
@@ -299,14 +319,16 @@ class ToteStatistics:
         # Save to file
         if self.save_path and not self.disable_logging:
             current_time = time.time() - self.start_time
-            for env_id in env_ids.cpu().numpy():
+            env_ids_cpu = env_ids.cpu().tolist()
+            source_totals = self.source_tote_ejections[env_ids].cpu().tolist()
+            for i, env_id in enumerate(env_ids_cpu):
                 self._append_to_file(
                     env_id,
                     "source_ejections",
                     {
                         "step": self.step_count,
                         "count": 1,
-                        "total": self.source_tote_ejections[env_id].item(),
+                        "total": source_totals[i],
                         "timestamp": current_time,
                     },
                 )
@@ -353,34 +375,35 @@ class ToteStatistics:
         self.dest_tote_ejections[env_ids] += 1
         self.operation_counts["dest_tote_ejection"] += len(env_ids)
 
-        # Save snapshots for each environment
-        for idx, env_id in enumerate(env_ids):
-            env_id_item = env_id.item()
-            tote_id_item = tote_ids[idx].item()
+        # Batch CPU transfers
+        env_ids_cpu = env_ids.cpu().tolist()
+        tote_ids_cpu = tote_ids.cpu().tolist()
+        obj_transfers_cpu = self.obj_transfers[env_ids].cpu().tolist()
+        source_ejections_cpu = self.source_tote_ejections[env_ids].cpu().tolist()
 
-            # Create a minimal snapshot with just the essential data
+        gcu_vals = [None] * len(env_ids_cpu)
+        if self.recent_gcu_values is not None:
+            gcu_vals = self.recent_gcu_values[env_ids, tote_ids].cpu().tolist()
+
+        current_time = time.time() - self.start_time
+
+        for i, env_id in enumerate(env_ids_cpu):
             snapshot_data = {
                 "step": self.step_count,
-                "tote_id": tote_id_item,
-                "obj_transfers": self.obj_transfers[env_id].item(),
-                "source_ejections": self.source_tote_ejections[env_id].item(),
-                "gcu": (
-                    self.recent_gcu_values[env_id, tote_id_item].item() if self.recent_gcu_values is not None else None
-                ),
-                "timestamp": time.time() - self.start_time,
+                "tote_id": tote_ids_cpu[i],
+                "obj_transfers": obj_transfers_cpu[i],
+                "source_ejections": source_ejections_cpu[i],
+                "gcu": gcu_vals[i],
+                "timestamp": current_time,
             }
-
-            # Store only the most recent snapshot
-            self.recent_ejection_data[env_id_item] = snapshot_data
-
-            # Save to file
+            self.recent_ejection_data[env_id] = snapshot_data
             if self.save_path and not self.disable_logging:
-                self._append_to_file(env_id_item, "dest_ejections", snapshot_data)
+                self._append_to_file(env_id, "dest_ejections", snapshot_data)
 
-            # Reset counts for this environment
-            self.source_tote_ejections[env_id] = 0
-            self.dest_tote_ejections[env_id] = 0
-            self.obj_transfers[env_id] = 0
+        # Vectorized reset
+        self.source_tote_ejections[env_ids] = 0
+        self.dest_tote_ejections[env_ids] = 0
+        self.obj_transfers[env_ids] = 0
 
     def increment_step(self):
         """Increment the step counter."""
@@ -456,36 +479,39 @@ class ToteStatistics:
         mean_source_ejections = 0
         data_count = 0
 
+        # Read the file once (instead of once per environment)
+        file_data = None
+        if self.save_path and not self.disable_logging:
+            try:
+                with open(self.save_path) as f:
+                    file_data = json.load(f)
+            except Exception as e:
+                print(f"Error reading from file: {e}")
+
         for env_id in range(self.num_envs):
             if self.recent_ejection_data[env_id] is not None:
-                # Read from file if available, otherwise use in-memory data
-                if self.save_path and not self.disable_logging:
-                    try:
-                        with open(self.save_path) as f:
-                            file_data = json.load(f)
-                            env_data = file_data["environments"].get(str(env_id), {})
-                            dest_ejections = env_data.get("dest_ejections", [])
+                if file_data is not None:
+                    env_data = file_data["environments"].get(str(env_id), {})
+                    dest_ejections = env_data.get("dest_ejections", [])
 
-                            if dest_ejections:
-                                summary[env_id] = {
-                                    "gcus": [
-                                        entry.get("gcu") for entry in dest_ejections if entry.get("gcu") is not None
-                                    ],
-                                    "obj_transfers": [entry.get("obj_transfers", 0) for entry in dest_ejections],
-                                    "source_ejections": [entry.get("source_ejections", 0) for entry in dest_ejections],
-                                }
+                    if dest_ejections:
+                        summary[env_id] = {
+                            "gcus": [
+                                entry.get("gcu") for entry in dest_ejections if entry.get("gcu") is not None
+                            ],
+                            "obj_transfers": [entry.get("obj_transfers", 0) for entry in dest_ejections],
+                            "source_ejections": [entry.get("source_ejections", 0) for entry in dest_ejections],
+                        }
 
-                                # Update means
-                                for entry in dest_ejections:
-                                    gcu = entry.get("gcu")
-                                    if gcu is not None:
-                                        mean_gcus += gcu
-                                    mean_obj_transfers += entry.get("obj_transfers", 0)
-                                    mean_source_ejections += entry.get("source_ejections", 0)
-                                    data_count += 1
-                    except Exception as e:
-                        print(f"Error reading from file: {e}")
-                        # Fallback to in-memory data
+                        for entry in dest_ejections:
+                            gcu = entry.get("gcu")
+                            if gcu is not None:
+                                mean_gcus += gcu
+                            mean_obj_transfers += entry.get("obj_transfers", 0)
+                            mean_source_ejections += entry.get("source_ejections", 0)
+                            data_count += 1
+                    else:
+                        # File exists but no dest_ejections for this env, fallback to in-memory
                         recent_data = self.recent_ejection_data[env_id]
                         summary[env_id] = {
                             "gcus": [recent_data.get("gcu")] if recent_data.get("gcu") is not None else [],
