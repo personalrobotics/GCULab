@@ -1001,11 +1001,10 @@ class BPP:
         if mask_only:
             return None, packable_mask_cpu
 
-        # Create a 2D tensor of object indices: shape (num_envs, num_obj_per_env)
-        obj_indices = torch.arange(0, num_obj_per_env, device="cpu").expand(num_envs, -1)
-
-        # Get valid indices per environment
-        valid_indices = [obj_indices[i][packable_mask_cpu[i]] for i in range(num_envs)]
+        # Get valid object indices per environment using vectorized ops
+        _, obj_ids = torch.where(packable_mask_cpu)
+        counts = packable_mask_cpu.sum(dim=1).tolist()
+        valid_indices = list(torch.split(obj_ids, counts))
 
         return valid_indices, packable_mask_cpu
 

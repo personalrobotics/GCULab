@@ -723,8 +723,7 @@ def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
     """
     total_volume = env.tote_manager.tote_volume
 
-    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
-    heightmaps = 19.99 - (env.observation_manager._obs_buffer["sensor"] if use_new_optimizations else env.observation_manager.compute()["sensor"]) # subtract distance from camera to tote
+    heightmaps = 19.99 - env.observation_manager._obs_buffer["sensor"]  # subtract distance from camera to tote
     top_down_volumes_ = torch.clamp(heightmaps * 100, min=0)  # Ensure no negative values
     top_down_volumes = torch.sum(top_down_volumes_, dim=(1, 2))  # Sum over heightmap dimensions
 
@@ -774,10 +773,6 @@ def object_overfilled_tote(env: ManagerBasedRLGCUEnv):
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
-    if not use_new_optimizations:
-        # Redundant -- this is already called every step
-        env.observation_manager.compute()
     envs_overfilled = env.tote_manager.eject_totes(
         env.tote_manager.dest_totes,
         torch.arange(env.num_envs, device=env.device),

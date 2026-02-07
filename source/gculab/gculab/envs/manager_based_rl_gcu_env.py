@@ -218,13 +218,8 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         self.tote_manager.source_tote_ejected = torch.zeros(self.num_envs, dtype=torch.bool, device="cpu")
         self.tote_manager.refill_source_totes(env_ids=torch.arange(self.num_envs, device=self.device))
         wait_time = self.tote_manager.obj_settle_wait_steps
-        import os; use_new_optimizations = bool(os.getenv("QUINN_OPTIMIZATIONS", False))
-        if use_new_optimizations:
-            self.scene.write_data_to_sim()
+        self.scene.write_data_to_sim()
         for i in range(wait_time):
-            if not use_new_optimizations:
-                # Should be no new data to write to sim
-                self.scene.write_data_to_sim()
             self.sim.step(render=False)
             if (
                 self._sim_step_counter % self.cfg.sim.render_interval == 0
@@ -236,9 +231,6 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             if i == wait_time - 1:
                 self.scene.update(dt=self.physics_dt)
         self.scene.write_data_to_sim()
-        if not use_new_optimizations:
-            # Seems pointless?
-            self.scene.write_data_to_sim()
         self.sim.forward()
 
         # post-step:

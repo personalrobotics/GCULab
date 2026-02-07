@@ -688,34 +688,37 @@ class ToteManager:
         """
         device = positions.device
 
-        is_multi_env = hasattr(cur_env, "numel") and cur_env.numel() > 1
+        # Fast path: both objects and cur_env are already tensors — skip the loop
+        if isinstance(objects, torch.Tensor) and isinstance(cur_env, torch.Tensor) and cur_env.numel() > 1:
+            n = objects.shape[0]
+            env_ids_tensor = cur_env.long().to(device)
+            obj_ids_tensor = objects.long().to(device)
+        else:
+            # Slow fallback for mixed types (lists, strings, single env)
+            is_multi_env = hasattr(cur_env, "numel") and cur_env.numel() > 1
+            n = len(objects) if not isinstance(objects, torch.Tensor) else objects.shape[0]
+            env_ids_list = []
+            obj_ids_list = []
 
-        # Build env_ids and obj_ids tensors
-        n = len(objects) if not isinstance(objects, torch.Tensor) else objects.shape[0]
-        env_ids_list = []
-        obj_ids_list = []
+            for j in range(n):
+                obj_id = objects[j]
+                if is_multi_env:
+                    env_id = cur_env[j].item()
+                else:
+                    env_id = cur_env.item() if hasattr(cur_env, "item") else cur_env
 
-        for j in range(n):
-            obj_id = objects[j]
-            # Get environment ID for this object
-            if is_multi_env:
-                env_id = cur_env[j].item()
-            else:
-                env_id = cur_env.item() if hasattr(cur_env, "item") else cur_env
+                if isinstance(obj_id, str):
+                    obj_idx = int(obj_id.replace("object", ""))
+                elif isinstance(obj_id, torch.Tensor):
+                    obj_idx = obj_id.item()
+                else:
+                    obj_idx = int(obj_id)
 
-            # Parse object ID
-            if isinstance(obj_id, str):
-                obj_idx = int(obj_id.replace("object", ""))
-            elif isinstance(obj_id, torch.Tensor):
-                obj_idx = obj_id.item()
-            else:
-                obj_idx = int(obj_id)
+                env_ids_list.append(env_id)
+                obj_ids_list.append(obj_idx)
 
-            env_ids_list.append(env_id)
-            obj_ids_list.append(obj_idx)
-
-        env_ids_tensor = torch.tensor(env_ids_list, device=device, dtype=torch.long)
-        obj_ids_tensor = torch.tensor(obj_ids_list, device=device, dtype=torch.long)
+            env_ids_tensor = torch.tensor(env_ids_list, device=device, dtype=torch.long)
+            obj_ids_tensor = torch.tensor(obj_ids_list, device=device, dtype=torch.long)
 
         # Build poses tensor (N, 7)
         poses = torch.cat([positions[:n], orientations[:n]], dim=-1)
@@ -724,7 +727,7 @@ class ToteManager:
         self._write_poses_to_sim(env_ids_tensor, obj_ids_tensor, poses)
 
         # Set visibility
-        self.set_object_visibility_paired(True, env_ids_list, obj_ids_list)
+        self.set_object_visibility_paired(True, env_ids_tensor, obj_ids_tensor)
 
     @profile
     def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None, min_separation=0.3):
