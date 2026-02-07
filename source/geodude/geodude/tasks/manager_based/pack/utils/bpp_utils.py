@@ -91,7 +91,13 @@ class BPP:
         self.source_loaded = [False] * num_envs
         self.subset_obj_indices = {}
 
-        self.fifo_queues = [deque() for _ in range(num_envs)]
+        # Tensor-based FIFO: padded with -1, fifo_len tracks queue length per env
+        num_objects = tote_manager.num_objects
+        self.fifo_order = torch.full((num_envs, num_objects), -1, dtype=torch.long)
+        self.fifo_len = torch.zeros(num_envs, dtype=torch.long)
+
+        # Tensor mirror of self.unpackable_obj_idx for vectorized filtering
+        self._unpackable_mask = torch.zeros(num_envs, num_objects, dtype=torch.bool)
 
         # Initialize unique properties storage
         self.unique_obj_dims = {}
@@ -609,6 +615,11 @@ class BPP:
             self.unpackable_obj_idx[env_idx] = [
                 idx for idx in self.unpackable_obj_idx[env_idx] if idx not in objects_to_remove
             ]
+            # Rebuild mask from remaining list
+            self._unpackable_mask[env_idx] = False
+            if self.unpackable_obj_idx[env_idx]:
+                remaining = torch.tensor(self.unpackable_obj_idx[env_idx], dtype=torch.long)
+                self._unpackable_mask[env_idx, remaining] = True
 
         # Perform ejection
         self.tote_manager.eject_totes(
@@ -623,6 +634,7 @@ class BPP:
             self.problems[env_idx].container = Container(self.tote_dims)
             self.packed_obj_idx[env_idx] = []
             self.unpackable_obj_idx[env_idx] = []
+            self._unpackable_mask[env_idx] = False
             self.source_eject_tries[env_idx] = 0
         else:
             # Refill source totes and increment try counter
@@ -947,6 +959,7 @@ class BPP:
         print(f"No valid transform for object {obj_idx_tensor} in environment {env_idx}. Adding to unpackable objects.")
 
         self.unpackable_obj_idx[env_idx].extend(obj_idx_tensor)
+        self._unpackable_mask[env_idx, obj_idx_tensor] = True
         remaining_objs = [obj for obj in curr_obj_indices if obj not in self.unpackable_obj_idx[env_idx]]
 
         job_args = self._prepare_job_args(
@@ -955,9 +968,10 @@ class BPP:
         future = executor.submit(self._env_worker, job_args)
         futures[future] = (i, env_idx.cpu(), remaining_objs)
 
+    @profile
     def get_packable_object_indices(
-        self, num_obj_per_env: int, tote_manager, env_indices: torch.Tensor, tote_ids: torch.Tensor
-    ) -> tuple[list, torch.Tensor]:
+        self, num_obj_per_env: int, tote_manager, env_indices: torch.Tensor, tote_ids: torch.Tensor, mask_only=False
+    ) -> tuple[list | None, torch.Tensor]:
         """
         Get indices of objects that can be packed per environment.
 
@@ -966,9 +980,10 @@ class BPP:
             tote_manager: The tote manager object
             env_indices: Indices of environments to get packable objects for
             tote_ids: Destination tote IDs for each environment
+            mask_only: If True, skip building the expensive ragged list and return None for indices
 
         Returns:
-            Tuple of (list of packable object indices per environment, mask tensor)
+            Tuple of (list of packable object indices per environment or None, mask tensor)
         """
         num_envs = env_indices.shape[0]
 
@@ -978,82 +993,83 @@ class BPP:
         # Get objects that are already in destination totes
         objs_in_dest = tote_manager.get_tote_objs_idx(tote_ids, env_indices)
 
+        # Compute mask of packable objects (including unpackable filter)
+        unpackable = self._unpackable_mask[env_indices.cpu()].to(reserved_objs.device)
+        packable_mask = (~reserved_objs & ~objs_in_dest & ~unpackable).bool()
+        packable_mask_cpu = packable_mask.cpu()
+
+        if mask_only:
+            return None, packable_mask_cpu
+
         # Create a 2D tensor of object indices: shape (num_envs, num_obj_per_env)
         obj_indices = torch.arange(0, num_obj_per_env, device="cpu").expand(num_envs, -1)
 
-        # Compute mask of packable objects
-        mask = (~reserved_objs & ~objs_in_dest).bool().cpu()
-
         # Get valid indices per environment
-        valid_indices = [obj_indices[i][mask[i]] for i in range(num_envs)]
+        valid_indices = [obj_indices[i][packable_mask_cpu[i]] for i in range(num_envs)]
 
-        # Remove unpackable objects from valid indices
-        for i in range(num_envs):
-            env_idx = env_indices[i].item()
-            valid_indices[i] = [obj for obj in valid_indices[i] if obj not in self.unpackable_obj_idx[env_idx]]
+        return valid_indices, packable_mask_cpu
 
-        return valid_indices, mask
-
-    def select_fifo_packable_objects(self, packable_objects, device):
+    @profile
+    def select_fifo_packable_objects(self, packable_mask, device):
         """
         Select packable objects using FIFO (First In, First Out) ordering.
 
         Args:
-            packable_objects: List of tensors with packable object indices for each environment
+            packable_mask: (num_envs, num_objects) bool tensor of packable objects
             device: Device to create tensors on
 
         Returns:
             Tensor of selected object indices (-1 for environments with no packable objects)
         """
-        import torch
+        num_envs = packable_mask.shape[0]
+        result = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
+        has_items = self.fifo_len > 0
+        if has_items.any():
+            result[has_items] = self.fifo_order[has_items, 0].to(device).int()
+        return result
 
-        num_envs = len(packable_objects)
-        selected_obj_indices = torch.full((num_envs,), -1, device=device, dtype=torch.int32)
-
-        for env_idx, packable_list in enumerate(packable_objects):
-            if len(packable_list) == 0:
-                continue
-
-            packable_values = {obj.item() for obj in packable_list}
-
-            # Remove stale objects from front of FIFO
-            while self.fifo_queues[env_idx] and self.fifo_queues[env_idx][0].item() not in packable_values:
-                self.fifo_queues[env_idx].popleft()
-
-            # Pick the first object from FIFO, but don't remove it yet
-            if self.fifo_queues[env_idx]:
-                selected_obj_indices[env_idx] = self.fifo_queues[env_idx][0]  # Peek at first object
-            else:
-                # If FIFO is empty, pick the first available packable object
-                selected_obj_indices[env_idx] = packable_list[0]
-
-        return selected_obj_indices
-
-    def update_fifo_queues(self, packable_objects):
+    @profile
+    def update_fifo_queues(self, packable_mask):
         """
         Update FIFO queues with new packable objects while maintaining FIFO order.
 
         Args:
-            packable_objects: List of tensors with packable object indices for each environment
+            packable_mask: (num_envs, num_objects) bool tensor of packable objects
         """
-        for env_idx, packable_list in enumerate(packable_objects):
-            fifo_queue = self.fifo_queues[env_idx]
-            packable_values = {obj.item() for obj in packable_list}
+        num_envs, num_objects = packable_mask.shape
+        fifo = self.fifo_order  # (E, O)
 
-            # Remove stale objects from FIFO that are no longer packable
-            from collections import deque
+        # Column index tensor (reused as FIFO positions and object indices)
+        idx = torch.arange(num_objects, device=fifo.device).unsqueeze(0).expand(num_envs, -1)
 
-            self.fifo_queues[env_idx] = deque([obj for obj in fifo_queue if obj.item() in packable_values])
+        # Build reverse map: fifo_pos[env, obj] = position of obj in FIFO, or num_objects if absent
+        fifo_pos = torch.full((num_envs, num_objects), num_objects, dtype=torch.long, device=fifo.device)
+        has_entry = fifo >= 0
+        if has_entry.any():
+            env_range = torch.arange(num_envs, device=fifo.device).unsqueeze(1).expand_as(fifo)
+            fifo_pos[env_range[has_entry], fifo[has_entry]] = idx[has_entry]
 
-            # Append new objects that aren't already in FIFO
-            fifo_values = {obj.item() for obj in self.fifo_queues[env_idx]}
-            for obj in packable_list:
-                if obj.item() not in fifo_values:
-                    self.fifo_queues[env_idx].append(obj)
-                    fifo_values.add(obj.item())
+        # Priority sort key per object:
+        #   In-FIFO & packable:     fifo_pos          (0..O-1)      -> first, preserving FIFO order
+        #   Packable & not in FIFO: num_objects + idx  (O..2O-1)     -> after existing, in index order
+        #   Not packable:           2*num_objects + idx (2O..3O-1)   -> last, excluded
+        in_fifo = fifo_pos < num_objects
+        sort_key = torch.where(
+            packable_mask & in_fifo, fifo_pos,
+            torch.where(packable_mask, num_objects + idx, 2 * num_objects + idx)
+        )
 
-            # REORDER packable_objects to match FIFO order
-            packable_objects[env_idx] = list(self.fifo_queues[env_idx])
+        # Single batched argsort -> priority-ordered object indices for all envs
+        sorted_objs = sort_key.argsort(dim=1, stable=True)
+
+        # Build result: first total_len entries are valid, rest -1
+        total_len = packable_mask.sum(dim=1)
+        result = torch.full_like(fifo, -1)
+        write_mask = idx < total_len.unsqueeze(1)
+        result[write_mask] = sorted_objs[write_mask]
+
+        self.fifo_order = result
+        self.fifo_len = total_len
 
     def remove_selected_from_fifo(self, selected_objects):
         """
@@ -1063,9 +1079,10 @@ class BPP:
             selected_objects: Tensor of selected object indices
         """
         for env_idx, selected_obj in enumerate(selected_objects):
-            if (
-                selected_obj != -1
-                and self.fifo_queues[env_idx]
-                and self.fifo_queues[env_idx][0].item() == selected_obj.item()
-            ):
-                self.fifo_queues[env_idx].popleft()
+            fl = self.fifo_len[env_idx].item()
+            if selected_obj != -1 and fl > 0 and self.fifo_order[env_idx, 0].item() == selected_obj.item():
+                # Shift left by 1
+                if fl > 1:
+                    self.fifo_order[env_idx, :fl - 1] = self.fifo_order[env_idx, 1:fl].clone()
+                self.fifo_order[env_idx, fl - 1] = -1
+                self.fifo_len[env_idx] = fl - 1

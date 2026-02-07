@@ -18,6 +18,9 @@ from geodude.tasks.manager_based.pack.utils.tote_helpers import (
 
 PI = 3.141592653589793238462643383279502884
 
+# Module-level cache for quaternion prototypes (keyed by device)
+_prototype_cache = {}
+
 
 def make_quaternion_prototypes(device="cpu", n_side=1):
     """
@@ -83,12 +86,12 @@ def quaternion_from_bin_logits(logits):
       quaternions: reconstructed quaternions (N, 4)
     """
     batch_size, num_bins = logits.shape
-    prototypes = make_quaternion_prototypes(device=logits.device)
-    assert prototypes.shape[0] == num_bins, f"Prototypes shape: {prototypes.shape}, num_bins: {num_bins}"
-    prototypes_rep = torch.repeat_interleave(prototypes.unsqueeze(0), batch_size, dim=0)
-    indices = torch.repeat_interleave(torch.argmax(logits, dim=-1, keepdim=True), repeats=4, dim=1)
-    quaternions = torch.gather(prototypes_rep, dim=1, index=indices.unsqueeze(1))
-    return torch.squeeze(quaternions, dim=1)
+    device = logits.device
+    if device not in _prototype_cache or _prototype_cache[device].shape[0] != num_bins:
+        _prototype_cache[device] = make_quaternion_prototypes(device=device)
+    prototypes = _prototype_cache[device]
+    indices = torch.argmax(logits, dim=-1)  # (N,)
+    return prototypes[indices]  # (N, 4)
 
 
 class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
@@ -125,13 +128,9 @@ class RslRlGCUVecEnvWrapper(RslRlVecEnvWrapper):
         x = actions[:, 0]
         y = actions[:, 1]
 
-        bbox_offset = torch.stack([
-            self.env.unwrapped.tote_manager.get_object_bbox(env_idx, obj_idx)
-            for env_idx, obj_idx in zip(
-                torch.arange(actions.shape[0], device=self.env.unwrapped.device),
-                object_to_pack,
-            )
-        ])
+        env_ids = torch.arange(actions.shape[0], device=self.env.unwrapped.device)
+        obj_ids = torch.tensor(object_to_pack, device=self.env.unwrapped.device)
+        bbox_offset = self.env.unwrapped.tote_manager._bbox_cache[env_ids, obj_ids]
         
         rotated_dim = calculate_rotated_bounding_box(bbox_offset, quats, device=self.env.unwrapped.device)
         x_pos_range = self.env.unwrapped.tote_manager.true_tote_dim[0] / 100 - rotated_dim[:, 0]

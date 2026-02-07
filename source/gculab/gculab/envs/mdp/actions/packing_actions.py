@@ -55,6 +55,11 @@ class PackingAction(ActionTerm):
         # get poses of totes
         self._tote_assets_state = torch.stack([tote.get_world_poses()[0] for tote in self._tote_assets], dim=0)
 
+        # Pre-compute tote half-dim offset (reused every process_actions call)
+        self._tote_half_dim_offset = torch.tensor(
+            [self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device
+        )
+
         # create tensors for raw and processed actions
         self._raw_actions = torch.zeros(self.num_envs, 9, device=self.device)
         self._processed_actions = torch.zeros(self.num_envs, 9, device=self.device)
@@ -108,14 +113,10 @@ class PackingAction(ActionTerm):
 
         if self.place_obj_bottomLeft:
             # offset to bottom left of the object
-            self._processed_actions[:, 2:5] -= torch.tensor(
-                [self.true_tote_dim[0] / 2, self.true_tote_dim[1] / 2, 0], device=self.device
-            ).repeat(self.num_envs, 1)
+            self._processed_actions[:, 2:5] -= self._tote_half_dim_offset
 
-            bbox_offset = torch.stack([
-                self._env.tote_manager.get_object_bbox(env_idx, obj_idx.item())
-                for env_idx, obj_idx in zip(batch_indices, actions[:, 1].long())
-            ])
+            obj_ids = actions[:, 1].long()
+            bbox_offset = self._env.tote_manager._bbox_cache[batch_indices, obj_ids]
 
             rotated_half_dim = (
                 calculate_rotated_bounding_box(

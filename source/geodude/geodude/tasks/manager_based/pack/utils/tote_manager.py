@@ -72,6 +72,8 @@ class ToteManager:
         self.unique_object_properties = {}
         # Cache for fast volume lookups
         self._volume_cache = None
+        # Cache for fast bbox lookups: (num_envs, num_objects, 3)
+        self._bbox_cache = None
         self.tote_to_obj = torch.zeros(
             self.num_envs, self.num_totes, self.num_objects, dtype=torch.int32, device=env.device
         )
@@ -233,6 +235,7 @@ class ToteManager:
         self.unique_object_properties = unique_properties
         # Build volume cache for fast GCU calculations
         self._build_volume_cache()
+        self._build_bbox_cache()
 
     def get_object_volume(self, env_idx, obj_idx):
         """
@@ -374,6 +377,22 @@ class ToteManager:
                     print("asset_path ", asset_path)
                     print("bbox ", self.unique_object_properties[asset_path][1])
                     print("volume ", volume)
+
+    def _build_bbox_cache(self):
+        """Build a cache for fast bbox lookups: (num_envs, num_objects, 3)."""
+        if self._bbox_cache is not None:
+            return
+
+        self._bbox_cache = torch.zeros(self.num_envs, self.num_objects, 3, device=self.device, dtype=torch.float32)
+        for env_idx in range(self.num_envs):
+            for obj_idx in range(self.num_objects):
+                asset_path = self.obj_asset_paths[env_idx][obj_idx]
+                if asset_path is not None and asset_path in self.unique_object_properties:
+                    bbox = self.unique_object_properties[asset_path][1]
+                    if isinstance(bbox, torch.Tensor):
+                        self._bbox_cache[env_idx, obj_idx] = bbox.to(self.device)
+                    else:
+                        self._bbox_cache[env_idx, obj_idx] = torch.tensor(bbox, device=self.device, dtype=torch.float32)
 
     def put_objects_in_tote(self, object_ids, tote_ids, env_ids):
         """

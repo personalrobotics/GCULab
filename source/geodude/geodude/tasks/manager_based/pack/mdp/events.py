@@ -509,36 +509,27 @@ def detect_objects_in_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor, ass
             )
 
 
+@profile
 def obs_dims(env: ManagerBasedRLGCUEnv):
     """Returns the dimensions of the object to pack."""
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, 3), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+    _, packable_mask = env.unwrapped.bpp.get_packable_object_indices(
         env.unwrapped.tote_manager.num_objects,
         env.unwrapped.tote_manager,
         torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
         tote_ids,
-    )[0]
-
-    # Update FIFO queues and peek at the first object in each queue
-    env.unwrapped.bpp.update_fifo_queues(packable_objects)
-    objs = torch.tensor(
-        [
-            (
-                env.unwrapped.bpp.fifo_queues[env_idx][0].item()
-                if env.unwrapped.bpp.fifo_queues[env_idx]
-                else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
-            )
-            for env_idx in range(env.unwrapped.num_envs)
-        ],
-        device=env.unwrapped.device,
+        mask_only=True,
     )
-    obj_dims = torch.stack([
-        env.unwrapped.tote_manager.get_object_bbox(env_idx, obj.item())
-        for env_idx, obj in zip(torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device), objs)
-    ])
-    obj_dims = obj_dims / 100.0  # Convert from cm to m
+
+    # Update FIFO queues and select the first object per env (vectorized)
+    env.unwrapped.bpp.update_fifo_queues(packable_mask)
+    objs = env.unwrapped.bpp.select_fifo_packable_objects(packable_mask, env.unwrapped.device)
+    objs = objs.clamp(min=0).long()
+    tote_manager = env.unwrapped.tote_manager
+    env_ids = torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device)
+    obj_dims = tote_manager._bbox_cache[env_ids, objs] / 100.0
     return obj_dims
 
 
@@ -547,24 +538,26 @@ def obs_lookahead(env: ManagerBasedRLGCUEnv, max_objects: int = 20):
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, max_objects * 3), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+    packable_objects, packable_mask = env.unwrapped.bpp.get_packable_object_indices(
         env.unwrapped.tote_manager.num_objects,
         env.unwrapped.tote_manager,
         torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
         tote_ids,
-    )[0]
+    )
 
     # Update FIFO queues
-    env.unwrapped.bpp.update_fifo_queues(packable_objects)
+    env.unwrapped.bpp.update_fifo_queues(packable_mask)
 
+    bpp = env.unwrapped.bpp
     obj_dims_list = []
     for env_idx in range(env.unwrapped.num_envs):
-        obj_indices = []
-        # Use FIFO queue if available, else fall back to packable_objects
-        if env.unwrapped.bpp.fifo_queues[env_idx]:
-            obj_indices = [obj.item() for obj in env.unwrapped.bpp.fifo_queues[env_idx]]
-        elif packable_objects[env_idx]:
+        fl = bpp.fifo_len[env_idx].item()
+        if fl > 0:
+            obj_indices = bpp.fifo_order[env_idx, :fl].tolist()
+        elif len(packable_objects[env_idx]) > 0:
             obj_indices = [obj.item() for obj in packable_objects[env_idx]]
+        else:
+            obj_indices = []
         # Pad or truncate to max_objects
         obj_indices = obj_indices[:max_objects]
         obj_indices += [0] * (max_objects - len(obj_indices))
@@ -584,20 +577,21 @@ def obs_latents(env: ManagerBasedRLGCUEnv):
     if not hasattr(env, "bpp"):
         return torch.zeros((env.unwrapped.num_envs, 512, 8), device=env.unwrapped.device)
     tote_ids = torch.zeros(env.unwrapped.num_envs, device=env.unwrapped.device).int()
-    packable_objects = env.unwrapped.bpp.get_packable_object_indices(
+    packable_objects, packable_mask = env.unwrapped.bpp.get_packable_object_indices(
         env.unwrapped.tote_manager.num_objects,
         env.unwrapped.tote_manager,
         torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device),
         tote_ids,
-    )[0]
+    )
     # Update FIFO queues and peek at the first object in each queue
-    env.unwrapped.bpp.update_fifo_queues(packable_objects)
+    env.unwrapped.bpp.update_fifo_queues(packable_mask)
+    bpp = env.unwrapped.bpp
     objs = torch.tensor(
         [
             (
-                env.unwrapped.bpp.fifo_queues[env_idx][0].item()
-                if env.unwrapped.bpp.fifo_queues[env_idx]
-                else (packable_objects[env_idx][0].item() if packable_objects[env_idx] else 0)
+                bpp.fifo_order[env_idx, 0].item()
+                if bpp.fifo_len[env_idx] > 0
+                else (packable_objects[env_idx][0].item() if len(packable_objects[env_idx]) > 0 else 0)
             )
             for env_idx in range(env.unwrapped.num_envs)
         ],
@@ -641,22 +635,21 @@ def obj_ids(env: ManagerBasedRLGCUEnv):
     return asset_ids.unsqueeze(1)
 
 
+@profile
 def heightmap(env: ManagerBasedRLGCUEnv):
     """Creates a heightmap of the scene.
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
     """
-    heightmap_stacked = torch.zeros(
-        (env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device
-    )
     # If env does not have bpp attribute or it's None, return zeros
     if not hasattr(env, "bpp"):
         return torch.zeros(
             (env.num_envs, env.tote_manager.true_tote_dim[0], env.tote_manager.true_tote_dim[1], 1), device=env.device
         )
-    for env_id in range(env.num_envs):
-        heightmap_stacked[env_id] = torch.from_numpy(env.bpp.problems[env_id].container.heightmap).unsqueeze(-1)
+    import numpy as np
+    hm_np = np.stack([env.bpp.problems[i].container.heightmap for i in range(env.num_envs)])
+    heightmap_stacked = torch.from_numpy(hm_np).unsqueeze(-1).to(device=env.device)
     return heightmap_stacked
 
 
