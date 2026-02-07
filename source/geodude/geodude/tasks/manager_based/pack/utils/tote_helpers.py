@@ -449,7 +449,7 @@ def update_object_positions_in_sim_batched(env, all_objects, all_positions, all_
     tote_manager._write_poses_to_sim(env_ids_tensor, obj_ids_tensor, poses_tensor)
 
     # Set visibility
-    tote_manager.set_object_visibility(True, batch_env_ids, batch_obj_ids)
+    tote_manager.set_object_visibility_paired(True, batch_env_ids, batch_obj_ids)
 
 
 def generate_positions_batched_multiprocess_cuda(

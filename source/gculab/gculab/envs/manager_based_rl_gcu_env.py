@@ -236,7 +236,6 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
             if i == wait_time - 1:
                 self.scene.update(dt=self.physics_dt)
         self.scene.write_data_to_sim()
-        self.sim.render()
         if not use_new_optimizations:
             # Seems pointless?
             self.scene.write_data_to_sim()
@@ -293,6 +292,7 @@ class ManagerBasedRLGCUEnv(ManagerBasedRLEnv, gym.Env):
         # return observations, rewards, resets and extras
         return self.obs_buf, self.reward_buf, self.reset_terminated, self.reset_time_outs, self.extras
 
+    @profile
     def _reset_idx(self, env_ids: Sequence[int]):
         """Reset environments based on specified indices.
 

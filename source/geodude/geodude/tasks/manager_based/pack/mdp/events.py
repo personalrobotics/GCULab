@@ -415,12 +415,14 @@ def set_objects_to_invisible(
     if env_ids is None:
         return
 
-    visibility_mask = ~torch.any(env.tote_manager.tote_to_obj, dim=1)
+    # Only compute for environments being reset, not all envs
+    visibility_mask = ~torch.any(env.tote_manager.tote_to_obj[env_ids], dim=1)  # (len(env_ids), num_objects)
 
-    for obj_id in range(env.tote_manager.num_objects):
-        envs_obj_in_reserve = torch.nonzero(visibility_mask[:, obj_id], as_tuple=True)[0].tolist()
-        if envs_obj_in_reserve:
-            env.tote_manager.set_object_visibility(False, envs_obj_in_reserve, [obj_id])
+    # Gather all (env, obj) pairs at once and do a single batched USD call
+    reserve_env_local, reserve_obj = torch.nonzero(visibility_mask, as_tuple=True)
+    if reserve_env_local.numel() > 0:
+        reserve_env = env_ids[reserve_env_local]
+        env.tote_manager.set_object_visibility_paired(False, reserve_env, reserve_obj)
 
 
 def check_obj_out_of_bounds(

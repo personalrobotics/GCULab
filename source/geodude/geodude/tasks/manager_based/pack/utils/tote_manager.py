@@ -147,6 +147,27 @@ class ToteManager:
                 for env_id in env_ids:
                     UsdGeom.Imageable(prims[env_id]).GetVisibilityAttr().Set(token)
 
+    def set_object_visibility_paired(self, visible, env_ids, object_ids):
+        """Set visibility for paired (env_id, object_id) entries (not cross-product).
+
+        Unlike set_object_visibility which iterates the cross-product of env_ids × object_ids,
+        this method iterates zip(env_ids, object_ids) — each env_id[i] pairs with object_id[i].
+
+        Args:
+            visible: Whether to make objects visible.
+            env_ids: Environment indices (list or tensor), paired with object_ids.
+            object_ids: Object indices (list or tensor), paired with env_ids.
+        """
+        self._init_visibility_prims()
+        if isinstance(env_ids, torch.Tensor):
+            env_ids = env_ids.detach().cpu().tolist()
+        if isinstance(object_ids, torch.Tensor):
+            object_ids = object_ids.detach().cpu().tolist()
+        token = "inherited" if visible else "invisible"
+        with Sdf.ChangeBlock():
+            for env_id, obj_id in zip(env_ids, object_ids):
+                UsdGeom.Imageable(self._visibility_prims[obj_id][env_id]).GetVisibilityAttr().Set(token)
+
     def _write_poses_to_sim(self, env_ids, obj_ids, poses, velocities=None):
         """Batch-write poses and velocities to simulation via direct PhysX view.
 
@@ -604,20 +625,21 @@ class ToteManager:
                 torch.zeros_like(outbound_gcus), outbound_gcus, totes_ejected=overfilled_totes
             )
 
-        # Collect all (env_id, obj_id) pairs to eject
-        eject_env_ids = []
-        eject_obj_ids = []
-        for env_id, tote_id in zip(env_ids[overfilled_envs], tote_ids[overfilled_envs]):
-            objects_in_tote = torch.where(self.tote_to_obj[env_id, tote_id] == 1)[0]
-            if objects_in_tote.numel() > 0:
-                for obj_id in objects_in_tote:
-                    eject_env_ids.append(env_id.item())
-                    eject_obj_ids.append(obj_id.item())
+        # Collect all (env_id, obj_id) pairs to eject — vectorized batch lookup
+        overfilled_env_ids = env_ids[overfilled_envs]
+        overfilled_tote_ids = tote_ids[overfilled_envs]
 
-        if eject_env_ids:
+        # Batch lookup: get object mask for all overfilled (env, tote) pairs at once
+        obj_masks = self.tote_to_obj[overfilled_env_ids, overfilled_tote_ids]  # (N, num_objects)
+
+        # Find all (pair_idx, obj_id) where mask == 1
+        pair_idx, eject_obj_tensor = torch.where(obj_masks == 1)
+
+        # Map pair_idx back to env_ids
+        eject_env_tensor = overfilled_env_ids[pair_idx]
+
+        if eject_env_tensor.numel() > 0:
             collection = self.collection
-            eject_env_tensor = torch.tensor(eject_env_ids, device=self.env.device)
-            eject_obj_tensor = torch.tensor(eject_obj_ids, device=self.env.device)
 
             # Get default states for all objects being ejected
             default_states = collection.data.default_object_state[eject_env_tensor.long(), eject_obj_tensor.long()].clone()
@@ -627,7 +649,7 @@ class ToteManager:
             self._write_poses_to_sim(eject_env_tensor, eject_obj_tensor, default_states[:, :7], default_states[:, 7:])
 
             # Set visibility off
-            self.set_object_visibility(False, eject_env_ids, eject_obj_ids)
+            self.set_object_visibility_paired(False, eject_env_tensor, eject_obj_tensor)
 
         if overfilled_envs.any():
             self.tote_to_obj[env_ids[overfilled_envs], tote_ids[overfilled_envs], :] = 0
@@ -683,7 +705,7 @@ class ToteManager:
         self._write_poses_to_sim(env_ids_tensor, obj_ids_tensor, poses)
 
         # Set visibility
-        self.set_object_visibility(True, env_ids_list, obj_ids_list)
+        self.set_object_visibility_paired(True, env_ids_list, obj_ids_list)
 
     @profile
     def sample_and_place_objects_in_totes(self, env, tote_ids, env_ids, max_objects_per_tote=None, min_separation=0.3):
