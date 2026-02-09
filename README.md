@@ -63,7 +63,12 @@ We recommend using the **conda installation** as it simplifies calling Python sc
 ### Step 2: Clone or Copy This Repository
 Ensure this project/repository is separate from the Isaac Lab installation (i.e., outside the `IsaacLab` directory).
 
-### Step 3: Install the Library in Editable Mode
+### Step 3: Initialize submodules
+```bash
+git submodule update --init --recursive
+```
+
+### Step 4: Install the Library in Editable Mode
 Using a Python interpreter with Isaac Lab installed, run:
 ```bash
 # Use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
@@ -72,6 +77,18 @@ python -m pip install -e source/gculab
 python -m pip install -e source/gculab_assets
 python -m pip install -e source/gculab_rl
 ```
+
+### Step 5: Install Packing-3D-RL
+Using the same Python environment as above, run:
+```bash
+cd ..
+git clone https://github.com/kaikwan/Packing-3D-RL.git
+cd Packing-3D-RL
+pip install -e .
+```
+
+### Step 6: Fixing Dependency Issues with IsaacLab
+You may run into some dependency issues if you are running certain versions of IsaacLab. I was personally able to fix my issues by replacing a file in IsaacLab (IsaacLab/source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py)with an older version found here: https://github.com/isaac-sim/IsaacLab/blob/931679641ee84e1b4175c15b48f9286d44ba9b04/source/isaaclab_rl/isaaclab_rl/rsl_rl/vecenv_wrapper.py
 
 ---
 ## Running Tasks with RL Agents
@@ -87,14 +104,6 @@ These include dummy agents that output zero or random actions. They are useful f
 python scripts/zero_agent.py --task=<TASK_NAME>
 ```
 
----
-
-### Random-Action Agent
-**Command:**
-```bash
-# Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python scripts/random_agent.py --task=<TASK_NAME>
-```
 
 ---
 
