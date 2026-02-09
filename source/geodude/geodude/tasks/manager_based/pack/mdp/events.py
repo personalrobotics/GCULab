@@ -210,6 +210,9 @@ def object_props(
         asset_filename = os.path.basename(asset_path).replace(".usd", "")
         # Construct path to latents subfolder
         latents_path = os.path.join(asset_dir, "latents", f"{asset_filename}_latent.pt")
+        if not os.path.exists(latents_path):
+            print(f"WARNING: Latents file not found at: {latents_path}")
+            return None
         latents = torch.load(latents_path)
         return latents
 

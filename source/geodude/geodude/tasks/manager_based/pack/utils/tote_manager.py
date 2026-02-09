@@ -616,7 +616,10 @@ class ToteManager:
 
         max_available = reserve_objects.sum(dim=1).max().item()
         if max_available <= 0:
-            return False
+            raise ValueError(
+                "No available objects to sample from reserve. Increase num_object_per_env to increase the number of"
+                " objects in the reserve."
+            )
 
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
         tote_ids = tote_ids.unsqueeze(0) if tote_ids.ndim == 0 else tote_ids
