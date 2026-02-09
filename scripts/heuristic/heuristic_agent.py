@@ -123,12 +123,6 @@ def main():
 
     step_count = 0
 
-    args = {
-        "decreasing_vol": False,  # Whether to use decreasing volume for packing
-        "use_stability": False,  # Whether to use stability checks for packing
-        "use_subset_sum": False,  # Whether to use subset sum for packing
-    }
-
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
@@ -157,7 +151,7 @@ def main():
             # Get the objects that can be packed
             packable_objects = heuristic.get_packable_object_indices(num_obj_per_env, tote_manager, env_indices, tote_ids)[0]
 
-            heuristic.update_container_heightmap(env, env_indices, tote_ids)
+            # heuristic.update_container_heightmap(env, env_indices, tote_ids)
             
             transforms, obj_indicies = heuristic.get_action(env, packable_objects, tote_ids, env_indices)
             actions[:, 1:9] = convert_transform_to_action_tensor(transforms, obj_indicies, env.unwrapped.device)

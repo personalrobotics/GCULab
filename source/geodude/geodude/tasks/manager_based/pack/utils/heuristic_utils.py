@@ -61,6 +61,13 @@ class Heuristic(bpp_utils.BPP):
         "024": ObjectType.BOWL,          # bowl
         "025": ObjectType.MUG,           # mug
     }
+    
+    # Object types that should prioritize stacking before grid search
+    STACKABLE_TYPES = {
+        ObjectType.CYLINDRICAL,
+        ObjectType.BOWL,
+        ObjectType.MUG,
+    }
 
     def __init__(self, tote_manager, num_envs: int, objects: list, scale: float = 1.0, **kwargs):
         super().__init__(tote_manager, num_envs, objects, scale, **kwargs)
@@ -176,7 +183,6 @@ class Heuristic(bpp_utils.BPP):
             
         elif obj_type == ObjectType.CYLINDRICAL:
             # Cylinders: try vertical (standing) and horizontal (laying down)
-            orientations.append(Attitude(roll=0, pitch=0, yaw=0))  # Standing
             orientations.append(Attitude(roll=90, pitch=0, yaw=0))  # Laying
             
         elif obj_type == ObjectType.BOWL:
@@ -185,8 +191,7 @@ class Heuristic(bpp_utils.BPP):
             
         elif obj_type == ObjectType.MUG:
             # Mugs: face down for stacking
-            orientations.append(Attitude(roll=180, pitch=0, yaw=0))
-            orientations.append(Attitude(roll=0, pitch=0, yaw=0))  # Face up as backup
+            orientations.append(Attitude(roll=90, pitch=0, yaw=0))
             
         elif obj_type == ObjectType.BANANA:
             # Bananas: lay flat
@@ -202,6 +207,11 @@ class Heuristic(bpp_utils.BPP):
             ])
         print(f" object of type {obj_type} has bbox {bbox} got orientations: {orientations}")
         return orientations
+
+    @staticmethod
+    def _is_stackable(obj_type: str) -> bool:
+        """Check if an object type should prioritize stacking."""
+        return obj_type in Heuristic.STACKABLE_TYPES
 
     @staticmethod
     def _heuristic_worker(args: dict) -> Tuple[int, Optional[int], Optional[Transform]]:
@@ -226,6 +236,7 @@ class Heuristic(bpp_utils.BPP):
             target_zone = target_zones[idx]
             stacking_cands = stacking_candidates[idx]
             bbox = bbox_list[idx]
+            is_stackable = Heuristic._is_stackable(obj_type)
             
             # Generate orientations on-demand
             orientations = Heuristic._generate_orientations_static(bbox, obj_type)
@@ -235,22 +246,13 @@ class Heuristic(bpp_utils.BPP):
                 item.rotate(attitude)
                 item.calc_heightmap()
 
-                # item.position = Position(num_placed_objects*8, 0, 0)
-                
-                    
-                # transform = Transform(item.position, attitude)
-                # print(f" object {obj_idx} in environment {env_idx} got transform: {transform}")
-                # print(f"container heightmap: {problem.container.heightmap}")
-                # print(f"container semantic mask: {problem.container.semantic_mask}")
-                # num_placed_objects += 1
-                # return (env_idx, obj_idx, transform)
-                
-                # Priority 1: Try stacking on similar objects
-                for sx, sy, _ in stacking_cands:
-                    print(f"trying to stack object {obj_idx} in environment {env_idx} at position {sx}, {sy}")
-                    if problem.container.add_item_topdown(item, sx, sy):
-                        transform = Transform(item.position, attitude)
-                        return (env_idx, obj_idx, transform)
+                # Priority 1: Try stacking on similar objects (only for stackable types)
+                if is_stackable:
+                    for sx, sy, _ in stacking_cands:
+                        print(f"trying to stack object {obj_idx} ({obj_type}) in environment {env_idx} at position {sx}, {sy}")
+                        if problem.container.add_item_topdown(item, sx, sy):
+                            transform = Transform(item.position, attitude)
+                            return (env_idx, obj_idx, transform)
                 
                 # Priority 2: Try target zone with type-specific heuristic
                 # zone_x_min, zone_x_max = target_zone
@@ -281,13 +283,25 @@ class Heuristic(bpp_utils.BPP):
                 # if best_position is not None:
                 #     return (env_idx, obj_idx, best_position)
                 
-                # # Priority 3: Try anywhere in container
-                print(f"grid serach. trying to place object {obj_idx} in environment {env_idx}")
+                # Priority 2: DBLF grid search (Deep Bottom Left First)
+                # Score = z * 10000 + x * 100 + y (prioritize low z, then low x, then low y)
+                print(f"DBLF grid search: placing object {obj_idx} ({obj_type}) in environment {env_idx}")
+                best_score = float('inf')
+                best_transform = None
+                
                 for x in range(problem.container.geometry.x_size):
                     for y in range(problem.container.geometry.y_size):
                         if problem.container.add_item_topdown(item, x, y):
-                            transform = Transform(item.position, attitude)
-                            return (env_idx, obj_idx, transform)
+                            z = item.position.z
+                            # DBLF scoring: prioritize bottom (low z), then back/left (low x), then front (low y)
+                            score = z * 10000 + x * 100 + y
+                            if score < best_score:
+                                best_score = score
+                                best_transform = Transform(Position(x, y, z), attitude)
+                
+                if best_transform is not None:
+                    print(f"  -> Best DBLF position: ({best_transform.position.x}, {best_transform.position.y}, {best_transform.position.z}) score={best_score}")
+                    return (env_idx, obj_idx, best_transform)
         
         # No valid placement found
         return (env_idx, None, None)
@@ -296,7 +310,6 @@ class Heuristic(bpp_utils.BPP):
         self, env, obj_indices: list[list], dest_tote_ids: torch.Tensor, env_indices: torch.Tensor, plot: bool = False
     ) -> Tuple[list, torch.Tensor]:
         """Get packing actions using heuristic strategy with semantic masks."""
-        
         transforms_list = []
         obj_idx_list = []
         
@@ -304,6 +317,7 @@ class Heuristic(bpp_utils.BPP):
         worker_args = []
         for i, env_idx in enumerate(env_indices):
             env_idx_val = env_idx.item()
+            print(f"[get_action START] env={env_idx_val}, container id={id(self.problems[env_idx_val].container)}, mask count={np.count_nonzero(self.problems[env_idx_val].container.semantic_mask + 1)}")
             curr_obj_indices = obj_indices[env_idx_val]
             
             if not curr_obj_indices:
@@ -344,7 +358,6 @@ class Heuristic(bpp_utils.BPP):
         
         # Collect results
         for env_idx, obj_idx, transform in results:
-            print(f"[get_action START] env={env_idx_val}, container id={id(self.problems[env_idx_val].container)}, mask count={np.count_nonzero(self.problems[env_idx_val].container.semantic_mask + 1)}")
             if obj_idx is not None and transform is not None:
                 transforms_list.append(transform)
                 obj_idx_list.append(torch.tensor([obj_idx], dtype=torch.int32))
