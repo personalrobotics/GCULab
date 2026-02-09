@@ -712,24 +712,20 @@ def gcu_reward_step(env: ManagerBasedRLGCUEnv):
         reset_envs = reset_envs.unsqueeze(0)
     gcu_values[reset_envs] = 0.0
     return gcu_values
-    
-def _resolve_env_ids(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None) -> torch.Tensor:
-    if env_ids is None:
-        return torch.arange(env.unwrapped.num_envs, device=env.unwrapped.device)
-    return env_ids
 
 
 def _get_dest_tote_gcu(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor) -> torch.Tensor:
     gcu_values = env.unwrapped.tote_manager.get_gcu(env_ids)  # Shape: [len(env_ids), num_totes]
     dest_totes = env.unwrapped.tote_manager.dest_totes[env_ids]  # Shape: [len(env_ids)]
-    row_ids = torch.arange(env_ids.numel(), device=env_ids.device)
-    return gcu_values[row_ids, dest_totes]
+    envs = torch.arange(env_ids.numel(), device=env_ids.device)
+    return gcu_values[envs, dest_totes]
 
 
 def log_gcu_dest_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
     """
     Computes the GCU of the destination tote for each environment.
-    This tracks the GCU of the tote being actively packed.
+    This tracks the GCU of the tote being actively packed. 
+    This gets logged as the average GCU across envs
     
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
@@ -737,7 +733,6 @@ def log_gcu_dest_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = 
     Returns:
         torch.Tensor: GCU of destination tote per environment, shape [num_envs]
     """
-    env_ids = _resolve_env_ids(env, env_ids)
     dest_gcu = _get_dest_tote_gcu(env, env_ids)
     log = env.extras.setdefault("log", {})
     log["GCU/gcu_dest_tote"] = dest_gcu
@@ -745,8 +740,7 @@ def log_gcu_dest_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = 
 
 def log_gcu_max(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
     """
-    Computes the GCU of the destination tote for each environment.
-    This tracks the GCU of the destination tote being actively packed.
+    Computes the maximum GCU of the destination tote across environments
     
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
@@ -754,7 +748,6 @@ def log_gcu_max(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
     Returns:
         torch.Tensor: GCU of destination tote per environment, shape [num_envs]
     """
-    env_ids = _resolve_env_ids(env, env_ids)
     dest_gcu = _get_dest_tote_gcu(env, env_ids)
     max_gcu = dest_gcu.max()
     log = env.extras.setdefault("log", {})
