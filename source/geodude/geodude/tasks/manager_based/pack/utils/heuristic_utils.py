@@ -114,8 +114,9 @@ class Heuristic(bpp_utils.BPP):
     ) -> List[Tuple[int, int, float]]:
         """Find candidate positions for stacking based on semantic mask.
         
-        Returns list of (centroid_x, centroid_y, avg_height) tuples for each
+        Returns list of (min_x, min_y, avg_height) tuples for each
         contiguous region matching the same YCB ID as the object being placed.
+        The min corner is used so stacking happens at the same origin as the first object.
         """
         candidates = []
         semantic_mask = container.semantic_mask
@@ -130,15 +131,15 @@ class Heuristic(bpp_utils.BPP):
         
         # Create binary mask for regions matching this YCB ID
         binary_mask = (semantic_mask == target_ycb_id).astype(np.int32)
-        # print(f"target ycb id: {target_ycb_id}")
-        # print(f"semantic mask: {np.count_nonzero(semantic_mask + 1)}")
-        # print(f"binary mask: {binary_mask}")
+        print(f"target ycb id: {target_ycb_id}")
+        print(f"semantic mask: {np.count_nonzero(semantic_mask + 1)}")
+        print(f"binary mask: {binary_mask}")
         
         # Label connected regions
         labeled_array, num_features = ndimage.label(binary_mask)
-        # print(f"labeled array: {labeled_array}")
-        # print(f"num features: {num_features}")
-        # Find centroid of each region
+        print(f"labeled array: {labeled_array}")
+        print(f"num features: {num_features}")
+        # Find origin corner (min x, min y) of each region
         for region_id in range(1, num_features + 1):
             region_mask = labeled_array == region_id
             region_coords = np.argwhere(region_mask)
@@ -146,14 +147,15 @@ class Heuristic(bpp_utils.BPP):
             if len(region_coords) == 0:
                 continue
             
-            # Compute centroid
-            centroid_x = int(np.mean(region_coords[:, 0]))
-            centroid_y = int(np.mean(region_coords[:, 1]))
+            # Use minimum x, minimum y (origin corner) instead of centroid
+            # This ensures stacking at the same position as the original object
+            min_x = int(np.min(region_coords[:, 0]))
+            min_y = int(np.min(region_coords[:, 1]))
             
             # Compute average height over the region
             avg_height = np.mean(heightmap[region_mask])
             
-            candidates.append((centroid_x, centroid_y, avg_height))
+            candidates.append((min_x, min_y, avg_height))
         
         # Sort by height (prefer stacking on taller objects for stability)
         candidates.sort(key=lambda c: c[2], reverse=True)
@@ -165,7 +167,6 @@ class Heuristic(bpp_utils.BPP):
         # Sort dimensions to find longest, middle, shortest
         dims = sorted(enumerate(bbox), key=lambda x: x[1], reverse=True)
         longest_axis, middle_axis, shortest_axis = [d[0] for d in dims]
-        print(f"object of type {obj_type} has bbox {bbox} got longest axis {longest_axis}, middle axis {middle_axis}, shortest axis {shortest_axis}")
         
         orientations = []
         if obj_type == ObjectType.CUBOIDAL:
@@ -185,8 +186,8 @@ class Heuristic(bpp_utils.BPP):
             orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             
         elif obj_type == ObjectType.CYLINDRICAL:
-            # Cylinders: try vertical (standing) and horizontal (laying down)
-            orientations.append(Attitude(roll=0, pitch=0, yaw=0))  # Laying
+            # Cylinders: try vertical (standing)
+            orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             
         elif obj_type == ObjectType.BOWL:
             # Bowls: face up for nesting
@@ -319,7 +320,6 @@ class Heuristic(bpp_utils.BPP):
         worker_args = []
         for i, env_idx in enumerate(env_indices):
             env_idx_val = env_idx.item()
-            print(f"[get_action START] env={env_idx_val}, container id={id(self.problems[env_idx_val].container)}, mask count={np.count_nonzero(self.problems[env_idx_val].container.semantic_mask + 1)}")
             curr_obj_indices = obj_indices[env_idx_val]
             
             if not curr_obj_indices:
@@ -369,7 +369,6 @@ class Heuristic(bpp_utils.BPP):
                 item.transform(transform)
                 print(f"Adding item {obj_idx} to container {env_idx} at position {item.position} with attitude {item.attitude}")
                 self.problems[env_idx].container.add_item(item, update_semantic_mask=True)
-                print(f"After add_item, semantic_mask non-empty count: {np.count_nonzero(self.problems[env_idx].container.semantic_mask + 1)}")
                 self.packed_obj_idx[env_idx].append(torch.tensor(obj_idx))
             else:
                 # Mark as unpackable
