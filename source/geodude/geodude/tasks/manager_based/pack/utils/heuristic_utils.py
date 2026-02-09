@@ -165,6 +165,7 @@ class Heuristic(bpp_utils.BPP):
         # Sort dimensions to find longest, middle, shortest
         dims = sorted(enumerate(bbox), key=lambda x: x[1], reverse=True)
         longest_axis, middle_axis, shortest_axis = [d[0] for d in dims]
+        print(f"object of type {obj_type} has bbox {bbox} got longest axis {longest_axis}, middle axis {middle_axis}, shortest axis {shortest_axis}")
         
         orientations = []
         if obj_type == ObjectType.CUBOIDAL:
@@ -172,18 +173,20 @@ class Heuristic(bpp_utils.BPP):
             if longest_axis == 0:  # x is longest
                 orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             elif longest_axis == 1:  # y is longest
-                orientations.append(Attitude(roll=0, pitch=90, yaw=0))
-            else:  # z is longest ("stands it up" and aligns it with shorter axis of tote)
-                orientations.append(Attitude(roll=90, pitch=0, yaw=90))
+                orientations.append(Attitude(roll=0, pitch=0, yaw=0))
+            else:  # z is longest (pitch rotation "stands it up"). 
+                # I think we only have objects where z is longest
+                orientations.append(Attitude(roll=0, pitch=90, yaw=90)) # prioritize axis aligned with shorter axis
+                orientations.append(Attitude(roll=0, pitch=90, yaw=0)) # axis aligned with longer axis
             
-            # Add flat orientations as backup
-            # orientations.append(Attitude(roll=0, pitch=0, yaw=0))
-            # orientations.append(Attitude(roll=90, pitch=0, yaw=0))
-            # orientations.append(Attitude(roll=0, pitch=90, yaw=0))
+            # Add various flat orientations as backup
+            orientations.append(Attitude(roll=0, pitch=0, yaw=0))
+            orientations.append(Attitude(roll=90, pitch=0, yaw=0))
+            orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             
         elif obj_type == ObjectType.CYLINDRICAL:
             # Cylinders: try vertical (standing) and horizontal (laying down)
-            orientations.append(Attitude(roll=90, pitch=0, yaw=0))  # Laying
+            orientations.append(Attitude(roll=0, pitch=0, yaw=0))  # Laying
             
         elif obj_type == ObjectType.BOWL:
             # Bowls: face up for nesting
@@ -284,7 +287,6 @@ class Heuristic(bpp_utils.BPP):
                 #     return (env_idx, obj_idx, best_position)
                 
                 # Priority 2: DBLF grid search (Deep Bottom Left First)
-                # Score = z * 10000 + x * 100 + y (prioritize low z, then low x, then low y)
                 print(f"DBLF grid search: placing object {obj_idx} ({obj_type}) in environment {env_idx}")
                 best_score = float('inf')
                 best_transform = None
@@ -293,8 +295,8 @@ class Heuristic(bpp_utils.BPP):
                     for y in range(problem.container.geometry.y_size):
                         if problem.container.add_item_topdown(item, x, y):
                             z = item.position.z
-                            # DBLF scoring: prioritize bottom (low z), then back/left (low x), then front (low y)
-                            score = z * 10000 + x * 100 + y
+                            # DBLF scoring: prioritize bottom (low z), then front (low y), then back/left (low x)
+                            score = z * 10000 + y * 100 + x
                             if score < best_score:
                                 best_score = score
                                 best_transform = Transform(Position(x, y, z), attitude)

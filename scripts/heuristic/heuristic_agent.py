@@ -77,6 +77,17 @@ def convert_transform_to_action_tensor(transforms, obj_indicies, device):
         1
     )
 
+    # Apply correction rotation (roll=90, yaw=90) to align algorithm coords with sim coords
+    correction_roll = torch.tensor([90.0], device=device) * torch.pi / 180.0
+    correction_pitch = torch.tensor([90.0], device=device) * torch.pi / 180.0
+    correction_yaw = torch.tensor([0.0], device=device) * torch.pi / 180.0
+    correction_quat = math_utils.quat_from_euler_xyz(
+        correction_roll.unsqueeze(1), correction_pitch.unsqueeze(1), correction_yaw.unsqueeze(1)
+    ).squeeze(1)
+
+    # Compose rotations: correction * original (apply correction after original rotation)
+    quats = math_utils.quat_mul(quats, correction_quat.expand(batch_size, -1))
+
     # Build action tensor
     action_tensor[:, 0] = obj_indicies
     action_tensor[:, 1:4] = positions
