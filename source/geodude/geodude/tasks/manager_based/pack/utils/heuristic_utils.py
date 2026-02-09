@@ -133,11 +133,12 @@ class Heuristic(bpp_utils.BPP):
         binary_mask = (semantic_mask == target_ycb_id).astype(np.int32)
         print(f"target ycb id: {target_ycb_id}")
         print(f"semantic mask: {np.count_nonzero(semantic_mask + 1)}")
-        print(f"binary mask: {binary_mask}")
+        # print(f"binary mask: {binary_mask}")
         
         # Label connected regions
         labeled_array, num_features = ndimage.label(binary_mask)
-        print(f"labeled array: {labeled_array}")
+        np.set_printoptions(threshold=np.inf)
+        print(f"labeled array:\n {labeled_array}")
         print(f"num features: {num_features}")
         # Find origin corner (min x, min y) of each region
         for region_id in range(1, num_features + 1):
@@ -369,6 +370,7 @@ class Heuristic(bpp_utils.BPP):
                 item.transform(transform)
                 print(f"Adding item {obj_idx} to container {env_idx} at position {item.position} with attitude {item.attitude}")
                 self.problems[env_idx].container.add_item(item, update_semantic_mask=True)
+                print(f"container dims are {self.problems[env_idx].container.geometry.x_size}, {self.problems[env_idx].container.geometry.y_size}, {self.problems[env_idx].container.geometry.z_size}")
                 self.packed_obj_idx[env_idx].append(torch.tensor(obj_idx))
             else:
                 # Mark as unpackable
