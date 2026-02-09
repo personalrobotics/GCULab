@@ -260,6 +260,7 @@ class RewardsCfg:
 
     wasted_volume = RewardTerm(func=mdp.inverse_wasted_volume, weight=40.0)
 
+
 @configclass
 class TerminationsCfg:
     """Termination terms for the MDP."""
