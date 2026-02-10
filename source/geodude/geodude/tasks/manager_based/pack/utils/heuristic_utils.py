@@ -51,6 +51,10 @@ class Heuristic(bpp_utils.BPP):
     # Zone definitions (x-coordinates in cm, container x_size is 50cm)
     CUBOIDAL_ZONE = (0, 30)  # Right 30 cm for cuboidals
     IRREGULAR_ZONE = (30, 50)  # left 20 cm for irregular objects
+
+    # Grid search parameters for last resort search
+    GRID_SEARCH_NUM = 25
+    STEP_WIDTH = 90
     
     # Object classification by YCB ID
     OBJECT_TYPE_MAP = {
@@ -107,12 +111,6 @@ class Heuristic(bpp_utils.BPP):
         
         return self.classify_object_by_ycb_id(item.obj_id)
 
-    def get_target_zone(self, obj_type: str) -> Tuple[int, int]:
-        """Get target x-coordinate zone for object type."""
-        if obj_type in [ObjectType.CUBOIDAL, ObjectType.CYLINDRICAL]:
-            return self.CUBOIDAL_ZONE
-        return self.IRREGULAR_ZONE
-
     def find_stacking_candidates(self, env_idx: int, obj_type: str) -> List[Tuple[int, int]]:
         """Find the stacking position for this object type.
         
@@ -157,16 +155,17 @@ class Heuristic(bpp_utils.BPP):
             
         elif obj_type == ObjectType.BOWL:
             # Bowls: face up for nesting
-            orientations.append(Attitude(roll=-90, pitch=0, yaw=0))
+            orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             
         elif obj_type == ObjectType.MUG:
             # Mugs: face down for stacking
-            orientations.append(Attitude(roll=90, pitch=0, yaw=0))
+            #TODO: need to flip handle around
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=-135))
             
         elif obj_type == ObjectType.BANANA:
             # Bananas: lay flat
-            orientations.append(Attitude(roll=90, pitch=0, yaw=0))
-            orientations.append(Attitude(roll=0, pitch=90, yaw=0))
+            orientations.append(Attitude(roll=90, pitch=90, yaw=0))
+            orientations.append(Attitude(roll=90, pitch=0, yaw=90))
             
         else:  # IRREGULAR
             # Try common stable orientations
@@ -225,35 +224,35 @@ class Heuristic(bpp_utils.BPP):
                             return (env_idx, obj_idx, transform)
                 
                 # Priority 2: Try target zone with type-specific heuristic
-                # zone_x_min, zone_x_max = target_zone
-                # best_score = float('inf')
-                # best_position = None
+                zone_x_min, zone_x_max = target_zone
+                best_score = float('inf')
+                best_position = None
                 
-                # # Determine scoring heuristic based on object type
-                # is_cuboidal = obj_type in [ObjectType.CUBOIDAL, ObjectType.CYLINDRICAL]
-                
-                # # Grid search in target zone
-                # for x in range(zone_x_min, min(zone_x_max, problem.container.geometry.x_size)):
-                #     for y in range(problem.container.geometry.y_size):
-                #         if problem.container.add_item_topdown(item, x, y):
-                #             if is_cuboidal:
-                #                 # DBLF (Deep Bottom Left First): prioritize low z, then low x, then low y
-                #                 score = item.position.z * 100 + x * 10 + y
-                #             else:
-                #                 # DTR (Deep Top Right): prioritize low z, then high x, then high y
-                #                 # Negate x and y to maximize them while minimizing overall score
-                #                 max_x = problem.container.geometry.x_size
-                #                 max_y = problem.container.geometry.y_size
-                #                 score = item.position.z * 100 + (max_x - x) * 10 + (max_y - y)
+                # Grid search in target zone
+                deepest_top_right = False
+                for x in range(zone_x_min, min(zone_x_max, problem.container.geometry.x_size)):
+                    for y in range(problem.container.geometry.y_size):
+                        if problem.container.add_item_topdown(item, x, y):
+                            if obj_type == ObjectType.CUBOIDAL:
+                                # DBLF (Deep Bottom Left First): prioritize low z, then low y, then low x
+                                score = item.position.z * 100  + y * 10 + x
+                            else:
+                                deepest_top_right = True
+                                # DTR (Deep Top Right): prioritize low z, then high x, then high y
+                                # Negate x and y to maximize them while minimizing overall score
+                                max_x = problem.container.geometry.x_size
+                                max_y = problem.container.geometry.y_size
+                                score = item.position.z * 100  + (max_y - y) * 10 + (max_x - x)
                             
-                #             if score < best_score:
-                #                 best_score = score
-                #                 best_position = Transform(item.position, attitude)
+                            if score < best_score:
+                                best_score = score
+                                best_position = Transform(item.position, attitude)
                 
-                # if best_position is not None:
-                #     return (env_idx, obj_idx, best_position)
+                if best_position is not None:
+                    print(f"Region search with region Deepest top right {deepest_top_right} found best position {best_position}")
+                    return (env_idx, obj_idx, best_position)
                 
-                # Priority 2: DBLF grid search (Deep Bottom Left First)
+                # Priority 3: DBLF grid search (Deep Bottom Left First)
                 print(f"DBLF grid search: placing object {obj_idx} ({obj_type}) in environment {env_idx}")
                 best_score = float('inf')
                 best_transform = None
@@ -271,7 +270,14 @@ class Heuristic(bpp_utils.BPP):
                 if best_transform is not None:
                     print(f"  -> Best DBLF position: ({best_transform.position.x}, {best_transform.position.y}, {best_transform.position.z}) score={best_score}")
                     return (env_idx, obj_idx, best_transform)
-        
+
+                # Priority 4: Last resort search
+                transforms = problem.container.search_possible_position(
+                    item, grid_num=Heuristic.GRID_SEARCH_NUM, step_width=Heuristic.STEP_WIDTH
+                )
+                if transforms:
+                    print(f"Last resort search found best position {transforms[0]}")
+                    return (env_idx, obj_idx, transforms[0])
         # No valid placement found
         return (env_idx, None, None)
 
@@ -295,7 +301,7 @@ class Heuristic(bpp_utils.BPP):
             obj_types = [self.classify_object(env_idx_val, obj_idx) for obj_idx in curr_obj_indices]
             
             # Get target zones
-            target_zones = [self.get_target_zone(obj_type) for obj_type in obj_types]
+            target_zones = [self.CUBOIDAL_ZONE if obj_type in ObjectType.CUBOIDAL else self.IRREGULAR_ZONE for obj_type in obj_types]
             
             # Find stacking candidates
             stacking_candidates = [
@@ -335,6 +341,8 @@ class Heuristic(bpp_utils.BPP):
                 print(f"Adding item {obj_idx} to container {env_idx} at position {item.position} with attitude {item.attitude}")
                 self.problems[env_idx].container.add_item(item, update_semantic_mask=True)
                 self.packed_obj_idx[env_idx].append(torch.tensor(obj_idx))
+                np.set_printoptions(threshold=np.inf, linewidth=200)
+                print(self.get_semantic_mask(env_idx).T)
                 
                 # Track most recent stacking position for stackable objects
                 ycb_id = item.obj_id
