@@ -55,7 +55,7 @@ for obj_id, obj_name in sorted(available_objects.items()):
 
 # Define which object IDs to include
 ycb_include_ids = [
-    # "003",  # cracker_box
+    "003",  # cracker_box
     # "004",  # sugar_box
     # "006",  # mustard_bottle
     # "007",  # tuna_fish_can

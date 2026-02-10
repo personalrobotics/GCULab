@@ -71,6 +71,10 @@ class Heuristic(bpp_utils.BPP):
 
     def __init__(self, tote_manager, num_envs: int, objects: list, scale: float = 1.0, **kwargs):
         super().__init__(tote_manager, num_envs, objects, scale, **kwargs)
+        # Track most recent placement position for stackable objects: {env_idx: {obj_type: (x, y)}}
+        self.stacking_positions: Dict[int, Dict[str, Tuple[int, int]]] = {
+            i: {} for i in range(num_envs)
+        }
     
     def _get_items_worker(self):
         """Override to use heuristic_utils.create_items_worker with YCB IDs."""
@@ -109,58 +113,19 @@ class Heuristic(bpp_utils.BPP):
             return self.CUBOIDAL_ZONE
         return self.IRREGULAR_ZONE
 
-    def find_stacking_candidates(
-        self, container: Container, env_idx: int, obj_idx: int, obj_type: str
-    ) -> List[Tuple[int, int, float]]:
-        """Find candidate positions for stacking based on semantic mask.
+    def find_stacking_candidates(self, env_idx: int, obj_type: str) -> List[Tuple[int, int]]:
+        """Find the stacking position for this object type.
         
-        Returns list of (min_x, min_y, avg_height) tuples for each
-        contiguous region matching the same YCB ID as the object being placed.
-        The min corner is used so stacking happens at the same origin as the first object.
+        Returns a single-element list with (x, y) if a stacking position
+        exists for this object type, otherwise empty list.
         """
-        candidates = []
-        semantic_mask = container.semantic_mask
-        heightmap = container.heightmap
+        env_positions = self.stacking_positions.get(env_idx, {})
+        position = env_positions.get(obj_type)
         
-        # Get the YCB ID of the object being placed
-        item = self.problems[env_idx].items[obj_idx]
-        target_ycb_id = item.obj_id
+        if position is None:
+            return []
         
-        if target_ycb_id is None:
-            return candidates
-        
-        # Create binary mask for regions matching this YCB ID
-        binary_mask = (semantic_mask == target_ycb_id).astype(np.int32)
-        print(f"target ycb id: {target_ycb_id}")
-        print(f"semantic mask: {np.count_nonzero(semantic_mask + 1)}")
-        # print(f"binary mask: {binary_mask}")
-        
-        # Label connected regions
-        labeled_array, num_features = ndimage.label(binary_mask)
-        np.set_printoptions(threshold=np.inf)
-        print(f"labeled array:\n {labeled_array}")
-        print(f"num features: {num_features}")
-        # Find origin corner (min x, min y) of each region
-        for region_id in range(1, num_features + 1):
-            region_mask = labeled_array == region_id
-            region_coords = np.argwhere(region_mask)
-            
-            if len(region_coords) == 0:
-                continue
-            
-            # Use minimum x, minimum y (origin corner) instead of centroid
-            # This ensures stacking at the same position as the original object
-            min_x = int(np.min(region_coords[:, 0]))
-            min_y = int(np.min(region_coords[:, 1]))
-            
-            # Compute average height over the region
-            avg_height = np.mean(heightmap[region_mask])
-            
-            candidates.append((min_x, min_y, avg_height))
-        
-        # Sort by height (prefer stacking on taller objects for stability)
-        candidates.sort(key=lambda c: c[2], reverse=True)
-        return candidates
+        return [position]
 
     @staticmethod
     def _generate_orientations_static(bbox: np.ndarray, obj_type: str) -> List[Attitude]:
@@ -253,7 +218,7 @@ class Heuristic(bpp_utils.BPP):
 
                 # Priority 1: Try stacking on similar objects (only for stackable types)
                 if is_stackable:
-                    for sx, sy, _ in stacking_cands:
+                    for (sx, sy) in stacking_cands:
                         print(f"trying to stack object {obj_idx} ({obj_type}) in environment {env_idx} at position {sx}, {sy}")
                         if problem.container.add_item_topdown(item, sx, sy):
                             transform = Transform(item.position, attitude)
@@ -333,10 +298,9 @@ class Heuristic(bpp_utils.BPP):
             target_zones = [self.get_target_zone(obj_type) for obj_type in obj_types]
             
             # Find stacking candidates
-            container = self.problems[env_idx_val].container
             stacking_candidates = [
-                self.find_stacking_candidates(container, env_idx_val, obj_idx, obj_type)
-                for obj_idx, obj_type in zip(curr_obj_indices, obj_types)
+                self.find_stacking_candidates(env_idx_val, obj_type)
+                for obj_type in obj_types
             ]
             
             # Get bboxes (orientations will be generated on-demand in worker)
@@ -365,13 +329,20 @@ class Heuristic(bpp_utils.BPP):
                 transforms_list.append(transform)
                 obj_idx_list.append(torch.tensor([obj_idx], dtype=torch.int32))
                 
-                # Update container with semantic mask
+                # Update container
                 item = self.problems[env_idx].items[obj_idx]
                 item.transform(transform)
                 print(f"Adding item {obj_idx} to container {env_idx} at position {item.position} with attitude {item.attitude}")
                 self.problems[env_idx].container.add_item(item, update_semantic_mask=True)
-                print(f"container dims are {self.problems[env_idx].container.geometry.x_size}, {self.problems[env_idx].container.geometry.y_size}, {self.problems[env_idx].container.geometry.z_size}")
                 self.packed_obj_idx[env_idx].append(torch.tensor(obj_idx))
+                
+                # Track most recent stacking position for stackable objects
+                ycb_id = item.obj_id
+                obj_type = self.classify_object_by_ycb_id(ycb_id)
+                if obj_type in self.STACKABLE_TYPES:
+                    self.stacking_positions[env_idx][obj_type] = (
+                        transform.position.x, transform.position.y
+                    )
             else:
                 # Mark as unpackable
                 if obj_indices[env_idx]:
