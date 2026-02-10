@@ -223,53 +223,55 @@ class Heuristic(bpp_utils.BPP):
                             transform = Transform(item.position, attitude)
                             return (env_idx, obj_idx, transform)
                 
-                # Priority 2: Try target zone with type-specific heuristic
+                # Priority 2: Full container search with zone preference
+                # Search entire container but add penalty for out-of-zone placements
                 zone_x_min, zone_x_max = target_zone
                 best_score = float('inf')
                 best_position = None
+                max_x = problem.container.geometry.x_size
+                max_y = problem.container.geometry.y_size
+                semantic_mask = problem.container.semantic_mask
                 
-                # Grid search in target zone
-                deepest_top_right = False
-                for x in range(zone_x_min, min(zone_x_max, problem.container.geometry.x_size)):
-                    for y in range(problem.container.geometry.y_size):
+                # Penalties for non-optimal placements
+                ZONE_PENALTY = 2000  # Placing outside preferred zone
+                CROSS_TYPE_STACK_PENALTY = 20000  # Stacking on different object type
+                
+                for x in range(max_x):
+                    for y in range(max_y):
                         if problem.container.add_item_topdown(item, x, y):
+                            z = item.position.z
+                            
+                            # Check if in preferred zone
+                            in_zone = zone_x_min <= x < zone_x_max
+                            zone_score = 0 if in_zone else ZONE_PENALTY
+                            
+                            # Check if stacking on a different object type
+                            cross_type_score = 0
+                            if z > 0:  # Stacking on something
+                                below_ycb_id = semantic_mask[x, y]
+                                if below_ycb_id >= 0:  # There's an object below
+                                    below_type = Heuristic.OBJECT_TYPE_MAP.get(
+                                        str(below_ycb_id).zfill(3), ObjectType.IRREGULAR
+                                    )
+                                    if below_type != obj_type:
+                                        cross_type_score = CROSS_TYPE_STACK_PENALTY
+                            
                             if obj_type == ObjectType.CUBOIDAL:
                                 # DBLF (Deep Bottom Left First): prioritize low z, then low y, then low x
-                                score = item.position.z * 100  + y * 10 + x
+                                score = z * 1000 + y * 10 + x + zone_score + cross_type_score
                             else:
-                                deepest_top_right = True
                                 # DTR (Deep Top Right): prioritize low z, then high x, then high y
-                                # Negate x and y to maximize them while minimizing overall score
-                                max_x = problem.container.geometry.x_size
-                                max_y = problem.container.geometry.y_size
-                                score = item.position.z * 100  + (max_y - y) * 10 + (max_x - x)
+                                score = z * 1000 + (max_y - y) * 10 + (max_x - x) + zone_score + cross_type_score
                             
                             if score < best_score:
                                 best_score = score
                                 best_position = Transform(item.position, attitude)
                 
                 if best_position is not None:
-                    print(f"Region search with region Deepest top right {deepest_top_right} found best position {best_position}")
+                    in_zone_str = "in-zone" if (best_score % 10000) < ZONE_PENALTY else "out-of-zone"
+                    heuristic = "DBLF" if obj_type == ObjectType.CUBOIDAL else "DTR"
+                    print(f"{heuristic} search ({in_zone_str}): placing object {obj_idx} ({obj_type}) at {best_position.position}")
                     return (env_idx, obj_idx, best_position)
-                
-                # Priority 3: DBLF grid search (Deep Bottom Left First)
-                print(f"DBLF grid search: placing object {obj_idx} ({obj_type}) in environment {env_idx}")
-                best_score = float('inf')
-                best_transform = None
-                
-                for x in range(problem.container.geometry.x_size):
-                    for y in range(problem.container.geometry.y_size):
-                        if problem.container.add_item_topdown(item, x, y):
-                            z = item.position.z
-                            # DBLF scoring: prioritize bottom (low z), then front (low y), then back/left (low x)
-                            score = z * 10000 + y * 100 + x
-                            if score < best_score:
-                                best_score = score
-                                best_transform = Transform(Position(x, y, z), attitude)
-                
-                if best_transform is not None:
-                    print(f"  -> Best DBLF position: ({best_transform.position.x}, {best_transform.position.y}, {best_transform.position.z}) score={best_score}")
-                    return (env_idx, obj_idx, best_transform)
 
                 # Priority 4: Last resort search
                 transforms = problem.container.search_possible_position(
