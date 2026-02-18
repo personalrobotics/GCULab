@@ -624,16 +624,17 @@ class ToteManager:
         tote_ids = torch.tensor(tote_ids, device=env_ids.device) if not isinstance(tote_ids, torch.Tensor) else tote_ids
         tote_ids = tote_ids.unsqueeze(0) if tote_ids.ndim == 0 else tote_ids
 
-        # num_objects_to_teleport = (
-        #     torch.randint(1, max_available + 1, (len(env_ids),), device=env_ids.device)
-        #     if max_objects_per_tote is None
-        #     else torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
-        # )
-        num_objects_to_teleport = torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
+        num_objects_to_teleport = (
+            torch.randint(1, max_available + 1, (len(env_ids),), device=env_ids.device)
+            if max_objects_per_tote is None
+            else torch.full((len(env_ids),), min(max_objects_per_tote, max_available), device=env_ids.device)
+        )
 
         sampled_objects = [
             (
-                torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[:num]
+                torch.tensor(reserve_objects_grouped[i], device=env_ids.device)[
+                    torch.randperm(len(reserve_objects_grouped[i]), device=env_ids.device)[:num]
+                ]
                 if num > 0 and reserve_objects_grouped[i]
                 else torch.tensor([], device=env_ids.device)
             )
