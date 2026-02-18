@@ -75,8 +75,8 @@ class Heuristic(bpp_utils.BPP):
 
     def __init__(self, tote_manager, num_envs: int, objects: list, scale: float = 1.0, **kwargs):
         super().__init__(tote_manager, num_envs, objects, scale, **kwargs)
-        # Track most recent placement position for stackable objects: {env_idx: {obj_type: (x, y)}}
-        self.stacking_positions: Dict[int, Dict[str, Tuple[int, int]]] = {
+        # Track most recent placement transform for stackable objects: {env_idx: {obj_type: Transform}}
+        self.stacking_positions: Dict[int, Dict[str, Transform]] = {
             i: {} for i in range(num_envs)
         }
     
@@ -111,19 +111,19 @@ class Heuristic(bpp_utils.BPP):
         
         return self.classify_object_by_ycb_id(item.obj_id)
 
-    def find_stacking_candidates(self, env_idx: int, obj_type: str) -> List[Tuple[int, int]]:
-        """Find the stacking position for this object type.
+    def find_stacking_candidates(self, env_idx: int, obj_type: str) -> List[Transform]:
+        """Find the stacking transform for this object type.
         
-        Returns a single-element list with (x, y) if a stacking position
+        Returns a single-element list with Transform if a stacking position
         exists for this object type, otherwise empty list.
         """
         env_positions = self.stacking_positions.get(env_idx, {})
-        position = env_positions.get(obj_type)
+        transform = env_positions.get(obj_type)
         
-        if position is None:
+        if transform is None:
             return []
         
-        return [position]
+        return [transform]
 
     @staticmethod
     def _generate_orientations_static(bbox: np.ndarray, obj_type: str) -> List[Attitude]:
@@ -151,6 +151,7 @@ class Heuristic(bpp_utils.BPP):
             
         elif obj_type == ObjectType.CYLINDRICAL:
             # Cylinders: try vertical (standing)
+            orientations.append(Attitude(roll=0, pitch=90, yaw=90))
             orientations.append(Attitude(roll=0, pitch=90, yaw=0))
             
         elif obj_type == ObjectType.BOWL:
@@ -161,6 +162,13 @@ class Heuristic(bpp_utils.BPP):
             # Mugs: face down for stacking
             #TODO: need to flip handle around
             orientations.append(Attitude(roll=0, pitch=-90, yaw=-135))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=-90))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=-45))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=0))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=45))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=90))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=135))
+            orientations.append(Attitude(roll=0, pitch=-90, yaw=180))
             
         elif obj_type == ObjectType.BANANA:
             # Bananas: lay flat
@@ -183,6 +191,89 @@ class Heuristic(bpp_utils.BPP):
         return obj_type in Heuristic.STACKABLE_TYPES
 
     @staticmethod
+    def _search_mug_all_orientations(
+        item: Item,
+        problem: PackingProblem,
+        orientations: List[Attitude],
+        target_zone: Tuple[int, int],
+        obj_idx: int,
+        env_idx: int,
+    ) -> Optional[Transform]:
+        """
+        Search ALL orientations for a mug and return the best placement.
+        
+        Unlike other objects that return on the first valid placement,
+        mugs evaluate all orientations to find the one that minimizes holes.
+        
+        Args:
+            item: The mug item to place
+            problem: The packing problem with container state
+            orientations: List of candidate orientations (different yaw angles)
+            target_zone: (x_min, x_max) for zone preference
+            obj_idx: Object index for logging
+            env_idx: Environment index for logging
+            
+        Returns:
+            Best Transform if found, None otherwise
+        """
+        zone_x_min, zone_x_max = target_zone
+        max_x = problem.container.geometry.x_size
+        max_y = problem.container.geometry.y_size
+        semantic_mask = problem.container.semantic_mask
+        
+        # Penalties
+        ZONE_PENALTY = 2000
+        CROSS_TYPE_STACK_PENALTY = 20000
+        
+        # Track best placement across ALL orientations
+        global_best_score = float('inf')
+        global_best_transform = None
+        
+        # Search all orientations and all positions
+        for attitude in orientations:
+            item.rotate(attitude)
+            item.calc_heightmap()
+            
+            for x in range(max_x):
+                for y in range(max_y):
+                    if problem.container.add_item_topdown(item, x, y):
+                        z = item.position.z
+                        
+                        # Zone preference
+                        in_zone = zone_x_min <= x < zone_x_max
+                        zone_score = 0 if in_zone else ZONE_PENALTY
+                        
+                        # Cross-type stacking penalty
+                        cross_type_score = 0
+                        if z > 0:
+                            below_ycb_id = semantic_mask[x, y]
+                            if below_ycb_id >= 0:
+                                below_type = Heuristic.OBJECT_TYPE_MAP.get(
+                                    str(below_ycb_id).zfill(3), ObjectType.IRREGULAR
+                                )
+                                if below_type != ObjectType.MUG:
+                                    cross_type_score = CROSS_TYPE_STACK_PENALTY
+                        
+                        # TODO: Add custom hole penalty scoring here
+                        # This is where you can implement orientation-specific scoring
+                        # based on semantic mask analysis
+                        hole_penalty = 0
+                        
+                        # DTR scoring + penalties
+                        score = z * 1000 + (max_y - y) * 10 + (max_x - x) + zone_score + cross_type_score + hole_penalty
+                        
+                        if score < global_best_score:
+                            global_best_score = score
+                            global_best_transform = Transform(item.position, attitude)
+        
+        if global_best_transform is not None:
+            in_zone_str = "in-zone" if (global_best_score % 10000) < ZONE_PENALTY else "out-of-zone"
+            print(f"MUG all-orientation search ({in_zone_str}): placing mug {obj_idx} at {global_best_transform.position} "
+                  f"with yaw={global_best_transform.attitude.yaw}, score={global_best_score:.1f}")
+        
+        return global_best_transform
+
+    @staticmethod
     def _heuristic_worker(args: dict) -> Tuple[int, Optional[int], Optional[Transform]]:
         """Worker function for finding object placement using heuristic strategy."""
         global num_placed_objects
@@ -203,83 +294,99 @@ class Heuristic(bpp_utils.BPP):
             item = problem.items[obj_idx]
             obj_type = obj_types[idx]
             target_zone = target_zones[idx]
-            stacking_cands = stacking_candidates[idx]
+            stacking_cands = stacking_candidates[idx]  # List[Transform]
             bbox = bbox_list[idx]
             is_stackable = Heuristic._is_stackable(obj_type)
             
             # Generate orientations on-demand
             orientations = Heuristic._generate_orientations_static(bbox, obj_type)
             
-            # Try each orientation
-            for attitude in orientations:
-                item.rotate(attitude)
-                item.calc_heightmap()
-
-                # Priority 1: Try stacking on similar objects (only for stackable types)
-                if is_stackable:
-                    for (sx, sy) in stacking_cands:
-                        print(f"trying to stack object {obj_idx} ({obj_type}) in environment {env_idx} at position {sx}, {sy}")
-                        if problem.container.add_item_topdown(item, sx, sy):
-                            transform = Transform(item.position, attitude)
-                            return (env_idx, obj_idx, transform)
-                
-                # Priority 2: Full container search with zone preference
-                # Search entire container but add penalty for out-of-zone placements
-                zone_x_min, zone_x_max = target_zone
-                best_score = float('inf')
-                best_position = None
-                max_x = problem.container.geometry.x_size
-                max_y = problem.container.geometry.y_size
-                semantic_mask = problem.container.semantic_mask
-                
-                # Penalties for non-optimal placements
-                ZONE_PENALTY = 2000  # Placing outside preferred zone
-                CROSS_TYPE_STACK_PENALTY = 20000  # Stacking on different object type
-                
-                for x in range(max_x):
-                    for y in range(max_y):
-                        if problem.container.add_item_topdown(item, x, y):
-                            z = item.position.z
-                            
-                            # Check if in preferred zone
-                            in_zone = zone_x_min <= x < zone_x_max
-                            zone_score = 0 if in_zone else ZONE_PENALTY
-                            
-                            # Check if stacking on a different object type
-                            cross_type_score = 0
-                            if z > 0:  # Stacking on something
-                                below_ycb_id = semantic_mask[x, y]
-                                if below_ycb_id >= 0:  # There's an object below
-                                    below_type = Heuristic.OBJECT_TYPE_MAP.get(
-                                        str(below_ycb_id).zfill(3), ObjectType.IRREGULAR
-                                    )
-                                    if below_type != obj_type:
-                                        cross_type_score = CROSS_TYPE_STACK_PENALTY
-                            
-                            if obj_type == ObjectType.CUBOIDAL:
-                                # DBLF (Deep Bottom Left First): prioritize low z, then low y, then low x
-                                score = z * 1000 + y * 10 + x + zone_score + cross_type_score
-                            else:
-                                # DTR (Deep Top Right): prioritize low z, then high x, then high y
-                                score = z * 1000 + (max_y - y) * 10 + (max_x - x) + zone_score + cross_type_score
-                            
-                            if score < best_score:
-                                best_score = score
-                                best_position = Transform(item.position, attitude)
-                
-                if best_position is not None:
-                    in_zone_str = "in-zone" if (best_score % 10000) < ZONE_PENALTY else "out-of-zone"
-                    heuristic = "DBLF" if obj_type == ObjectType.CUBOIDAL else "DTR"
-                    print(f"{heuristic} search ({in_zone_str}): placing object {obj_idx} ({obj_type}) at {best_position.position}")
-                    return (env_idx, obj_idx, best_position)
-
-                # Priority 4: Last resort search
-                transforms = problem.container.search_possible_position(
-                    item, grid_num=Heuristic.GRID_SEARCH_NUM, step_width=Heuristic.STEP_WIDTH
+            # Priority 0: Try stacking on similar objects using same transform (all stackable types)
+            if is_stackable and stacking_cands:
+                for stacking_transform in stacking_cands:
+                    # Use the same attitude as the object below
+                    item.rotate(stacking_transform.attitude)
+                    item.calc_heightmap()
+                    
+                    sx, sy = stacking_transform.position.x, stacking_transform.position.y
+                    print(f"trying to stack object {obj_idx} ({obj_type}) in environment {env_idx} "
+                          f"at position ({sx}, {sy}) with attitude {stacking_transform.attitude}")
+                    if problem.container.add_item_topdown(item, sx, sy):
+                        transform = Transform(item.position, stacking_transform.attitude)
+                        return (env_idx, obj_idx, transform)
+            
+            # Object-specific placement search
+            if obj_type == ObjectType.MUG:
+                # Special handling for mugs: search ALL orientations
+                best_transform = Heuristic._search_mug_all_orientations(
+                    item, problem, orientations, target_zone, obj_idx, env_idx
                 )
-                if transforms:
-                    print(f"Last resort search found best position {transforms[0]}")
-                    return (env_idx, obj_idx, transforms[0])
+                if best_transform is not None:
+                    return (env_idx, obj_idx, best_transform)
+            else:
+                # Standard search for non-mug objects (returns on first valid placement)
+                for attitude in orientations:
+                    item.rotate(attitude)
+                    item.calc_heightmap()
+                    
+                    # Full container search with zone preference
+                    zone_x_min, zone_x_max = target_zone
+                    best_score = float('inf')
+                    best_position = None
+                    max_x = problem.container.geometry.x_size
+                    max_y = problem.container.geometry.y_size
+                    semantic_mask = problem.container.semantic_mask
+                    
+                    # Penalties for non-optimal placements
+                    ZONE_PENALTY = 2000  # Placing outside preferred zone
+                    CROSS_TYPE_STACK_PENALTY = 20000  # Stacking on different object type
+                    
+                    for x in range(max_x):
+                        for y in range(max_y):
+                            if problem.container.add_item_topdown(item, x, y):
+                                z = item.position.z
+                                
+                                # Check if in preferred zone
+                                in_zone = zone_x_min <= x < zone_x_max
+                                zone_score = 0 if in_zone else ZONE_PENALTY
+                                
+                                # Check if stacking on a different object type
+                                cross_type_score = 0
+                                if z > 0:  # Stacking on something
+                                    below_ycb_id = semantic_mask[x, y]
+                                    if below_ycb_id >= 0:  # There's an object below
+                                        below_type = Heuristic.OBJECT_TYPE_MAP.get(
+                                            str(below_ycb_id).zfill(3), ObjectType.IRREGULAR
+                                        )
+                                        if below_type != obj_type:
+                                            cross_type_score = CROSS_TYPE_STACK_PENALTY
+                                
+                                if obj_type == ObjectType.CUBOIDAL:
+                                    # DBLF (Deep Bottom Left First): prioritize low z, then low y, then low x
+                                    score = z * 1000 + y * 10 + x + zone_score + cross_type_score
+                                else:
+                                    # DTR (Deep Top Right): prioritize low z, then high x, then high y
+                                    score = z * 1000 + (max_y - y) * 10 + (max_x - x) + zone_score + cross_type_score
+                                
+                                if score < best_score:
+                                    best_score = score
+                                    best_position = Transform(item.position, attitude)
+                    
+                    if best_position is not None:
+                        in_zone_str = "in-zone" if (best_score % 10000) < ZONE_PENALTY else "out-of-zone"
+                        heuristic = "DBLF" if obj_type == ObjectType.CUBOIDAL else "DTR"
+                        print(f"{heuristic} search ({in_zone_str}): placing object {obj_idx} ({obj_type}) at {best_position.position}")
+                        return (env_idx, obj_idx, best_position)
+
+            # Last resort search (for both mug and non-mug if nothing found)
+            item.rotate(orientations[0])
+            item.calc_heightmap()
+            transforms = problem.container.search_possible_position(
+                item, grid_num=Heuristic.GRID_SEARCH_NUM, step_width=Heuristic.STEP_WIDTH
+            )
+            if transforms:
+                print(f"Last resort search found best position {transforms[0]}")
+                return (env_idx, obj_idx, transforms[0])
         # No valid placement found
         return (env_idx, None, None)
 
@@ -346,13 +453,11 @@ class Heuristic(bpp_utils.BPP):
                 np.set_printoptions(threshold=np.inf, linewidth=200)
                 print(self.get_semantic_mask(env_idx).T)
                 
-                # Track most recent stacking position for stackable objects
+                # Track most recent stacking transform for stackable objects
                 ycb_id = item.obj_id
                 obj_type = self.classify_object_by_ycb_id(ycb_id)
                 if obj_type in self.STACKABLE_TYPES:
-                    self.stacking_positions[env_idx][obj_type] = (
-                        transform.position.x, transform.position.y
-                    )
+                    self.stacking_positions[env_idx][obj_type] = transform
             else:
                 # Mark as unpackable
                 if obj_indices[env_idx]:
