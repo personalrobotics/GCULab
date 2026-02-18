@@ -721,15 +721,16 @@ def _get_dest_tote_gcu(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor) -> torc
     return gcu_values[envs, dest_totes]
 
 
-def log_gcu_dest_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
+def log_gcus(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
     """
     Computes the GCU of the destination tote for each environment.
-    This tracks the GCU of the tote being actively packed. 
-    This gets logged as the average GCU across envs
+    This tracks the GCU of the tote being actively packed as well as the maximum GCU across all totes. 
+    This gets logged as the average GCU across envs and the maximum GCU across all totes.
     
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
-        
+        env_ids (torch.Tensor): Tensor of environment IDs.
+
     Returns:
         torch.Tensor: GCU of destination tote per environment, shape [num_envs]
     """
@@ -737,20 +738,7 @@ def log_gcu_dest_tote(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = 
     log = env.extras.setdefault("log", {})
     log["GCU/gcu_dest_tote"] = dest_gcu
 
-
-def log_gcu_max(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
-    """
-    Computes the maximum GCU of the destination tote across environments
-    
-    Args:
-        env (ManagerBasedRLGCUEnv): The environment object.
-        
-    Returns:
-        torch.Tensor: GCU of destination tote per environment, shape [num_envs]
-    """
-    dest_gcu = _get_dest_tote_gcu(env, env_ids)
     max_gcu = dest_gcu.max()
-    log = env.extras.setdefault("log", {})
     log["GCU/gcu_max"] = max_gcu
 
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):

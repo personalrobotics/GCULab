@@ -235,14 +235,8 @@ class EventCfg:
         mode="post_reset",
     )
 
-    log_gcu_dest_tote = EventTerm(
-        func=mdp.log_gcu_dest_tote,
-        mode="interval",
-        interval_range_s=(0.0, 0.0),
-    )
-
-    log_gcu_max = EventTerm(
-        func=mdp.log_gcu_max,
+    log_gcus = EventTerm(
+        func=mdp.log_gcus,
         mode="interval",
         interval_range_s=(0.0, 0.0),
     )
