@@ -714,6 +714,30 @@ def gcu_reward_step(env: ManagerBasedRLGCUEnv):
     return gcu_values
 
 
+def _get_dest_tote_gcu(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor) -> torch.Tensor:
+    gcu_values = env.unwrapped.tote_manager.get_gcu(env_ids)  # Shape: [len(env_ids), num_totes]
+    dest_totes = env.unwrapped.tote_manager.dest_totes[env_ids]  # Shape: [len(env_ids)]
+    envs = torch.arange(env_ids.numel(), device=env_ids.device)
+    return gcu_values[envs, dest_totes]
+
+
+def log_gcus(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
+    """
+    Computes the GCU of the destination tote for each environment.
+    This tracks the GCU of the tote being actively packed as well as the maximum GCU across all totes. 
+    This gets logged as the average GCU across envs and the maximum GCU across all totes.
+    
+    Args:
+        env (ManagerBasedRLGCUEnv): The environment object.
+        env_ids (torch.Tensor): Tensor of environment IDs.
+    """
+    dest_gcu = _get_dest_tote_gcu(env, env_ids)
+    log = env.extras.setdefault("log", {})
+    log["GCU/gcu_dest_tote"] = dest_gcu
+
+    max_gcu = dest_gcu.max()
+    log["GCU/gcu_max"] = max_gcu
+
 def inverse_wasted_volume(env: ManagerBasedRLGCUEnv, gamma=0.99):
     """
     Computes the wasted volume in the tote, defined as 1 - (% top down volume - GCU of objects).

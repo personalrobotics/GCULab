@@ -235,6 +235,12 @@ class EventCfg:
         mode="post_reset",
     )
 
+    log_gcus = EventTerm(
+        func=mdp.log_gcus,
+        mode="interval",
+        interval_range_s=(0.0, 0.0),
+    )
+
 
 @configclass
 class RewardsCfg:
