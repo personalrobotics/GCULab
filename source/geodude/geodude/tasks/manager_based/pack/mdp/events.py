@@ -730,9 +730,6 @@ def log_gcus(env: ManagerBasedRLGCUEnv, env_ids: torch.Tensor | None = None):
     Args:
         env (ManagerBasedRLGCUEnv): The environment object.
         env_ids (torch.Tensor): Tensor of environment IDs.
-
-    Returns:
-        torch.Tensor: GCU of destination tote per environment, shape [num_envs]
     """
     dest_gcu = _get_dest_tote_gcu(env, env_ids)
     log = env.extras.setdefault("log", {})
