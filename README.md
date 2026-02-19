@@ -104,6 +104,13 @@ These include dummy agents that output zero or random actions. They are useful f
 python scripts/other_agents/zero_agent.py --task=<TASK_NAME>
 ```
 
+### Random-Action Agent
+**Command:**
+```bash
+# Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
+python scripts/other_agents/random_agent.py --task=<TASK_NAME>
+```
+
 
 ---
 

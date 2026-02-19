@@ -33,7 +33,8 @@ simulation_app = app_launcher.app
 
 import os
 from datetime import datetime
-
+import random
+import numpy as np
 import gymnasium as gym
 import isaaclab_tasks  # noqa: F401
 import torch
@@ -98,6 +99,11 @@ def main():
         args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
     )
     env_cfg.seed = args_cli.seed
+    random.seed(args_cli.seed)
+    np.random.seed(args_cli.seed)
+    torch.manual_seed(args_cli.seed)
+    torch.cuda.manual_seed_all(args_cli.seed)
+
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
 
@@ -194,9 +200,11 @@ def main():
             # Generate random x, y positions within valid range
             random_x = torch.rand(args_cli.num_envs, device=env.unwrapped.device) * x_pos_range
             random_y = torch.rand(args_cli.num_envs, device=env.unwrapped.device) * y_pos_range
-            random_z = torch.zeros(args_cli.num_envs, device=env.unwrapped.device)  # z will be set from depth or drop height
+
+            # Fixed Drop height
+            drop_height_z = torch.ones(args_cli.num_envs, device=env.unwrapped.device) * 0.3 
             
-            random_positions = torch.stack([random_x, random_y, random_z], dim=1)
+            random_positions = torch.stack([random_x, random_y, drop_height_z], dim=1)
             
             # Concatenate: [obj_idx, x, y, z, qw, qx, qy, qz]
             actions[:, 1:9] = torch.cat(
@@ -207,11 +215,6 @@ def main():
                 ],
                 dim=1,
             )
-
-            # Fixed Drop height
-            drop_heights = torch.ones(args_cli.num_envs, device=env.unwrapped.device) * 0.3
-
-            actions[:, 4] = drop_heights
 
             # apply actions
             env.step(actions)
