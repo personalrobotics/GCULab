@@ -26,7 +26,7 @@ Demo for Amazon Packing Task, places all candidate objects in top right corner
 
 **Command:**
 ```bash
-python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
+python scripts/other_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
 ```
 
 
@@ -101,7 +101,14 @@ These include dummy agents that output zero or random actions. They are useful f
 **Command:**
 ```bash
 # Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python scripts/zero_agent.py --task=<TASK_NAME>
+python scripts/other_agents/zero_agent.py --task=<TASK_NAME>
+```
+
+### Random-Action Agent
+**Command:**
+```bash
+# Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
+python scripts/other_agents/random_agent.py --task=<TASK_NAME>
 ```
 
 
@@ -111,7 +118,7 @@ python scripts/zero_agent.py --task=<TASK_NAME>
 **Command:**
 ```bash
 # Use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-python scripts/bpp_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
+python scripts/other_agents/test_placement_agent.py --task=Isaac-Pack-NoArm-Camera-v0 --num_envs 5 --enable_cameras
 ```
 
 ---
